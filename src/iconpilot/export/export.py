@@ -75,8 +75,43 @@ def _style_size(styles: dict | None, style_id: str | None) -> int:
     return 24
 
 
+# Tuned against the phash oracle (gate renders before/after must be identical):
+# floatPrecision 1 drifted dense 48px color icons; 2 is pixel-safe.
+# mergePaths off: icons keep one path per deliberate shape (paint order matters).
+_SVGO_CONFIG = {
+    "multipass": True,
+    "floatPrecision": 2,
+    "plugins": [
+        {
+            "name": "preset-default",
+            "params": {
+                "overrides": {
+                    "removeViewBox": False,  # never drop the grid contract
+                    "removeUselessStrokeAndFill": False,  # never touch stroke/fill attrs
+                    "mergePaths": False,
+                }
+            },
+        }
+    ],
+}
+
+
 def tidy(svg_text: str) -> str:
-    """Whitespace/comment minify without touching geometry."""
+    """Optimize an SVG for export: svgo-py (tuned) with plain-minify fallback.
+
+    svgo is an optimizer, not a sanitizer — if it raises for any reason the
+    whitespace/comment minifier keeps the export working. Config is tuned to
+    preserve the iconpilot output contract (viewBox, currentColor, stroke
+    attrs, fill=none); floatPrecision 2 is the oracle-validated floor.
+    """
+    try:
+        import svgo
+
+        data = svgo.optimize(svg_text, _SVGO_CONFIG).get("data", "")
+        if data.strip():
+            return data + "\n"
+    except Exception:  # noqa: BLE001, S110 — never block an export on the optimizer
+        pass
     text = re.sub(r"<!--.*?-->", "", svg_text, flags=re.DOTALL)
     text = re.sub(r">\s+<", "><", text.strip())
     return text + "\n"

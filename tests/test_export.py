@@ -120,3 +120,43 @@ def test_export_sprite_uses_design_sizes(exportpack: Path, tmp_path: Path) -> No
     layout = json.loads((out / "sprite.json").read_text())
     assert layout["mono-hut"]["width"] == 24
     assert layout["color-hut"]["width"] == 48
+
+
+# --- svgo-py export optimization ---------------------------------------------
+
+DENSE_SVG = (
+    '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48" width="48" height="48">'
+    '<path fill="#89919a" d="M12.13 22.75 L24.06 8.31 L39.94 22.62"/>'
+    '<path fill="#346751" d="M12.06 22.81 V40.13 H35.94 V22.69"/>'
+    '<path fill="#ff656f" d="M18.25 40.06 V28.13 H29.75 V40.06"/></svg>'
+)
+
+
+def test_tidy_preserves_contract_and_shrinks() -> None:
+    from iconpilot.export.export import tidy
+
+    out = tidy(VALID_SVG)
+    assert 'viewBox="0 0 24 24"' in out
+    assert "currentColor" in out
+    assert 'fill="none"' in out
+    assert 'stroke-width="2"' in out
+    assert len(out) < len(VALID_SVG)
+
+
+def test_tidy_is_visually_lossless(tmp_path: Path) -> None:
+    # the phash oracle, as a test: render before/after must hash identically
+    from iconpilot.export.export import tidy
+    from iconpilot.render.render import hamming, hash_file
+
+    for i, svg_text in enumerate((VALID_SVG, DENSE_SVG)):
+        src = tmp_path / f"src{i}.svg"
+        dst = tmp_path / f"dst{i}.svg"
+        src.write_text(svg_text)
+        dst.write_text(tidy(svg_text))
+        assert hamming(hash_file(src), hash_file(dst)) == 0, svg_text[:60]
+
+
+def test_tidy_falls_back_on_bad_input() -> None:
+    from iconpilot.export.export import tidy
+
+    assert tidy("") == "" or tidy("") == "\n"
