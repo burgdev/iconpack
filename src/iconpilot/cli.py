@@ -15,6 +15,7 @@ from iconpilot.gate.run import run_gate
 from iconpilot.pack import PackError, load_pack
 from iconpilot.render.contact import contact_sheet
 from iconpilot.render.render import hamming, hash_file
+from iconpilot.server.server import serve as serve_review
 from iconpilot.styles import resolve_styles, user_styles_path
 
 app = typer.Typer(
@@ -65,10 +66,17 @@ def review(
     pack: str,
     host: str = typer.Option("127.0.0.1", "--host"),
     port: int = typer.Option(8765, "--port"),
-    static: bool = typer.Option(False, "--static", help="Write a self-contained HTML file."),
 ) -> None:
-    """Serve (or write) the review page."""
-    _not_implemented("review")
+    """Serve the live review page (decisions + per-icon editing)."""
+    try:
+        _load_pack_arg(pack)
+    except PackError as exc:
+        typer.secho(str(exc), fg=typer.colors.RED, err=True)
+        raise typer.Exit(code=2) from exc
+    pack_dir = Path(pack)
+    if pack_dir.is_file():
+        pack_dir = pack_dir.parent
+    serve_review(pack_dir, host, port)
 
 
 @app.command()

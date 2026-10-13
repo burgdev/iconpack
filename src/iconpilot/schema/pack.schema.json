@@ -33,6 +33,11 @@
       "minItems": 1,
       "items": { "type": "integer", "minimum": 1 }
     },
+    "rev": {
+      "type": "integer",
+      "minimum": 0,
+      "description": "Monotonic revision, bumped on every sanctioned write."
+    },
     "icons": {
       "type": "object",
       "minProperties": 1,

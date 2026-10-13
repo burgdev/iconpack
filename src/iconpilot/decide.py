@@ -237,14 +237,13 @@ def apply_decisions(
                 if comment_text:
                     comment(variant, comment_text)
 
-    # persist: decisions echo + pack.json (atomic)
+    # persist: decisions echo + pack.json (atomic, rev bump)
     runs = pack_dir / ".runs" / round_id
     runs.mkdir(parents=True, exist_ok=True)
     (runs / "decisions.json").write_text(json.dumps(
         {"round": round_id, "decided_at": datetime.now(timezone.utc).isoformat(),
          "source": source, "icons": decisions}, indent=2,
     ))
-    tmp = pack_dir / "pack.json.tmp"
-    tmp.write_text(json.dumps(pack, indent=2, ensure_ascii=False) + "\n")
-    tmp.replace(pack_dir / "pack.json")
+    from iconpilot.pack import write_pack_atomic
+    write_pack_atomic(pack_dir, pack)
     return log
