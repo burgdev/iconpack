@@ -44,12 +44,26 @@ def collect_exportables(
                 master = pack["icons"].get(mi, {}).get("variants", {}).get(mv)
                 if master and master.get("status") == "approved":
                     entries.append(
-                        Entry(icon_id, vid, pack_dir / "icons" / mi / f"{mv}.svg", (mi, mv))
+                        Entry(
+                            icon_id,
+                            vid,
+                            pack_dir / "icons" / mi / f"{mv}.svg",
+                            (mi, mv),
+                            _style_size(styles, master.get("style")),
+                        )
                     )
                 else:
                     skipped.append(f"{icon_id}#{vid} (master not approved)")
             elif v.get("status") == "approved":
-                entries.append(Entry(icon_id, vid, pack_dir / "icons" / icon_id / f"{vid}.svg"))
+                entries.append(
+                    Entry(
+                        icon_id,
+                        vid,
+                        pack_dir / "icons" / icon_id / f"{vid}.svg",
+                        None,
+                        _style_size(styles, v.get("style")),
+                    )
+                )
             else:
                 skipped.append(f"{icon_id}#{vid} ({v.get('status', 'todo')})")
     return entries, skipped
