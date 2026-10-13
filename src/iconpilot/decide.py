@@ -13,6 +13,7 @@ single non-approved authored variant, else "mono".
   <cand> ok ["comment"]    approve candidate → icons/<icon>/<variant>.svg, frozen
   <cand> keep ["comment"]  materialize as working copy, stays in_review
   <cand> no ["comment"]    drop candidate (comment recorded)
+  <cand> rate <0-10>       rate a candidate; 0 drops it, ratings feed the next draft
   * no                     reject all → variant back to todo
   more <N>                 N more variants next round (recorded as request)
   like <cand> <N>          N variants based on candidate
@@ -41,6 +42,7 @@ _ITEM_RE = re.compile(
     (?:
       (?P<star>\*)\s+no
       |(?P<cand>{_CAND})\s+(?P<action>ok|keep|no)
+      |(?P<rate_cand>{_CAND})\s+rate\s+(?P<rate_n>10|[0-9])
       |more\s+(?P<more>\d+)
       |like\s+(?P<like_cand>{_CAND})\s+(?P<like_n>\d+)
       |(?P<restart>restart)
@@ -221,6 +223,19 @@ def apply_decisions(
                 if comment_text:
                     comment(variant, comment_text)
                     variant.setdefault("rejected_ideas", []).append(comment_text)
+            elif "rate_cand" in item:
+                cand = item["rate_cand"]
+                n = int(item["rate_n"])
+                if cand not in cands:
+                    raise ValueError(
+                        f"{icon_id}#{variant_id}: rate candidate '{cand}' not in run "
+                        f"{round_id} (found: {sorted(cands) or 'none'})"
+                    )
+                if n == 0:
+                    log.append(f"{icon_id}#{variant_id}: dropped {cand} (rated 0)")
+                else:
+                    comment(variant, f"[{cand}] rated {n}/10")
+                    log.append(f"{icon_id}#{variant_id}: {cand} rated {n}/10")
             elif "action" in item:
                 cand = item["cand"]
                 action = item["action"]

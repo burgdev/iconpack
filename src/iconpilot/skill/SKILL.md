@@ -109,6 +109,22 @@ Packs often start as an import of already-shipped icons (`status: approved`,
 
 Never bulk-reopen: improve one variant at a time; the set stays shippable.
 
+## Signal your progress (the review page shows it)
+
+While working a pack, keep the review page informed — it polls
+`.runs/.ai-status` and shows a working/ready banner:
+
+```bash
+echo "drafting hut/mono — 4 candidates" > <pack>/.runs/.ai-status
+# ...draft + gate...
+echo "screening r001" >> <pack>/.runs/.ai-status   # overwrite, keep it one line
+# when candidates are gated and the sheet is ready:
+rm <pack>/.runs/.ai-status    # page switches to 'ready for decision'
+```
+
+Update it at every loop step (drafting → gating → screening); remove it when
+you hand over for decisions.
+
 ## Failure paths
 
 - **Pack locked** (`pack is locked` / HTTP 423): another writer (review

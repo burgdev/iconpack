@@ -1,163 +1,383 @@
-"""Mobile-first review page — vanilla, no build step, served inline."""
+"""Review page — Vue 3 (vendored ESM, no build step), responsive, interactive."""
 
 PAGE = """<!doctype html>
-<html lang="en"><head>
+<html lang="en">
+<head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>iconpilot review</title>
 <style>
-  :root { color-scheme: light dark; }
-  body { font-family: system-ui, sans-serif; margin: 0; padding: 12px; max-width: 760px; margin-inline: auto; }
-  h1 { font-size: 1.1rem; } h2 { font-size: .95rem; margin: 18px 0 6px; }
-  .card { border: 1px solid color-mix(in srgb, currentColor 25%, transparent);
-          border-radius: 10px; padding: 10px; margin: 10px 0; }
-  .row { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
-  .variants { display: flex; gap: 6px; flex-wrap: wrap; margin: 6px 0; }
-  .chip { padding: 2px 8px; border-radius: 99px; font-size: .75rem; border: 1px solid currentColor; }
-  .chip.approved { background: #2e7d32; color: #fff; border: 0; }
-  .chip.in_review, .chip.stale { background: #b07d2e; color: #fff; border: 0; }
-  .chip.todo, .chip.drafting { opacity: .6; }
-  img.i { width: 48px; height: 48px; background: #fff; border-radius: 6px; }
-  img.i.dark { background: #112119; }
-  button { font: inherit; padding: 5px 10px; border-radius: 8px; border: 1px solid currentColor; background: transparent; cursor: pointer; }
-  button.primary { background: #2e7d32; color: #fff; border: 0; }
-  button.warn { background: #b07d2e; color: #fff; border: 0; }
-  input, textarea { font: inherit; width: 100%; box-sizing: border-box; padding: 6px; border-radius: 8px;
-        border: 1px solid color-mix(in srgb, currentColor 30%, transparent); background: transparent; }
-  textarea { min-height: 60px; }
-  .muted { opacity: .65; font-size: .8rem; }
-  .err { color: #d32f2f; white-space: pre-wrap; }
-  .ok { color: #2e7d32; }
-  .cands { display: flex; gap: 10px; flex-wrap: wrap; }
-  .cand { text-align: center; font-size: .8rem; }
-  details summary { cursor: pointer; }
-</style></head><body>
-<h1>iconpilot review — <span id="packname"></span> <span class="muted" id="rev"></span></h1>
-<div id="msg" class="muted"></div>
+:root {
+  --bg: #f6f7f9; --card: #ffffff; --ink: #17202a; --muted: #66707a;
+  --line: #dfe3e8; --accent: #2e7d32; --accent-ink: #ffffff;
+  --warn: #b07d2e; --danger: #c62828; --chip: #eceff3; --shadow: 0 1px 3px rgba(20,30,40,.08);
+}
+@media (prefers-color-scheme: dark) {
+  :root { --bg:#12161b; --card:#1a2027; --ink:#e8ecf0; --muted:#8b95a0; --line:#2a323c;
+          --chip:#242c35; --shadow:0 1px 3px rgba(0,0,0,.4); }
+}
+* { box-sizing: border-box; }
+body { margin:0; font:15px/1.45 system-ui,-apple-system,Segoe UI,Roboto,sans-serif;
+       background:var(--bg); color:var(--ink); }
+header { position:sticky; top:0; z-index:10; background:var(--card); border-bottom:1px solid var(--line);
+         padding:10px 16px; display:flex; align-items:center; gap:12px; flex-wrap:wrap; box-shadow:var(--shadow); }
+header h1 { font-size:1rem; margin:0; font-weight:650; }
+header .meta { color:var(--muted); font-size:.8rem; }
+.spacer { flex:1; }
+.banner { width:100%; padding:6px 12px; border-radius:8px; font-size:.85rem; display:flex; gap:8px; align-items:center; }
+.banner.working { background:color-mix(in srgb, var(--warn) 15%, transparent); color:var(--warn); }
+.banner.ready  { background:color-mix(in srgb, var(--accent) 14%, transparent); color:var(--accent); }
+.dot { width:8px; height:8px; border-radius:50%; background:currentColor; animation:pulse 1.6s infinite; }
+.banner.ready .dot { animation:none; }
+@keyframes pulse { 50% { opacity:.3; } }
+main { max-width:1200px; margin:0 auto; padding:16px; }
+section h2 { font-size:.85rem; text-transform:uppercase; letter-spacing:.06em; color:var(--muted); margin:22px 0 10px; }
+.group { background:var(--card); border:1px solid var(--line); border-radius:12px; padding:12px; margin:10px 0; box-shadow:var(--shadow); }
+.group > .ghead { display:flex; align-items:center; gap:10px; margin-bottom:8px; flex-wrap:wrap; }
+.group b { font-size:.95rem; }
+.grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(150px,1fr)); gap:12px; }
+.card { background:var(--card); border:1px solid var(--line); border-radius:12px; padding:10px; text-align:center;
+        box-shadow:var(--shadow); display:flex; flex-direction:column; gap:8px; }
+.card .thumb { cursor:zoom-in; align-self:center; border-radius:8px; background:#fff; }
+.card .name { font-size:.85rem; font-weight:600; }
+.rating { display:flex; align-items:center; gap:6px; justify-content:center; }
+.rating button { padding:4px 8px; font-size:.9rem; }
+.rating input[type=range] { flex:1; min-width:60px; accent-color:var(--accent); }
+button { font:inherit; padding:6px 12px; border-radius:8px; border:1px solid var(--line);
+         background:var(--card); color:var(--ink); cursor:pointer; }
+button:hover { border-color:var(--accent); }
+button.primary { background:var(--accent); color:var(--accent-ink); border-color:var(--accent); }
+button.subtle { font-size:.8rem; padding:4px 8px; color:var(--muted); }
+button.armed { border-color:var(--accent); color:var(--accent); font-weight:600; }
+button.armed-x { border-color:var(--danger); color:var(--danger); font-weight:600; }
+.chip { display:inline-block; padding:1px 8px; border-radius:99px; font-size:.72rem; background:var(--chip); color:var(--muted); }
+.chip.approved { background:var(--accent); color:var(--accent-ink); }
+.chip.in_review, .chip.stale { background:var(--warn); color:#fff; }
+textarea { font:13px/1.5 ui-monospace,Menlo,Consolas,monospace; width:100%; min-height:64px; padding:8px;
+           border-radius:8px; border:1px solid var(--line); background:var(--card); color:var(--ink); resize:vertical; }
+textarea[readonly] { color:var(--muted); }
+.composer { background:var(--card); border:1px solid var(--line); border-radius:12px; padding:12px; margin:14px 0; }
+.composer .row { display:flex; gap:8px; align-items:center; flex-wrap:wrap; margin-top:8px; }
+.err { color:var(--danger); font-size:.85rem; white-space:pre-wrap; margin:4px 0; }
+.ok { color:var(--accent); font-size:.85rem; }
+/* dialog */
+.overlay { position:fixed; inset:0; background:rgba(8,12,16,.55); display:flex; align-items:center;
+           justify-content:center; z-index:50; padding:16px; }
+.dialog { background:var(--card); border:1px solid var(--line); border-radius:14px; max-width:560px; width:100%;
+          max-height:92vh; overflow:auto; padding:16px; box-shadow:0 12px 40px rgba(0,0,0,.25); }
+.dialog h3 { margin:0 0 8px; font-size:1rem; display:flex; justify-content:space-between; align-items:center; }
+.dialog .stage { border-radius:10px; display:flex; align-items:center; justify-content:center; padding:20px; margin:10px 0; }
+.dialog .controls { display:flex; flex-wrap:wrap; gap:8px; align-items:center; margin:8px 0; }
+.dialog .controls label { font-size:.78rem; color:var(--muted); min-width:74px; }
+.seg { display:flex; gap:4px; }
+.seg button { padding:4px 10px; font-size:.85rem; }
+.seg button.on { background:var(--accent); color:var(--accent-ink); border-color:var(--accent); }
+.swatch { width:26px; height:26px; border-radius:8px; border:2px solid var(--line); cursor:pointer; padding:0; }
+.swatch.on { border-color:var(--accent); }
+input[type=color] { width:34px; height:28px; padding:0 2px; border:1px solid var(--line); border-radius:8px; background:none; }
+.stylebox { background:var(--chip); border-radius:10px; padding:10px; font-size:.82rem; margin-top:10px; }
+.stylebox select { font:inherit; padding:4px 8px; border-radius:8px; border:1px solid var(--line); background:var(--card); color:var(--ink); }
+.kv { display:grid; grid-template-columns:auto 1fr; gap:2px 12px; margin-top:6px; color:var(--muted); }
+.kv b { color:var(--ink); font-weight:600; }
+.muted { color:var(--muted); font-size:.82rem; }
+footer { text-align:center; color:var(--muted); font-size:.75rem; padding:20px; }
+</style>
+</head>
+<body>
+<div id="app">
+  <header>
+    <h1>{{ S.pack.name || 'iconpilot' }}</h1>
+    <span class="meta">S.rev {{ S.rev }} · S.round {{ S.round || '—' }}</span>
+    <span class="spacer"></span>
+    <span class="meta">{{ S.candidates.length }} S.candidates</span>
+    <button class="subtle" @click="load(true)">refresh</button>
+    <div v-if="ai.text" class="banner" :class="ai.active ? 'working' : 'ready'">
+      <span class="dot"></span>{{ S.ai.text }}
+    </div>
+  </header>
 
-<h2>Decision text <span class="muted">(same grammar as the CLI)</span></h2>
-<textarea id="decision" placeholder='hut/mono: a2 keep "thinner roof" · b1 no · more 2'></textarea>
-<div class="row" style="margin-top:6px">
-  <button class="primary" onclick="applyDecisions()">Apply decisions</button>
-  <button onclick="copyDecisions()">Copy decisions</button>
+  <main>
+    <div v-if="msg" :class="msgClass">{{ S.msg }}</div>
+
+    <section v-if="grouped.length">
+      <h2>Current S.round — rate, then decide</h2>
+      <div class="group" v-for="g in grouped" :key="g.key">
+        <div class="ghead">
+          <b>{{ g.icon }} / {{ g.variant }}</b>
+          <span class="chip">{{ styleLabel(g.style) }}</span>
+          <span class="muted">{{ g.cands.length }} S.candidates</span>
+          <button class="subtle armed-x" @click="rejectAll(g)">drop entire icon</button>
+        </div>
+        <div class="grid">
+          <div class="card" v-for="c in g.cands" :key="c.cand">
+            <img class="thumb" loading="lazy" width="64" height="64"
+                 :src="render(c.path, 64, '#ffffff')" @click="open(g, c)">
+            <div class="name">{{ c.cand }}</div>
+            <div class="rating">
+              <button :class="{ 'armed-x': item(g, c.cand)?.t?.startsWith(c.cand + ' no') }"
+                      title="drop (rate 0)" @click="drop(g, c)">✕</button>
+              <input type="range" min="0" max="10" :value="rating(g, c.cand)"
+                     @input="rate(g, c, $event.target.value)" :title="'rate ' + c.cand">
+              <button :class="{ armed: item(g, c.cand)?.t === c.cand + ' ok' }"
+                      title="approve — final" @click="approve(g, c)">✓</button>
+            </div>
+            <button class="subtle" :class="{ armed: item(g, c.cand)?.t === c.cand + ' keep' }"
+                    @click="keep(g, c)">keep (refine)</button>
+          </div>
+        </div>
+      </div>
+    </section>
+    <section v-else>
+      <h2>Current S.round</h2>
+      <p class="muted">no S.candidates in the latest run — the AI banner above shows progress.</p>
+    </section>
+
+    <div class="composer">
+      <h2 style="margin:0 0 8px">Decision text</h2>
+      <p class="muted" style="margin:0 0 8px">
+        ok = <b>approve final</b> (frozen) · keep = <b>refine next S.round</b> · rate 0 = drop ·
+        ratings feed the next draft. Generated field is read-only; edit manually if needed.
+      </p>
+      <textarea v-if="!manual" readonly :value="decisionText" placeholder="rate or click S.candidates…"></textarea>
+      <textarea v-else v-model="manualText" placeholder='hut/mono: a2 ok · b1 rate 7 · more 2'></textarea>
+      <div class="row">
+        <button class="primary" @click="apply" :disabled="!S.decisionText && !manualText">Apply decisions</button>
+        <button @click="copy">{{ S.manual ? 'copy manual' : 'copy' }}</button>
+        <button v-if="!manual" class="subtle" @click="startManual">edit manually</button>
+        <button v-else class="subtle" @click="manual = false; S.manualText = ''">back to generated</button>
+        <span class="muted">{{ S.lines.length }} icon S.lines</span>
+      </div>
+    </div>
+
+    <section>
+      <h2>Icons</h2>
+      <div class="group" v-for="(icon, id) in pack.icons" :key="id">
+        <div class="ghead">
+          <b>{{ id }}</b>
+          <span v-if="icon.main_color" class="chip" :style="{background: icon.main_color, color:'#fff'}">{{ icon.main_color }}</span>
+          <input v-if="editing === id" style="flex:1; min-width:120px" :value="icon.brief"
+                 @keydown.enter="saveIcon(id, $event.target.value)" @blur="saveIcon(id, $event.target.value)">
+          <span v-else class="muted" style="flex:1; cursor:text" @click="editing = id">{{ icon.brief }}</span>
+          <button class="subtle" @click="editing = S.editing === id ? null : id">edit</button>
+        </div>
+        <div class="grid">
+          <div class="card" v-for="(v, vid) in icon.variants" :key="vid">
+            <img v-if="!v.link" class="thumb" loading="lazy" width="64" height="64"
+                 :src="render('icons/' + id + '/' + vid + '.svg', 64, '#ffffff')"
+                 @click="openIcon(id, vid, v)">
+            <div class="name">{{ vid }}</div>
+            <span class="chip" :class="v.status">{{ v.link ? '→ ' + v.link : v.status }}</span>
+            <span v-if="v.status === 'stale' || edited(id, vid)" class="muted">needs re-review</span>
+          </div>
+        </div>
+      </div>
+    </section>
+    <footer>iconpilot review · flock-serialized writes · approval is always yours</footer>
+  </main>
+
+  <div v-if="dlg" class="overlay" @click.self="dlg = null">
+    <div class="dialog">
+      <h3><span>{{ S.dlg.icon }} / {{ S.dlg.variant }} <span class="muted">{{ S.dlg.cand || '' }}</span></span>
+          <button class="subtle" @click="dlg = null">close ✕</button></h3>
+      <div class="stage" :style="{background: S.dlg.bg}">
+        <img :width="dlg.size * 2" :height="dlg.size * 2"
+             :src="render(S.dlg.path, S.dlg.size * 2, S.dlg.bg, S.dlg.color)">
+      </div>
+      <div class="controls">
+        <label>size</label>
+        <div class="seg">
+          <button v-for="s in [16,24,48,96]" :key="s" :class="{on: S.dlg.size === s}"
+                  @click="dlg.size = s">{{ s }}</button>
+        </div>
+      </div>
+      <div class="controls">
+        <label>background</label>
+        <div class="seg">
+          <button v-for="b in bgs" :key="b.hex" class="swatch" :class="{on: S.dlg.bg === b.hex}"
+                 :style="{background: b.hex}" :title="b.name" @click="dlg.bg = b.hex"></button>
+        </div>
+        <input type="color" :value="dlg.bg" @input="dlg.bg = $event.target.value" title="custom background">
+      </div>
+      <div class="controls">
+        <label>icon color</label>
+        <input type="color" :value="dlg.color" @input="dlg.color = $event.target.value">
+        <span class="muted">applies to currentColor (mono)</span>
+      </div>
+      <div class="stylebox" v-if="dlg.styleId">
+        <b>{{ styleLabel(S.dlg.styleId) }}</b>
+        <div class="kv">
+          <template v-if="styles[S.dlg.styleId]">
+            <span>grid</span><b>{{ S.styles[S.dlg.styleId].size || 'pack' }}px</b>
+            <span>stroke</span><b>{{ S.styles[S.dlg.styleId].stroke?.width || '—' }}</b>
+            <span>mode</span><b>{{ S.styles[S.dlg.styleId].construction }} / {{ S.styles[S.dlg.styleId].color_mode }}</b>
+            <span>budget</span><b>≤ {{ S.styles[S.dlg.styleId].max_nodes }} nodes · gap {{ S.styles[S.dlg.styleId].min_gap }}</b>
+            <span v-if="styles[S.dlg.styleId].palette">palette</span>
+            <b v-if="styles[S.dlg.styleId].palette">{{ S.styles[S.dlg.styleId].palette.join(' ') }}</b>
+          </template>
+        </div>
+        <div class="controls" style="margin-top:8px">
+          <label>switch style</label>
+          <select :value="dlg.styleId" @change="switchStyle(S.dlg, $event.target.value)">
+            <option v-for="(s, sid) in styles" :key="sid" :value="sid">{{ sid }} — {{ s.label }}</option>
+          </select>
+        </div>
+      </div>
+    </div>
+  </div>
 </div>
 
-<h2>Current round candidates <span class="muted" id="round"></span></h2>
-<div id="cands"></div>
+<script type="module">
+import { createApp, reactive, computed, onMounted } from '/static/vue.esm-browser.prod.js';
 
-<h2>Icons</h2>
-<div id="icons"></div>
+const S = reactive({
+  pack: { icons: {} }, rev: 0, round: null, candidates: [],
+  styles: {}, ai: { text: '', active: false },
+  decisions: {}, manual: false, manualText: '',
+  msg: '', msgClass: 'muted', editing: null,
+  dlg: null,
+  bgs: [
+    { name: 'white', hex: '#ffffff' }, { name: 'paper', hex: '#f6f9f7' },
+    { name: 'night', hex: '#112119' }, { name: 'ink', hex: '#1c1c1c' },
+  ],
+});
 
-<script>
-let PACK = null, REV = 0, ROUND = null;
-
-async function j(url, opts) {
+const api = async (url, opts) => {
   const r = await fetch(url, opts);
-  const data = await r.json().catch(() => ({}));
-  if (!r.ok) throw Object.assign(new Error(data.error || JSON.stringify(data.errors) || r.status), {data});
-  return data;
-}
-const esc = s => String(s ?? '').replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+  const d = await r.json().catch(() => ({}));
+  if (!r.ok) throw Object.assign(new Error(d.error || JSON.stringify(d.errors) || r.status), { d });
+  return d;
+};
+const esc = s => String(s ?? '');
 
-function msg(t, cls='') { const m = document.getElementById('msg'); m.className = cls; m.textContent = t; }
-
-async function load() {
-  const [p, run] = await Promise.all([j('/api/pack'), j('/api/run')]);
-  PACK = p.pack; REV = p.rev; ROUND = run.round;
-  document.getElementById('packname').textContent = PACK.name;
-  document.getElementById('rev').textContent = 'rev ' + REV;
-  document.getElementById('round').textContent = ROUND ? '(' + ROUND + ')' : '(none)';
-  renderIcons(); renderCands(run.candidates);
-}
-
-function renderIcons() {
-  const el = document.getElementById('icons'); el.innerHTML = '';
-  for (const [id, icon] of Object.entries(PACK.icons)) {
-    const card = document.createElement('div'); card.className = 'card';
-    const variants = Object.entries(icon.variants).map(([v, d]) => {
-      const st = d.link ? 'link→' + d.link : (d.status || 'todo');
-      const file = d.link ? null : `icons/${id}/${v}.svg`;
-      const img = file ? `<img class="i" loading="lazy" src="/api/render?p=${encodeURIComponent(file)}&size=48">` : '';
-      return `<div class="cand">${img}<div>${esc(v)} <span class="chip ${esc(d.status||'')}">${esc(st)}</span></div></div>`;
-    }).join('');
-    card.innerHTML = `
-      <details open>
-        <summary><b>${esc(id)}</b>${icon.main_color ? ` <span class="chip" style="background:${esc(icon.main_color)};color:#fff;border:0">${esc(icon.main_color)}</span>` : ''}</summary>
-        <div class="variants">${variants}</div>
-        <div class="row" style="gap:4px">
-          <input style="flex:1" id="brief-${esc(id)}" placeholder="brief" value="${esc(icon.brief)}">
-          <input style="flex:1" id="prompt-${esc(id)}" placeholder="prompt (optional)" value="${esc(icon.prompt||'')}">
-          <input style="width:90px" id="main_color-${esc(id)}" placeholder="#hex" value="${esc(icon.main_color||'')}">
-          <button onclick="saveIcon('${esc(id)}')">Save</button>
-        </div>
-      </details>`;
-    el.appendChild(card);
+S.grouped = computed(() => {
+  const m = new Map();
+  for (const c of S.candidates) {
+    const key = c.icon + '/' + c.variant;
+    if (!m.has(key)) m.set(key, { key, icon: c.icon, variant: c.variant, cands: [], style: c.style });
+    m.get(key).cands.push(c);
   }
-}
-
-function renderCands(cands) {
-  const el = document.getElementById('cands'); el.innerHTML = '';
-  if (!cands.length) { el.innerHTML = '<div class="muted">no candidates in the latest run</div>'; return; }
-  const byIcon = {};
-  for (const c of cands) (byIcon[c.icon + '/' + c.variant] ??= []).push(c);
-  for (const [key, list] of Object.entries(byIcon)) {
-    const d = document.createElement('div'); d.className = 'card';
-    d.innerHTML = `<b>${esc(key)}</b><div class="cands">` + list.map(c => `
-      <div class="cand">
-        <img class="i" loading="lazy" src="/api/render?p=${encodeURIComponent('.runs/'+ROUND+'/'+c.variant+'/'+c.icon+'/'+c.cand+'.svg')}&size=48">
-        <div class="row" style="justify-content:center;gap:2px">
-          <span>${esc(c.cand)}</span>
-          <button title="approve" onclick="cand('${esc(key)}','${esc(c.cand)}','ok')">ok</button>
-          <button title="keep" onclick="cand('${esc(key)}','${esc(c.cand)}','keep')">keep</button>
-          <button title="reject" onclick="cand('${esc(key)}','${esc(c.cand)}','no')">no</button>
-        </div>
-      </div>`).join('') + '</div>';
-    el.appendChild(d);
+  return [...m.values()];
+});
+S.lines = computed(() => {
+  const out = [];
+  for (const [key, entry] of Object.entries(S.decisions)) {
+    if (entry.items.length) out.push(key + ': ' + entry.items.map(i => i.t).join(' · '));
   }
-}
+  return out;
+});
+S.decisionText = computed(() => S.lines.value.join('\\n'));
 
-function cand(key, c, action) {
-  const t = document.getElementById('decision');
-  const item = `${c} ${action}`;
-  t.value = t.value ? t.value.split('\\n').filter(Boolean).map(l => l.startsWith(key+':') ? mergeItem(l, item) : l).concat(key.startsWith('$') ? [] : (t.value.includes(key+':') ? [] : [key + ': ' + item])).join('\\n') : key + ': ' + item;
+function render(p, size, bg, color) {
+  const q = new URLSearchParams({ p, size, bg: bg || '#ffffff' });
+  if (color && color !== '#000000') q.set('color', color);
+  return '/api/render?' + q;
 }
-function mergeItem(line, item) {
-  const [k, rest] = [line.slice(0, line.indexOf(':')), line.slice(line.indexOf(':')+1).trim()];
-  return k + ': ' + (rest ? rest + ' · ' + item : item);
+function item(g, cand) {
+  return (S.decisions[g.key]?.items || []).find(i => i.cand === cand);
 }
-
-async function applyDecisions() {
-  const text = document.getElementById('decision').value.trim();
-  if (!text) return msg('nothing to apply');
+function rating(g, cand) {
+  const it = item(g, cand);
+  if (!it) return 5;
+  const m = it.t.match(/rate (\\d+)/); if (m) return +m[1];
+  if (it.t.endsWith(' ok')) return 10;
+  if (it.t.includes(' no') || it.t.endsWith(' keep')) return 0;
+  return 5;
+}
+function setItem(g, cand, t) {
+  const entry = S.decisions[g.key] || (S.decisions[g.key] = { items: [] });
+  entry.items = entry.items.filter(i => i.cand !== '*');           // drop stale 'reject all'
+  const i = entry.items.findIndex(x => x.cand === cand);
+  if (i >= 0) entry.items[i] = { cand, t };                          // update in place
+  else entry.items.push({ cand, t });
+}
+function drop(g, c)   { setItem(g, c.cand, c.cand + ' no'); }
+function approve(g, c){ setItem(g, c.cand, c.cand + ' ok'); }
+function keep(g, c)   { setItem(g, c.cand, c.cand + ' keep'); }
+function rate(g, c, n){ setItem(g, c.cand, +n === 0 ? c.cand + ' no' : `${c.cand} rate ${n}`); }
+function rejectAll(g) {
+  S.decisions[g.key] = { items: [{ cand: '*', t: '* no' }] };
+}
+function styleLabel(sid) {
+  const s = S.styles[sid];
+  return sid + (s ? ` — ${s.label}` : '');
+}
+function open(g, c) {
+  S.dlg = { icon: g.icon, variant: g.variant, cand: c.cand, path: c.path,
+            size: 48, bg: '#ffffff', color: '#1c1c1c', styleId: g.style };
+}
+function openIcon(id, vid, v) {
+  if (v.link) return;
+  const icon = S.pack.icons[id];
+  S.dlg = { icon: id, variant: vid, cand: null,
+            path: 'icons/' + id + '/' + vid + '.svg',
+            size: 48, bg: '#ffffff', color: icon.main_color || '#1c1c1c',
+            styleId: v.style };
+}
+async function switchStyle(dlg, sid) {
   try {
-    const r = await j('/api/decision', {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({text, round: ROUND})});
-    msg('applied: ' + (r.log || []).join(' | '), 'ok');
-    document.getElementById('decision').value = '';
-    load();
-  } catch (e) { msg(e.message, 'err'); }
+    const r = await api('/api/variant', { method: 'PUT', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ icon: dlg.icon, variant: dlg.variant, style: sid }) });
+    S.msg = `style → ${sid} (rev ${r.rev})`; S.msgClass = 'ok';
+    dlg.styleId = sid; await load();
+  } catch (e) { S.msg = e.d?.errors ? e.d.errors.join('\\n') : e.message; S.msgClass = 'err'; }
 }
-
-function copyDecisions() {
-  const t = document.getElementById('decision').value.trim();
-  navigator.clipboard.writeText(t).then(() => msg('copied — paste to your agent', 'ok'));
-}
-
-async function saveIcon(id) {
-  const patch = {icon: id};
-  for (const f of ['brief','prompt','main_color']) {
-    const v = document.getElementById(`${f}-${id}`).value;
-    if (v) patch[f] = v;
-  }
+function startManual() { S.manual = true; S.manualText = S.decisionText.value; }
+async function apply() {
+  const text = (S.manual ? S.manualText : S.decisionText.value).trim();
+  if (!text) return;
   try {
-    const r = await j('/api/icon', {method:'PUT', headers:{'Content-Type':'application/json'}, body: JSON.stringify(patch)});
-    msg('saved ' + id + ' (rev ' + r.rev + ')', 'ok');
-  } catch (e) { msg(e.data?.errors ? e.data.errors.join('\\n') : e.message, 'err'); }
+    const r = await api('/api/decision', { method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ text, round: S.round }) });
+    S.msg = 'applied: ' + (r.log || []).join(' | '); S.msgClass = 'ok';
+    S.decisions = {}; S.manual = false; S.manualText = '';
+    await load();
+  } catch (e) { S.msg = e.message; S.msgClass = 'err'; }
+}
+async function copy() {
+  await navigator.clipboard.writeText((S.manual ? S.manualText : S.decisionText.value).trim());
+  S.msg = 'copied — paste to your agent'; S.msgClass = 'ok';
+}
+async function saveIcon(id, brief) {
+  S.editing = null;
+  if (!brief || brief === S.pack.icons[id].brief) return;
+  try {
+    const r = await api('/api/icon', { method: 'PUT', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ icon: id, brief }) });
+    S.msg = `saved ${id} (rev ${r.rev})`; S.msgClass = 'ok'; await load();
+  } catch (e) { S.msg = e.d?.errors ? e.d.errors.join('\\n') : e.message; S.msgClass = 'err'; }
+}
+function edited(id, vid) { return false; } // server marks ✎edited via status; page keeps simple
+
+async function load(manual) {
+  const [p, run, styles, ai] = await Promise.all([
+    api('/api/pack'), api('/api/run'), api('/api/styles'), api('/api/ai-status'),
+  ]);
+  S.pack = p.pack; S.rev = p.rev; S.round = run.round;
+  S.candidates = run.candidates.map(c => ({
+    ...c, path: `.runs/${run.round}/${c.variant}/${c.icon}/${c.cand}.svg`,
+  }));
+  S.styles = styles; S.ai = ai;
 }
 
-setInterval(async () => {
-  try { const r = await j('/api/pack'); if (r.rev !== REV) { msg('pack changed — reloading'); load(); } } catch {}
-}, 2500);
-
-load();
-</script></body></html>
+const App = {
+  setup() {
+    onMounted(() => {
+      load().catch(e => { S.msg = e.message; S.msgClass = 'err'; });
+      setInterval(async () => {
+        try {
+          const [p, ai] = await Promise.all([api('/api/pack'), api('/api/ai-status')]);
+          if (p.rev !== S.rev || ai.text !== S.ai.text) await load();
+        } catch {}
+      }, 2000);
+    });
+    return {
+      S, render, item, rating, drop, approve, keep, rate, rejectAll,
+      styleLabel, open, openIcon, switchStyle, startManual, apply,
+      copy, saveIcon, edited, load,
+    };
+  },
+};
+createApp(App).mount('#app');
+</script>
+</body></html>
 """

@@ -7,6 +7,7 @@ and link suggestions. No LLMs in here — pixels and hashes only.
 
 from __future__ import annotations
 
+import io
 from pathlib import Path
 
 import imagehash
@@ -21,7 +22,13 @@ def render_png(svg_path: str | Path, size: int, background: str | None = None) -
     png = resvg_py.svg_to_bytes(
         svg_path=str(svg_path), width=size, height=size, background=background
     )
-    return Image.open(__import__("io").BytesIO(bytes(png))).convert("RGBA")
+    return Image.open(io.BytesIO(bytes(png))).convert("RGBA")
+
+
+def render_png_text(svg_text: str, size: int, background: str | None = None) -> Image.Image:
+    """Render an SVG *string* (post color-substitution) at size × size."""
+    png = resvg_py.svg_to_bytes(svg_string=svg_text, width=size, height=size, background=background)
+    return Image.open(io.BytesIO(bytes(png))).convert("RGBA")
 
 
 def ink_ratio(img: Image.Image) -> float:

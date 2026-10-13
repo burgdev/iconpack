@@ -23,9 +23,10 @@ from urllib.parse import parse_qs, urlparse
 from iconpilot.decide import apply_decisions, parse_decision_text
 from iconpilot.pack import load_pack, revalidate, write_pack_atomic
 from iconpilot.render.contact import contact_sheet
-from iconpilot.render.render import render_png
+from iconpilot.render.render import render_png_text
 
 EDITABLE_FIELDS = ("brief", "prompt", "main_color")
+_HEX_RE = __import__("re").compile(r"^#[0-9a-fA-F]{6}$")
 
 
 @contextlib.contextmanager
@@ -121,15 +122,30 @@ class ReviewHandler(BaseHTTPRequestHandler):
             self._json(200, {"round": runs[-1] if runs else None, "candidates": entries})
             return
 
+        if url.path == "/static/vue.esm-browser.prod.js":
+            body = (Path(__file__).parent / "static" / "vue.esm-browser.prod.js").read_bytes()
+            self.send_response(200)
+            self.send_header("Content-Type", "text/javascript")
+            self.send_header("Cache-Control", "max-age=86400")
+            self.send_header("Content-Length", str(len(body)))
+            self.end_headers()
+            self.wfile.write(body)
+            return
+
         if url.path == "/api/render":
             rel = (q.get("p") or [""])[0]
             size = int((q.get("size") or ["48"])[0])
-            bg = (q.get("bg") or ["light"])[0]
+            bg = (q.get("bg") or [""])[0]
+            color = (q.get("color") or [""])[0]
             svg = _safe_svg(self.pack_dir, rel)
             if svg is None:
                 self._json(404, {"error": "not found"})
                 return
-            img = render_png(svg, size, background="#ffffff" if bg == "light" else "#112119")
+            text = svg.read_text()
+            if _HEX_RE.match(color):
+                text = text.replace("currentColor", color)
+            background = bg if _HEX_RE.match(bg) else ("#112119" if bg == "dark" else "#ffffff")
+            img = render_png_text(text, size, background=background)
             import io
 
             buf = io.BytesIO()
@@ -140,6 +156,45 @@ class ReviewHandler(BaseHTTPRequestHandler):
             self.send_header("Content-Length", str(len(body)))
             self.end_headers()
             self.wfile.write(body)
+            return
+
+        if url.path == "/api/styles":
+            _, styles = load_pack(self.pack_dir / "pack.json")
+            self._json(
+                200,
+                {
+                    sid: {
+                        k: v
+                        for k, v in st.as_dict().items()
+                        if k
+                        in (
+                            "label",
+                            "construction",
+                            "color_mode",
+                            "stroke",
+                            "fill",
+                            "size",
+                            "palette",
+                            "detail",
+                            "max_nodes",
+                            "min_gap",
+                            "guidance",
+                        )
+                    }
+                    for sid, st in styles.items()
+                },
+            )
+            return
+
+        if url.path == "/api/ai-status":
+            f = self.pack_dir / ".runs" / ".ai-status"
+            status = ""
+            if f.is_file():
+                try:
+                    status = f.read_text().strip()
+                except OSError:
+                    status = ""
+            self._json(200, {"status": status, "active": bool(status)})
             return
 
         if url.path == "/api/sheet":
@@ -196,6 +251,37 @@ class ReviewHandler(BaseHTTPRequestHandler):
 
     def do_PUT(self) -> None:
         url = urlparse(self.path)
+        if url.path == "/api/variant":
+            data = self._body()
+            icon_id = data.get("icon")
+            variant_id = data.get("variant")
+            style_id = data.get("style")
+            if not (icon_id and variant_id and style_id):
+                self._json(400, {"error": "need icon, variant, style"})
+                return
+            try:
+                with pack_lock(self.pack_dir):
+                    pack, styles = load_pack(self.pack_dir / "pack.json")
+                    v = pack["icons"].get(icon_id, {}).get("variants", {}).get(variant_id)
+                    if v is None or "link" in v:
+                        self._json(404, {"error": f"no authored variant {icon_id}#{variant_id}"})
+                        return
+                    if style_id not in styles:
+                        self._json(400, {"errors": [f"unknown style '{style_id}'"]})
+                        return
+                    v["style"] = style_id
+                    _, errors = revalidate(pack)
+                    if errors:
+                        self._json(400, {"errors": errors})
+                        return
+                    write_pack_atomic(self.pack_dir, pack)
+                self._json(200, {"rev": pack.get("rev", 0)})
+            except TimeoutError as exc:
+                self._json(423, {"error": str(exc)})
+            except Exception as exc:
+                self._json(500, {"error": str(exc)})
+            return
+
         if url.path != "/api/icon":
             self._json(404, {"error": "no such route"})
             return

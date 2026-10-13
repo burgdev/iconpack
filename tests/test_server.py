@@ -144,3 +144,51 @@ def test_pack_lock_blocks_concurrent_writer(srvpack: Path) -> None:
         with pytest.raises(TimeoutError), pack_lock(srvpack, timeout=0.4):
             pass
         assert time.monotonic() - t0 < 2
+
+
+# --- vue page + new endpoints ---------------------------------------------------
+
+
+def test_styles_endpoint(server: _Server) -> None:
+    code, body = server.get("/api/styles")
+    assert code == 200
+    styles = json.loads(body)
+    assert "mono-line" in styles and styles["mono-line"]["stroke"]["width"] == 2
+
+
+def test_variant_style_switch(server: _Server, srvpack: Path) -> None:
+    code, data = server.req(
+        "PUT",
+        "/api/variant",
+        {
+            "icon": "hut",
+            "variant": "mono",
+            "style": "mono-bold",
+        },
+    )
+    assert code == 200, data
+    pack = json.loads((srvpack / "pack.json").read_text())
+    assert pack["icons"]["hut"]["variants"]["mono"]["style"] == "mono-bold"
+    # unknown style → 400, nothing written
+    code, data = server.req(
+        "PUT", "/api/variant", {"icon": "hut", "variant": "mono", "style": "nope"}
+    )
+    assert code == 400
+
+
+def test_ai_status_endpoint(server: _Server, srvpack: Path) -> None:
+    status_dir = srvpack / ".runs"
+    (status_dir / ".ai-status").write_text("drafting hut/mono — 4 candidates\n")
+    _code, body = server.get("/api/ai-status")
+    assert json.loads(body) == {"status": "drafting hut/mono — 4 candidates", "active": True}
+    (status_dir / ".ai-status").unlink()
+    _code, body = server.get("/api/ai-status")
+    assert json.loads(body) == {"status": "", "active": False}
+
+
+def test_render_with_custom_colors(server: _Server, srvpack: Path) -> None:
+    import urllib.parse
+
+    p = urllib.parse.quote(".runs/r001/mono/hut/a1.svg")
+    code, body = server.get(f"/api/render?p={p}&size=24&bg=%231c1c1c&color=%23346751")
+    assert code == 200 and body[:4] == b"\x89PNG"

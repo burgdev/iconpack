@@ -376,19 +376,6 @@ def test_staleness_is_transitive(workpack: Path) -> None:
     assert out["icons"]["peak"]["variants"]["mono"]["status"] == "stale"  # transitive
 
 
-def test_page_field_ids_match_saveicon() -> None:
-    # regression: Save read main_color-<id> but the input was color-<id>
-    import re as _re
-
-    from iconpilot.server.page import PAGE
-
-    fields = _re.search(r"for \(const f of \[([^\]]+)\]", PAGE).group(1)
-    names = [f.strip().strip("'\"") for f in fields.split(",")]
-    assert "main_color" in names
-    for n in names:
-        assert f'id="{n}-$' in PAGE, f"page has no input id {n}-<icon>"
-
-
 def test_hand_edit_stales_dependents(workpack: Path) -> None:
     # approve hut/mono, then hand-edit its file → decide flags + stales chain
     runner.invoke(app, ["decide", str(workpack), "--round", "r001", "--text", "hut/mono: a1 ok"])
