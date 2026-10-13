@@ -1,6 +1,5 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://github.com/burgdev/iconpack/blob/main/src/iconpack/schema/pack.schema.json",
   "title": "iconpack pack.json",
   "type": "object",
   "required": ["schema", "name", "version", "spec", "icons"],

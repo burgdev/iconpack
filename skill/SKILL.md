@@ -7,7 +7,6 @@ description: Design, review, and export consistent SVG icon packs via the iconpa
 
 `iconpack` is a multi-model pipeline: drafters generate SVG variants, deterministic
 gates check them, a screener pre-ranks them, and **the user decides** every round.
-Full design: `ARCHITECTURE.md` in the tool repo (github.com/burgdev/iconpack).
 
 ## When to use
 
@@ -27,7 +26,7 @@ repeat until all icons approved
 iconpack export <pack> --target <T> --out <DIR>
 ```
 
-`<pack>` is a directory path (e.g. `~/git/wodore/wodore-design/iconpacks/outdoor-poi`).
+`<pack>` is a pack directory path (a folder containing `pack.json`).
 
 ## Compact decision text
 
@@ -48,13 +47,13 @@ it yourself — the CLI is the only parser.
 - Never approve icons on the user's behalf; approval is always the user's action
   (page button or decision text).
 - LLMs never self-certify gate results; only the deterministic gate does.
-- Keep Claude-usage to designer/reviewer/advisor roles; rounds with `--no-claude`
-  run screener + user only (cheaper iterations).
+- Keep expensive-model usage to designer/reviewer/advisor roles; rounds with
+  `--no-claude` run screener + user only (cheaper iterations).
 
 ## Escalation
 
 When an icon has been fully rejected twice, or the user flags it, run the advisor
-escalation path (ARCHITECTURE.md §3) rather than re-rolling the same brief.
+escalation path rather than re-rolling the same brief.
 
 ## Report back to the user
 

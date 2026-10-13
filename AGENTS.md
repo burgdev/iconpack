@@ -1,7 +1,7 @@
 # AGENTS.md — iconpack
 
-Multi-model SVG icon-pack pipeline. Canonical design doc: `ARCHITECTURE.md`
-(read it before changing pipeline/gate/data-model behavior).
+Multi-model SVG icon-pack pipeline: drafters generate variants, deterministic
+gates check them, a screener pre-ranks them, the user decides each round.
 
 ## Commands
 
@@ -13,9 +13,12 @@ uv run iconpack --help
 
 ## Conventions
 
-- Python ≥3.12, stdlib + the pinned deps only. Node tools are deferred to M6
-  (ARCHITECTURE.md §2.2) — do not add npm dependencies before that milestone.
-- Roles, not model names, appear in code (§3); routing lives in config (§12).
+- Python ≥3.12, stdlib + pinned deps only.
+- Keep the tool **project-agnostic**: no hardcoded paths, orgs, or project
+  names anywhere — packs are plain directories passed by path (or resolved
+  from the user's `packs_dir` config).
+- Refer to model **roles** (designer / drafter / fixer / screener / reviewer /
+  advisor), never model names, in code; routing lives in user config.
 - JSON Schemas in `src/iconpack/schema/` are validated on every pack load;
   extend them together with any `pack.json` format change and add a test.
 - The skill (`skill/SKILL.md`) is instructions only — no logic. It is installed

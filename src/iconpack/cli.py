@@ -1,10 +1,10 @@
-"""iconpack CLI — see ARCHITECTURE.md §10 for the target surface."""
+"""iconpack CLI."""
 
 from __future__ import annotations
 
 import typer
 
-from iconpack import MILESTONES, __version__
+from iconpack import __version__
 
 app = typer.Typer(
     name="iconpack",
@@ -14,10 +14,8 @@ app = typer.Typer(
 
 
 def _not_implemented(command: str) -> None:
-    milestone = MILESTONES.get(command, "a later milestone")
     typer.secho(
-        f"`iconpack {command}` is not implemented yet — it lands with {milestone}. "
-        "See ARCHITECTURE.md §15 for the roadmap.",
+        f"`iconpack {command}` is not implemented yet.",
         fg=typer.colors.YELLOW,
         err=True,
     )
@@ -53,7 +51,7 @@ def add(pack: str, icon: str, brief: str | None = typer.Option(None, "--brief"))
 
 @app.command()
 def bakeoff(pack: str, models: str = typer.Option(..., "--models"), icons: int = typer.Option(..., "--icons")) -> None:
-    """Compare candidate drafters before the first real pack (§13)."""
+    """Compare candidate drafters before the first real pack."""
     _not_implemented("bakeoff")
 
 

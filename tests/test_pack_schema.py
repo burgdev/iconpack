@@ -1,4 +1,4 @@
-"""Schema tests: the ARCHITECTURE.md §7.2 example must validate."""
+"""Schema tests: the documented example pack must validate."""
 
 from __future__ import annotations
 
