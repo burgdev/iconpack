@@ -20,6 +20,22 @@ pack-local).
 grid, stroke discipline, 16px legibility, silhouette-first, color ratios.
 The gate enforces the numbers; craft.md carries the judgment.
 
+## Finding the pack (multiple packs supported)
+
+`iconpilot packs` lists every discovered pack (roots from
+`~/.config/iconpilot/config.toml` `[packs].dirs`, plus `~/iconpacks`). When the
+user doesn't say which pack: list the candidates and **ask** — never guess.
+If a repo contains an `iconpacks/` dir, that's a strong hint; still confirm
+when more than one pack exists.
+
+## DESIGN.md (design system context)
+
+Before drafting for a pack: if `pack.json` sets `inherits.design_md`, read
+that file (context output points to it). If not set, **look for a `DESIGN.md`
+in the pack dir and its repo root anyway** — colors, corner radii, mood and
+anti-references from the design system feed the drafter's prompt (pack spec
+and style numbers always win over DESIGN.md prose).
+
 ## The loop (you drive it)
 
 ```

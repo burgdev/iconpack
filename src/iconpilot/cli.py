@@ -21,6 +21,7 @@ from iconpilot.export.export import (
 )
 from iconpilot.gate.run import run_gate
 from iconpilot.pack import PackError, load_pack, revalidate, write_pack_atomic
+from iconpilot.packs import summarize
 from iconpilot.render.contact import contact_sheet
 from iconpilot.render.render import hamming, hash_file
 from iconpilot.server.server import pack_lock
@@ -172,6 +173,24 @@ def add(
         typer.secho(str(exc), fg=typer.colors.RED, err=True)
         raise typer.Exit(code=2) from exc
     typer.secho(f"added {icon} ({', '.join(variants)})", fg=typer.colors.GREEN)
+
+
+@app.command(name="packs")
+def packs() -> None:
+    """List discovered packs across configured roots (config.toml [packs].dirs)."""
+    from iconpilot.packs import config_path, discover_packs, pack_roots
+
+    found = discover_packs()
+    roots = ", ".join(str(r) for r in pack_roots()) or "none"
+    typer.echo(f"roots: {roots}  (configure in {config_path()})")
+    if not found:
+        typer.secho(
+            "no packs found — pass a pack path to any command, or add roots to config.toml",
+            fg=typer.colors.YELLOW,
+        )
+        return
+    for p in found:
+        typer.echo(f"  {p['path']}  —  {summarize(p['path'])}")
 
 
 @app.command()

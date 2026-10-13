@@ -111,6 +111,18 @@ def _lint(root, spec: dict, style: Style, report: GateReport) -> None:
     fill = style.fill or "none"
     if fill == "none" and root.get("fill") not in (None, "none"):
         report.fail(f"lint: fill must be none for outline styles (found '{root.get('fill')}')")
+    if style.palette:
+        allowed = {c.lower() for c in style.palette}
+        used = {
+            v.lower()
+            for el in root.iter()
+            for attr in ("fill", "stroke")
+            for v in [el.get(attr) or ""]
+            if v.startswith("#")
+        }
+        rogue = used - allowed - {"#fff", "#ffffff"}  # white halo tolerated
+        if rogue:
+            report.fail(f"lint: colors outside the style palette: {sorted(rogue)}")
     report.checks.append(f"lint: elements/attributes conform to style '{style.id}'")
 
 

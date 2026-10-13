@@ -56,6 +56,7 @@ iconpilot gate <run-dir> --pack P      # batch gate (writes .gate.json per candi
 iconpilot gate hut.svg --pack P        # gate any single SVG (hand tweaks)
 iconpilot contact-sheet <run-dir> --pack P           # one PNG for screening
 iconpilot similar <file> --pack P      # near-duplicates → link suggestions
+iconpilot packs                        # list discovered packs (config.toml roots)
 iconpilot decide <pack> --text 'hut/mono: a2 ok · b1 no · more 2'
 iconpilot export <pack> --target maplibre --out <dir>
 ```

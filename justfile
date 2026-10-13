@@ -32,7 +32,3 @@ docs-serve:
 # Build the documentation (→ site/)
 docs-build:
     uv run --group docs zensical build
-
-# Build the Docker image locally
-docker-build tag="iconpilot:dev":
-    docker build -t {{tag}} .

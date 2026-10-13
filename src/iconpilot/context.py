@@ -63,6 +63,11 @@ def build_context(
     }
     if icon.get("main_color"):
         ctx["main_color"] = icon["main_color"]
+    if style.palette:
+        ctx["palette"] = list(style.palette)
+    dm = pack.get("inherits", {}).get("design_md")
+    if dm:
+        ctx["design_md"] = dm
     if prompt:
         ctx["prompt"] = prompt
     if anchor_id and anchor_id != variant_id:
@@ -117,6 +122,10 @@ def render_markdown(ctx: dict) -> str:
     ]
     if "main_color" in ctx:
         lines += [f"**Main color:** `{ctx['main_color']}`", ""]
+    if "palette" in ctx:
+        lines += [f"**Palette (only these colors):** {', '.join(ctx['palette'])}", ""]
+    if "design_md" in ctx:
+        lines += [f"**Design system:** read `{ctx['design_md']}` before drafting.", ""]
     for key, title in (
         ("anchor_svg", "Anchor (family form baseline)"),
         ("reference_svg", "Reference (visually match)"),

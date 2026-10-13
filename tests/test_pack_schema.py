@@ -9,6 +9,7 @@ from pathlib import Path
 import jsonschema
 import pytest
 
+from iconpilot.context import build_context
 from iconpilot.gate.run import run_gate
 from iconpilot.pack import PackError, _json_schema, load_pack
 from iconpilot.styles import BUILTIN_STYLES, resolve_styles
@@ -343,3 +344,37 @@ def test_style_grid_overrides_pack_viewbox(tmp_path: Path, pack_dir: Path) -> No
     # the same 48px SVG must FAIL against a 24-grid style
     report = run_gate(svg, pack, styles["mono-line"])
     assert any("viewBox" in e for e in report.errors)
+
+
+# --- palette + design_md context ---------------------------------------------
+
+PALETTE_STYLE_SVG = (
+    '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" '
+    'fill="#ff0000" stroke="#224e3b" stroke-width="2" '
+    'stroke-linecap="round" stroke-linejoin="round">'
+    '<path d="M4 11 L12 4 L20 11"/></svg>'
+)
+
+
+def test_palette_enforced_in_lint(tmp_path: Path, pack_dir: Path) -> None:
+    svg = tmp_path / "p.svg"
+    svg.write_text(PALETTE_STYLE_SVG)
+    pack, styles = load_pack(pack_dir / "pack.json")
+    # lineal-color with a palette that excludes #ff0000
+    lc = styles["lineal-color"]
+    styled = type(lc)(**{**lc.as_dict(), "palette": ("#346751", "#9dd9d2")})
+    report = run_gate(svg, pack, styled)
+    assert any("palette" in e for e in report.errors)
+
+
+def test_context_surfaces_palette_and_design_md(pack_dir: Path) -> None:
+    import json as _json
+
+    pack = _json.loads((pack_dir / "pack.json").read_text())
+    pack["inherits"] = {"design_md": "../../DESIGN.md"}
+    pack["styles"] = {"lineal-color": {"palette": ["#346751", "#9dd9d2"]}}
+    (pack_dir / "pack.json").write_text(_json.dumps(pack))
+    pack_data, styles = load_pack(pack_dir / "pack.json")
+    ctx = build_context(pack_dir, pack_data, styles, "hut", "color")
+    assert ctx["palette"] == ["#346751", "#9dd9d2"]
+    assert ctx["design_md"] == "../../DESIGN.md"

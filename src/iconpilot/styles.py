@@ -38,6 +38,7 @@ class Style:
     avoid: tuple[str, ...] = ()
     render_sizes: tuple[int, ...] = (16, 24, 48)
     size: int | None = None  # design grid px; None = inherit the pack spec viewBox
+    palette: tuple[str, ...] = ()  # allowed hex colors for colored styles; empty = any
     note: str | None = None
 
     def __post_init__(self) -> None:
@@ -220,7 +221,7 @@ def _style_from_dict(style_id: str, d: dict, base: Style | None) -> Style:
     src = base.as_dict() if base else {"id": style_id}
     src.update({k: v for k, v in d.items() if k != "id"})
     src["id"] = style_id
-    for tuple_key in ("style_words", "avoid", "render_sizes"):
+    for tuple_key in ("style_words", "avoid", "render_sizes", "palette"):
         if tuple_key in src and isinstance(src[tuple_key], list):
             src[tuple_key] = tuple(src[tuple_key])
     if "stroke" in src and isinstance(src["stroke"], dict) and base and base.stroke:

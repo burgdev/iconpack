@@ -18,4 +18,6 @@ agent-driven (no LLM calls in the tool).
 - Review server: live per-icon editing, decisions through one code path,
   flock-serialized writes, rev polling
 - Exports: svg, sprite-svg, maplibre sprites (@1x/@2x), iconify JSON with aliases
-- Skill (SKILL.md + craft.md), zensical docs, CI (ruff/ty/pytest), Docker image
+- Skill (SKILL.md + craft.md), zensical docs, CI (ruff/ty/pytest)
+- Per-style design grids (mono 24, color 48), style palettes (gate-enforced),
+  pack discovery (`iconpilot packs` + config.toml roots), DESIGN.md inheritance
