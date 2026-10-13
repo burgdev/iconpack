@@ -80,6 +80,20 @@ input[type=color] { width:34px; height:28px; padding:0 2px; border:1px solid var
 .matrix .stage { border-radius:10px; display:flex; align-items:flex-end; justify-content:space-around;
                  padding:14px 8px; gap:8px; min-height:130px; }
 .matrix .sizes { font-size:.7rem; color:var(--muted); text-align:center; margin-top:4px; }
+.ratebtn { min-width:64px; font-weight:600; }
+.sheet .sheetbox { position:fixed; bottom:0; left:0; right:0; max-width:560px; margin:0 auto;
+                   background:var(--card); border:1px solid var(--line); border-bottom:none;
+                   border-radius:16px 16px 0 0; padding:16px 16px calc(16px + env(safe-area-inset-bottom));
+                   box-shadow:0 -8px 32px rgba(0,0,0,.25); }
+.sheet .sheetbox h3 { display:flex; justify-content:space-between; align-items:center; margin:0 0 10px; font-size:.95rem; }
+.sheetstage { display:flex; align-items:flex-end; justify-content:center; gap:20px; padding:12px 0 16px; }
+.stars { display:flex; gap:2px; }
+.stars button { flex:1; font-size:30px; line-height:1.3; padding:10px 0; color:var(--line); border:none; background:none; }
+.stars button.on { color:#e8a825; }
+.sheetrow { display:flex; justify-content:space-between; margin-top:10px; gap:8px; }
+@media (min-width: 700px) {
+  .sheet .sheetbox { position:relative; bottom:auto; border-radius:16px; border-bottom:1px solid var(--line); }
+}
 .stylebox { background:var(--chip); border-radius:10px; padding:10px; font-size:.82rem; margin-top:10px; }
 .stylebox select { font:inherit; padding:4px 8px; border-radius:8px; border:1px solid var(--line); background:var(--card); color:var(--ink); }
 .kv { display:grid; grid-template-columns:auto 1fr; gap:2px 12px; margin-top:6px; color:var(--muted); }
@@ -121,8 +135,11 @@ footer { text-align:center; color:var(--muted); font-size:.75rem; padding:20px; 
             <div class="rating">
               <button :class="{ 'armed-x': item(g, c.cand)?.t?.startsWith(c.cand + ' no') }"
                       title="drop (rate 0)" @click="drop(g, c)">✕</button>
-              <input type="range" min="0" max="10" :value="rating(g, c.cand)"
-                     @input="rate(g, c, $event.target.value)" :title="'rate ' + c.cand">
+              <button class="ratebtn" :class="{ armed: rating(g, c.cand) > 0 }"
+                      @click="openSheet(g, c)" :title="'rate ' + c.cand">
+                <template v-if="rating(g, c.cand) > 0">★ {{ rating(g, c.cand) }}</template>
+                <template v-else>rate</template>
+              </button>
               <button :class="{ armed: item(g, c.cand)?.t === c.cand + ' ok' }"
                       title="approve — final" @click="approve(g, c)">✓</button>
             </div>
@@ -180,6 +197,26 @@ footer { text-align:center; color:var(--muted); font-size:.75rem; padding:20px; 
     <footer>iconpilot review v{{ S.version }} · flock-serialized writes · approval is always yours</footer>
   </main>
 
+  <div v-if="S.sheet" class="overlay sheet" @click.self="S.sheet = null">
+    <div class="sheetbox">
+      <h3>{{ S.sheet.g.icon }} / {{ S.sheet.g.variant }} · {{ S.sheet.c.cand }}
+          <button class="subtle" @click="S.sheet = null">✕</button></h3>
+      <div class="sheetstage">
+        <img width="96" height="96" :src="render(S.sheet.c.path, 96, '#f6f9f7')">
+        <img width="48" height="48" :src="render(S.sheet.c.path, 48, '#22292e', '#f2f7f4')">
+        <img width="24" height="24" :src="render(S.sheet.c.path, 24, '#f6f9f7')">
+      </div>
+      <div class="stars">
+        <button v-for="n in 10" :key="n" :class="{ on: n <= rating(S.sheet.g, S.sheet.c.cand) }"
+                @click="rate(S.sheet.g, S.sheet.c, n); S.sheet = null;">★</button>
+      </div>
+      <div class="sheetrow">
+        <button class="armed-x" @click="drop(S.sheet.g, S.sheet.c); S.sheet = null">drop (0)</button>
+        <button class="subtle" @click="S.sheet = null">cancel</button>
+      </div>
+    </div>
+  </div>
+
   <div v-if="S.dlg" class="overlay" @click.self="S.dlg = null">
     <div class="dialog">
       <h3><span>{{ S.dlg.icon }} / {{ S.dlg.variant }} <span class="muted">{{ S.dlg.cand || '' }}</span></span>
@@ -236,7 +273,7 @@ const S = reactive({
   styles: {}, ai: { text: '', active: false }, version: '',
   decisions: {}, manual: false, manualText: '',
   msg: '', msgClass: 'muted', editing: null,
-  dlg: null,
+  dlg: null, sheet: null,
   bgs: [
     { name: 'white', hex: '#ffffff' }, { name: 'paper', hex: '#f6f9f7' },
     { name: 'night', hex: '#112119' }, { name: 'ink', hex: '#1c1c1c' },
@@ -303,6 +340,7 @@ function styleLabel(sid) {
   const s = S.styles[sid];
   return sid + (s ? ` — ${s.label}` : '');
 }
+function openSheet(g, c) { S.sheet = { g, c }; }
 function open(g, c) {
   const main = S.pack.icons?.[g.icon]?.main_color;
   S.dlg = { icon: g.icon, variant: g.variant, cand: c.cand, path: c.path, styleId: g.style,

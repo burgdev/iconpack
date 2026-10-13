@@ -175,6 +175,33 @@ def add(
     typer.secho(f"added {icon} ({', '.join(variants)})", fg=typer.colors.GREEN)
 
 
+@app.command()
+def wait(
+    pack: str,
+    timeout: float = typer.Option(3600, "--timeout", help="Seconds to wait before giving up."),
+    interval: float = typer.Option(2, "--interval", help="Poll interval in seconds."),
+) -> None:
+    """Block until the user applies decisions (pack rev changes), then exit.
+
+    The agent loop's handoff point: serve the review page, run this, continue
+    automatically when it returns (exit 0 = decisions applied, exit 124 = timeout).
+    """
+    from iconpilot.watch import wait_for_change
+
+    pack_dir = resolve_pack_dir(pack)
+    result = wait_for_change(pack_dir, timeout=timeout, interval=interval)
+    if not result["changed"]:
+        typer.secho(
+            f"timeout after {timeout:.0f}s (rev {result['rev']} unchanged)",
+            fg=typer.colors.YELLOW,
+            err=True,
+        )
+        raise typer.Exit(code=124)
+    typer.secho(f"pack changed → rev {result['rev']}", fg=typer.colors.GREEN)
+    if result["summary"]:
+        typer.echo(f"  {result['summary']}")
+
+
 @app.command(name="packs")
 def packs() -> None:
     """List discovered packs across configured roots (config.toml [packs].dirs)."""

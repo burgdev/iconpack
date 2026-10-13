@@ -70,12 +70,15 @@ and style numbers always win over DESIGN.md prose).
              Ranking orders candidates FOR THE USER — it never selects or
              approves; only `decide` (step 5) changes state.
              Also check family coherence against anchors.
-5. DECIDE    The USER decides — review page, or compact text they paste:
-             hut/mono: a2 keep "thinner roof" · b1 no · more 2
+5. DECIDE    Hand the review page to the user, then block:
+             iconpilot wait <pack>          # returns when they Apply
+             The USER decides — page buttons or compact text they paste:
+             hut/mono: a2 keep "thinner roof" · b1 rate 7 · more 2
              → iconpilot decide <pack> --text "…" (verbatim; CLI is the
              only parser). Approval/keep materialize to icons/, dependents
              of changed anchors go stale automatically.
-6. REPEAT    `iconpilot status <pack>` shows what's outstanding (todo,
+6. REPEAT    When `wait` returns: read the decisions (status + decisions.json),
+             act on requests (`more N`, `like`, `restart`) and continue    `iconpilot status <pack>` shows what's outstanding (todo,
              in_review, `stale` — stale variants must be re-run; `✎edited`
              means the icons/ file changed after approval). Loop until every
              variant is approved; then export.

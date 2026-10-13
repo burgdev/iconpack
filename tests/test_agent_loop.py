@@ -457,3 +457,26 @@ def test_new_author_designer(tmp_path: Path) -> None:
     assert r.exit_code == 0
     r = runner.invoke(app, ["new", str(tmp_path / "x"), "--author", "llm"])
     assert r.exit_code == 2
+
+
+def test_wait_returns_on_rev_change(workpack: Path) -> None:
+    import threading
+
+    from iconpilot.watch import current_rev, wait_for_change
+
+    baseline = current_rev(workpack)
+
+    def bump() -> None:
+        import time
+
+        time.sleep(0.3)
+        r = runner.invoke(
+            app, ["decide", str(workpack), "--round", "r001", "--text", "hut/mono: a1 ok"]
+        )
+        assert r.exit_code == 0, r.output
+
+    threading.Thread(target=bump).start()
+    result = wait_for_change(workpack, timeout=10, interval=0.1, start_rev=baseline)
+    assert result["changed"] is True
+    assert result["rev"] == baseline + 1
+    assert "hut" in result["summary"]
