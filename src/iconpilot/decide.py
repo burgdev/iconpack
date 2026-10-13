@@ -28,7 +28,7 @@ from __future__ import annotations
 import json
 import re
 import shutil
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 
 from iconpilot.styles import Style
@@ -41,8 +41,8 @@ _ITEM_RE = re.compile(
       |(?P<cand>{_CAND})\s+(?P<action>ok|keep|no)
       |more\s+(?P<more>\d+)
       |like\s+(?P<like_cand>{_CAND})\s+(?P<like_n>\d+)
-      |restart
-      |note
+      |(?P<restart>restart)
+      |(?P<note>note)
     )
     (?:\s+"(?P<comment>[^"]*)")?
     \s*$""",
@@ -123,8 +123,7 @@ def _resolve_variant(icon: dict, requested: str | None) -> str:
             raise ValueError(f"variant '{requested}' is not an authored variant")
         return requested
     authored = [
-        v for v, d in icon["variants"].items()
-        if "style" in d and d.get("status") != "approved"
+        v for v, d in icon["variants"].items() if "style" in d and d.get("status") != "approved"
     ]
     if len(authored) == 1:
         return authored[0]
@@ -133,7 +132,9 @@ def _resolve_variant(icon: dict, requested: str | None) -> str:
     raise ValueError("multiple candidate variants — specify '<icon>/<variant>:'")
 
 
-def _find_candidates(pack_dir: Path, round_id: str, icon_id: str, variant_id: str) -> dict[str, Path]:
+def _find_candidates(
+    pack_dir: Path, round_id: str, icon_id: str, variant_id: str
+) -> dict[str, Path]:
     d = pack_dir / ".runs" / round_id / variant_id / icon_id
     if not d.is_dir():
         return {}
@@ -207,16 +208,22 @@ def apply_decisions(
                     shutil.copyfile(cands[cand], dest)
                     variant["status"] = "approved"
                     variant["chosen"] = {"run": round_id, "variant": cand}
-                    log.append(f"{icon_id}#{variant_id}: approved {cand} → {dest.relative_to(pack_dir)}")
+                    log.append(
+                        f"{icon_id}#{variant_id}: approved {cand} → {dest.relative_to(pack_dir)}"
+                    )
                     if changed:
                         for dep in _dependents_of(pack, icon_id, variant_id):
-                            pack["icons"][dep.split("#")[0]]["variants"][dep.split("#")[1]]["status"] = "stale"
+                            pack["icons"][dep.split("#")[0]]["variants"][dep.split("#")[1]][
+                                "status"
+                            ] = "stale"
                             log.append(f"{dep}: stale (dependency {icon_id}#{variant_id} changed)")
                 elif action == "keep":
                     dest.parent.mkdir(parents=True, exist_ok=True)
                     shutil.copyfile(cands[cand], dest)
                     variant["status"] = "in_review"
-                    log.append(f"{icon_id}#{variant_id}: kept {cand} → {dest.relative_to(pack_dir)} (working copy)")
+                    log.append(
+                        f"{icon_id}#{variant_id}: kept {cand} → {dest.relative_to(pack_dir)} (working copy)"
+                    )
                 elif action == "no":
                     log.append(f"{icon_id}#{variant_id}: dropped candidate {cand}")
                 if comment_text:
@@ -226,9 +233,13 @@ def apply_decisions(
                 log.append(f"{icon_id}#{variant_id}: requested {item['more']} more")
             elif "like_cand" in item:
                 variant["request"] = {
-                    "type": "like", "n": int(item["like_n"]), "from": item["like_cand"],
+                    "type": "like",
+                    "n": int(item["like_n"]),
+                    "from": item["like_cand"],
                 }
-                log.append(f"{icon_id}#{variant_id}: requested {item['like_n']} like {item['like_cand']}")
+                log.append(
+                    f"{icon_id}#{variant_id}: requested {item['like_n']} like {item['like_cand']}"
+                )
             elif "restart" in item or "note" in item:
                 if "restart" in item:
                     variant["status"] = "todo"
@@ -240,10 +251,18 @@ def apply_decisions(
     # persist: decisions echo + pack.json (atomic, rev bump)
     runs = pack_dir / ".runs" / round_id
     runs.mkdir(parents=True, exist_ok=True)
-    (runs / "decisions.json").write_text(json.dumps(
-        {"round": round_id, "decided_at": datetime.now(timezone.utc).isoformat(),
-         "source": source, "icons": decisions}, indent=2,
-    ))
+    (runs / "decisions.json").write_text(
+        json.dumps(
+            {
+                "round": round_id,
+                "decided_at": datetime.now(UTC).isoformat(),
+                "source": source,
+                "icons": decisions,
+            },
+            indent=2,
+        )
+    )
     from iconpilot.pack import write_pack_atomic
+
     write_pack_atomic(pack_dir, pack)
     return log

@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import json
-import shutil
 from pathlib import Path
 
 import pytest
@@ -29,7 +28,8 @@ def workpack(tmp_path: Path) -> Path:
     (d / "pack.json").write_text(json.dumps(example_pack()))
     # run r001 with candidates for hut#mono and selfhut#mono
     for icon, cand, svg in [
-        ("hut", "a1", VALID_SVG), ("hut", "a2", OTHER_SVG),
+        ("hut", "a1", VALID_SVG),
+        ("hut", "a2", OTHER_SVG),
         ("selfhut", "a1", VALID_SVG),
     ]:
         p = d / ".runs" / "r001" / "mono" / icon
@@ -40,12 +40,48 @@ def workpack(tmp_path: Path) -> Path:
 
 # --- decide -------------------------------------------------------------------
 
+
+def test_decide_restart_and_note_are_applied(workpack: Path) -> None:
+    # regression: bare regex alternatives parsed to empty dicts — silent no-op (0.0.1)
+    r = runner.invoke(app, [
+        "decide", str(workpack), "--round", "r001", "--text",
+        'hut/mono: a1 ok · selfhut/mono: restart "cutlery concept wrong"',
+    ])
+    assert r.exit_code == 0, r.output
+    out = json.loads((workpack / "pack.json").read_text())
+    hut = out["icons"]["hut"]["variants"]["mono"]
+    selfhut = out["icons"]["selfhut"]["variants"]["mono"]
+    assert hut["status"] == "approved"
+    assert selfhut["status"] == "todo"          # restart actually applied
+    assert "chosen" not in selfhut
+    assert any("cutlery concept wrong" in c["text"] for c in selfhut["comments"])
+
+    r = runner.invoke(app, [
+        "decide", str(workpack), "--round", "r001", "--text",
+        'hut/mono: note "revisit door proportion"',
+    ])
+    assert r.exit_code == 0, r.output
+    out = json.loads((workpack / "pack.json").read_text())
+    hut = out["icons"]["hut"]["variants"]["mono"]
+    assert any("revisit door proportion" in c["text"] for c in hut["comments"])
+    assert hut["status"] == "approved"          # note alone must not change status
+
+
+def test_decide_like_request(workpack: Path) -> None:
+    r = runner.invoke(app, [
+        "decide", str(workpack), "--round", "r001", "--text", "hut/mono: like a1 3",
+    ])
+    assert r.exit_code == 0, r.output
+    out = json.loads((workpack / "pack.json").read_text())
+    assert out["icons"]["hut"]["variants"]["mono"]["request"] == {
+        "type": "like", "n": 3, "from": "a1",
+    }
+
+
 def test_parse_two_icons_one_line() -> None:
     from iconpilot.decide import parse_decision_text
 
-    d = parse_decision_text(
-        'hut/mono: a1 ok · selfhut/mono: a1 keep "cutlery next round" · more 2'
-    )
+    d = parse_decision_text('hut/mono: a1 ok · selfhut/mono: a1 keep "cutlery next round" · more 2')
     assert list(d) == ["hut/mono", "selfhut/mono"]
     assert d["hut/mono"]["items"] == [{"cand": "a1", "action": "ok"}]
     assert d["selfhut/mono"]["items"] == [
@@ -55,10 +91,17 @@ def test_parse_two_icons_one_line() -> None:
 
 
 def test_decide_approve_keep_reject(workpack: Path) -> None:
-    r = runner.invoke(app, [
-        "decide", str(workpack), "--round", "r001", "--text",
-        'hut/mono: a1 keep "thinner roof" · a2 no · more 2',
-    ])
+    r = runner.invoke(
+        app,
+        [
+            "decide",
+            str(workpack),
+            "--round",
+            "r001",
+            "--text",
+            'hut/mono: a1 keep "thinner roof" · a2 no · more 2',
+        ],
+    )
     assert r.exit_code == 0, r.output
     kept = workpack / "icons" / "hut" / "mono.svg"
     assert kept.read_text() == VALID_SVG
@@ -77,9 +120,17 @@ def test_decide_ok_marks_dependents_stale(workpack: Path) -> None:
     pack["icons"]["selfhut"]["variants"]["mono"]["status"] = "approved"
     (workpack / "pack.json").write_text(json.dumps(pack))
 
-    r = runner.invoke(app, [
-        "decide", str(workpack), "--round", "r001", "--text", "hut/mono: a2 ok",
-    ])
+    r = runner.invoke(
+        app,
+        [
+            "decide",
+            str(workpack),
+            "--round",
+            "r001",
+            "--text",
+            "hut/mono: a2 ok",
+        ],
+    )
     assert r.exit_code == 0, r.output
     out = json.loads((workpack / "pack.json").read_text())
     assert out["icons"]["hut"]["variants"]["mono"]["status"] == "approved"
@@ -88,39 +139,73 @@ def test_decide_ok_marks_dependents_stale(workpack: Path) -> None:
 
 
 def test_decide_star_reject_resets(workpack: Path) -> None:
-    r = runner.invoke(app, [
-        "decide", str(workpack), "--round", "r001", "--text", 'selfhut/mono: * no',
-    ])
+    r = runner.invoke(
+        app,
+        [
+            "decide",
+            str(workpack),
+            "--round",
+            "r001",
+            "--text",
+            "selfhut/mono: * no",
+        ],
+    )
     assert r.exit_code == 0, r.output
     out = json.loads((workpack / "pack.json").read_text())
     assert out["icons"]["selfhut"]["variants"]["mono"]["status"] == "todo"
 
 
 def test_decide_unknown_candidate_rejected(workpack: Path) -> None:
-    r = runner.invoke(app, [
-        "decide", str(workpack), "--round", "r001", "--text", "hut/mono: z9 ok",
-    ])
+    r = runner.invoke(
+        app,
+        [
+            "decide",
+            str(workpack),
+            "--round",
+            "r001",
+            "--text",
+            "hut/mono: z9 ok",
+        ],
+    )
     assert r.exit_code == 2
 
 
 def test_decide_revalidates_pack(workpack: Path) -> None:
-    r = runner.invoke(app, [
-        "decide", str(workpack), "--round", "r001", "--text", "hut/mono: a1 ok",
-    ])
+    r = runner.invoke(
+        app,
+        [
+            "decide",
+            str(workpack),
+            "--round",
+            "r001",
+            "--text",
+            "hut/mono: a1 ok",
+        ],
+    )
     assert r.exit_code == 0
     # resulting pack must still pass full validation
     from iconpilot.pack import load_pack
+
     load_pack(workpack / "pack.json")
 
 
 # --- context ------------------------------------------------------------------
 
+
 def test_context_markdown(workpack: Path) -> None:
     # approve hut#mono first so it exists as a reference target
     runner.invoke(app, ["decide", str(workpack), "--round", "r001", "--text", "hut/mono: a1 ok"])
-    r = runner.invoke(app, [
-        "context", str(workpack), "--icon", "selfhut", "--variant", "mono",
-    ])
+    r = runner.invoke(
+        app,
+        [
+            "context",
+            str(workpack),
+            "--icon",
+            "selfhut",
+            "--variant",
+            "mono",
+        ],
+    )
     assert r.exit_code == 0, r.output
     assert "Self-catering hut" in r.output
     assert "Reference (visually match)" in r.output
@@ -128,9 +213,18 @@ def test_context_markdown(workpack: Path) -> None:
 
 
 def test_context_json_has_gate_contract(workpack: Path) -> None:
-    r = runner.invoke(app, [
-        "context", str(workpack), "--icon", "hut", "--variant", "mono", "--json",
-    ])
+    r = runner.invoke(
+        app,
+        [
+            "context",
+            str(workpack),
+            "--icon",
+            "hut",
+            "--variant",
+            "mono",
+            "--json",
+        ],
+    )
     assert r.exit_code == 0
     ctx = json.loads(r.output)
     assert ctx["gate"]["max_nodes"] == 40
@@ -139,18 +233,19 @@ def test_context_json_has_gate_contract(workpack: Path) -> None:
 
 # --- batch gate -----------------------------------------------------------------
 
+
 def test_batch_gate_writes_reports(workpack: Path) -> None:
     r = runner.invoke(app, ["gate", str(workpack / ".runs" / "r001"), "--pack", str(workpack)])
     assert r.exit_code == 0, r.output
-    report = json.loads(
-        (workpack / ".runs" / "r001" / "mono" / "hut" / "a1.gate.json").read_text()
-    )
+    report = json.loads((workpack / ".runs" / "r001" / "mono" / "hut" / "a1.gate.json").read_text())
     assert report["passed"] is True
 
 
 def test_batch_gate_fails_bad_svg(workpack: Path) -> None:
     bad = workpack / ".runs" / "r001" / "mono" / "hut" / "b1.svg"
-    bad.write_text('<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48"><text>x</text></svg>')
+    bad.write_text(
+        '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48"><text>x</text></svg>'
+    )
     r = runner.invoke(app, ["gate", str(workpack / ".runs" / "r001"), "--pack", str(workpack)])
     assert r.exit_code == 1
     assert "batch: 3 passed, 1 failed" in r.output
@@ -158,10 +253,17 @@ def test_batch_gate_fails_bad_svg(workpack: Path) -> None:
 
 # --- contact sheet ---------------------------------------------------------------
 
+
 def test_contact_sheet(workpack: Path) -> None:
-    r = runner.invoke(app, [
-        "contact-sheet", str(workpack / ".runs" / "r001"), "--pack", str(workpack),
-    ])
+    r = runner.invoke(
+        app,
+        [
+            "contact-sheet",
+            str(workpack / ".runs" / "r001"),
+            "--pack",
+            str(workpack),
+        ],
+    )
     assert r.exit_code == 0, r.output
     sheet = workpack / ".runs" / "r001" / "contact-sheet.png"
     assert sheet.is_file()
