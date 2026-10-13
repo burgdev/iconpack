@@ -2,9 +2,15 @@
 
 from __future__ import annotations
 
+import json
+from pathlib import Path
+
 import typer
 
 from iconpilot import __version__
+from iconpilot.gate.run import run_gate
+from iconpilot.pack import PackError, load_pack
+from iconpilot.styles import resolve_styles, user_styles_path
 
 app = typer.Typer(
     name="iconpilot",
@@ -93,10 +99,109 @@ def status(pack: str) -> None:
     _not_implemented("status")
 
 
+def _load_pack_arg(pack: str) -> tuple[dict, dict]:
+    """Accept a pack.json path or a pack directory."""
+    p = Path(pack)
+    if p.is_dir():
+        p = p / "pack.json"
+    return load_pack(p)
+
+
 @app.command()
-def gate(file: str, pack: str = typer.Option(..., "--pack")) -> None:
+def gate(
+    file: str,
+    pack: str = typer.Option(..., "--pack", help="Pack directory or pack.json path."),
+    variant: str = typer.Option(
+        None, "--variant", help="Variant name; defaults to 'mono' then first authored."
+    ),
+    as_json: bool = typer.Option(False, "--json"),
+) -> None:
     """Run the deterministic gate on any SVG (debug / hand-made icons)."""
-    _not_implemented("gate")
+    try:
+        pack_data, styles = _load_pack_arg(pack)
+    except PackError as exc:
+        typer.secho(str(exc), fg=typer.colors.RED, err=True)
+        raise typer.Exit(code=2) from exc
+
+    icons = pack_data["icons"]
+    target = None
+    if variant:
+        for icon_id, icon in icons.items():
+            if variant in icon.get("variants", {}):
+                target = icon["variants"][variant]
+                break
+        if target is None or "style" not in target:
+            typer.secho(f"variant '{variant}' not found as an authored variant", fg=typer.colors.RED, err=True)
+            raise typer.Exit(code=2)
+    else:
+        for icon_id, icon in icons.items():
+            vs = icon.get("variants", {})
+            if "mono" in vs and "style" in vs["mono"]:
+                target, variant = vs["mono"], "mono"
+                break
+        if target is None:
+            for icon_id, icon in icons.items():
+                for vid, v in icon.get("variants", {}).items():
+                    if "style" in v:
+                        target, variant = v, vid
+                        break
+                if target:
+                    break
+    if target is None:
+        typer.secho("pack has no authored variants to gate against", fg=typer.colors.RED, err=True)
+        raise typer.Exit(code=2)
+
+    report = run_gate(file, pack_data, styles[target["style"]])
+    if as_json:
+        typer.echo(json.dumps(report.as_dict(), indent=2))
+    else:
+        for c in report.checks:
+            typer.secho(f"  ✓ {c}", fg=typer.colors.GREEN)
+        for e in report.errors:
+            typer.secho(f"  ✗ {e}", fg=typer.colors.RED)
+        typer.secho(
+            f"{'PASS' if report.passed else 'FAIL'} — {file} against style '{target['style']}'"
+            + (f" (variant {variant})" if variant else ""),
+            fg=typer.colors.GREEN if report.passed else typer.colors.RED,
+        )
+    raise typer.Exit(code=0 if report.passed else 1)
+
+
+@app.command(name="styles")
+def styles(
+    pack: str = typer.Option(None, "--pack", help="Include pack-local styles for this pack."),
+) -> None:
+    """List the style registry: built-ins, user config, and pack-local."""
+    from iconpilot.styles import BUILTIN_STYLES
+
+    pack_local_ids: set[str] = set()
+    if pack:
+        try:
+            data, _ = _load_pack_arg(pack)
+            pack_local_ids = set(data.get("styles", {}))
+        except PackError as exc:
+            typer.secho(str(exc), fg=typer.colors.RED, err=True)
+            raise typer.Exit(code=2) from exc
+
+    merged = resolve_styles(data.get("styles") if pack else None)
+    typer.echo(f"registry: {len(merged)} styles")
+    if user_styles_path().is_file():
+        typer.echo(f"user config: {user_styles_path()}")
+    for style_id in sorted(merged):
+        s = merged[style_id]
+        if pack and style_id in pack_local_ids:
+            src = "pack"
+        elif style_id in BUILTIN_STYLES and BUILTIN_STYLES[style_id] == s:
+            src = "built-in"
+        else:
+            src = "user"
+        desc = f"{s.construction}/{s.color_mode}"
+        if s.stroke:
+            desc += f" stroke {s.stroke.get('width')}"
+        if s.fill:
+            desc += f" fill {s.fill}"
+        desc += f" · detail {s.detail} · max {s.max_nodes} nodes"
+        typer.echo(f"  {style_id:<16} [{src:<8}] {s.label}: {desc}")
 
 
 @app.command()

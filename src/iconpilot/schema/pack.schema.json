@@ -1,13 +1,20 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "title": "iconpilot pack.json",
+  "title": "iconpilot pack.json v2",
   "type": "object",
-  "required": ["schema", "name", "version", "spec", "icons"],
+  "required": ["schema", "name", "version", "icons"],
   "additionalProperties": false,
   "properties": {
-    "schema": { "const": 1 },
+    "schema": { "const": 2 },
     "name": { "type": "string", "pattern": "^[a-z][a-z0-9-]*$" },
     "version": { "type": "string", "pattern": "^\\d+\\.\\d+\\.\\d+$" },
+    "provenance": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "created_by": { "enum": ["user", "designer"] }
+      }
+    },
     "inherits": {
       "type": "object",
       "additionalProperties": false,
@@ -16,31 +23,26 @@
       }
     },
     "spec": { "$ref": "#/$defs/spec" },
-    "style": {
+    "styles": {
       "type": "object",
-      "required": ["description"],
-      "additionalProperties": false,
-      "properties": {
-        "description": { "type": "string" },
-        "anti_references": { "type": "array", "items": { "type": "string" } }
-      }
+      "description": "Pack-local style overrides; ids may extend registry styles.",
+      "additionalProperties": { "type": "object" }
     },
-    "rules": { "type": "array", "items": { "type": "string" } },
     "schedule": {
       "type": "array",
       "minItems": 1,
       "items": { "type": "integer", "minimum": 1 }
     },
-    "anchors": { "type": "array", "items": { "type": "string" } },
     "icons": {
       "type": "object",
+      "minProperties": 1,
       "additionalProperties": { "$ref": "#/$defs/icon" }
     }
   },
   "$defs": {
     "spec": {
       "type": "object",
-      "required": ["viewBox", "stroke", "allowed_elements"],
+      "required": ["viewBox", "allowed_elements"],
       "additionalProperties": false,
       "properties": {
         "viewBox": { "type": "string", "pattern": "^0 0 \\d+(\\.\\d+)? \\d+(\\.\\d+)?$" },
@@ -59,7 +61,6 @@
             "linejoin": { "enum": ["miter", "round", "bevel"] }
           }
         },
-        "corner_radius": { "type": "number", "minimum": 0 },
         "fill": { "type": "string" },
         "color": { "type": "string" },
         "allowed_elements": {
@@ -68,18 +69,55 @@
           "items": { "type": "string", "pattern": "^[a-z]+$" }
         },
         "precision": { "type": "number", "exclusiveMinimum": 0 },
-        "max_nodes": { "type": "integer", "minimum": 1 },
-        "min_gap": { "type": "number", "minimum": 0 }
+        "corner_radius": { "type": "number", "minimum": 0 }
       }
     },
     "icon": {
       "type": "object",
-      "required": ["brief", "status"],
+      "required": ["brief", "variants"],
       "additionalProperties": false,
       "properties": {
-        "brief": { "type": "string" },
-        "tags": { "type": "array", "items": { "type": "string" } },
-        "status": { "enum": ["todo", "drafting", "in_review", "approved", "escalated"] },
+        "brief": { "type": "string", "description": "What the icon IS: metaphor, key shapes, avoid." },
+        "prompt": { "type": "string", "description": "Optional per-icon composition hints." },
+        "main_color": {
+          "type": "string",
+          "pattern": "^#[0-9a-fA-F]{6}$",
+          "description": "Optional dominant color; feeds color variants and the review page."
+        },
+        "variants": {
+          "type": "object",
+          "minProperties": 1,
+          "additionalProperties": { "$ref": "#/$defs/variant" }
+        }
+      }
+    },
+    "variant": {
+      "type": "object",
+      "required": [],
+      "oneOf": [
+        { "$ref": "#/$defs/authored_variant" },
+        { "$ref": "#/$defs/linked_variant" }
+      ],
+      "properties": {}
+    },
+    "authored_variant": {
+      "type": "object",
+      "required": ["style", "status"],
+      "additionalProperties": false,
+      "properties": {
+        "style": { "type": "string", "pattern": "^[a-z][a-z0-9-]*$" },
+        "status": { "$ref": "#/$defs/status" },
+        "anchor": {
+          "type": "boolean",
+          "description": "Family form baseline: its approved SVG enters all sibling prompts."
+        },
+        "reference": {
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9-]*#[a-z][a-z0-9-]*$",
+          "description": "Additional specific sibling (icon#variant) to visually match."
+        },
+        "brief": { "type": "string", "description": "Variant-level brief override." },
+        "prompt": { "type": "string", "description": "Variant-level prompt override." },
         "chosen": {
           "type": "object",
           "required": ["run", "variant"],
@@ -103,6 +141,22 @@
         },
         "rejected_ideas": { "type": "array", "items": { "type": "string" } }
       }
+    },
+    "linked_variant": {
+      "type": "object",
+      "required": ["link"],
+      "additionalProperties": false,
+      "properties": {
+        "link": {
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9-]*#[a-z][a-z0-9-]*$",
+          "description": "Alias of another icon's variant: no own file, no own state."
+        }
+      }
+    },
+    "status": {
+      "enum": ["todo", "drafting", "in_review", "approved", "escalated", "stale"],
+      "description": "stale = a dependency (anchor/reference target) changed after approval."
     }
   }
 }

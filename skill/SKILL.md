@@ -8,6 +8,12 @@ description: Design, review, and export consistent SVG icon packs via the iconpi
 `iconpilot` is a multi-model pipeline: drafters generate SVG variants, deterministic
 gates check them, a screener pre-ranks them, and **the user decides** every round.
 
+Data model: icons have independent **variant siblings** (primitive/mono/color …)
+each bound to a **style** from the registry; one variant may be the **anchor**
+(form baseline for its siblings), `reference` adds a sibling to visually match,
+and `link` aliases another icon's variant (no own file/state). Styles are
+three-tier (built-in < `~/.config/iconpilot/styles.toml` < pack-local).
+
 ## When to use
 
 - The user wants to create or extend an icon pack ("design icons for X").
@@ -43,10 +49,17 @@ it yourself — the CLI is the only parser.
 
 ## Hard rules
 
-- **Never edit `pack.json` or `icons/` by hand.** Only the CLI writes pack state.
+- **Never edit `pack.json` by hand.** Only the CLI and the review server write it
+  (atomic + locked; keep/reject decisions flow through `decisions.json` → `decide`).
+- **`icons/*.svg` are hand-editable between rounds** — that is the supported
+  tweak loop: keep → edit → gate re-validates → next round refines from the
+  edited file. Run `iconpilot gate <file> --pack <pack>` after editing.
 - Never approve icons on the user's behalf; approval is always the user's action
-  (page button or decision text).
+  (page button or decision text). LLM-created packs are todo-only, enforced by
+  the semantic validator.
 - LLMs never self-certify gate results; only the deterministic gate does.
+- LLMs reference registry styles; they never author gate thresholds
+  (node budgets, gaps, stroke widths).
 - Keep expensive-model usage to designer/reviewer/advisor roles; rounds with
   `--no-claude` run screener + user only (cheaper iterations).
 
