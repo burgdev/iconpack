@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "title": "iconpack pack.json",
+  "title": "iconpilot pack.json",
   "type": "object",
   "required": ["schema", "name", "version", "spec", "icons"],
   "additionalProperties": false,

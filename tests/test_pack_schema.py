@@ -48,7 +48,7 @@ EXAMPLE_PACK = {
 
 def _schema() -> dict:
     text = (
-        resources.files("iconpack.schema").joinpath("pack.schema.json").read_text()
+        resources.files("iconpilot.schema").joinpath("pack.schema.json").read_text()
     )
     return json.loads(text)
 

@@ -1,13 +1,13 @@
-"""iconpack CLI."""
+"""iconpilot CLI."""
 
 from __future__ import annotations
 
 import typer
 
-from iconpack import __version__
+from iconpilot import __version__
 
 app = typer.Typer(
-    name="iconpack",
+    name="iconpilot",
     help="Design consistent SVG icon packs with deterministic gates and human rounds.",
     no_args_is_help=True,
 )
@@ -15,7 +15,7 @@ app = typer.Typer(
 
 def _not_implemented(command: str) -> None:
     typer.secho(
-        f"`iconpack {command}` is not implemented yet.",
+        f"`iconpilot {command}` is not implemented yet.",
         fg=typer.colors.YELLOW,
         err=True,
     )
@@ -24,7 +24,7 @@ def _not_implemented(command: str) -> None:
 
 def _version_cb(value: bool | None) -> None:
     if value:
-        typer.echo(f"iconpack {__version__}")
+        typer.echo(f"iconpilot {__version__}")
         raise typer.Exit()
 
 
@@ -107,13 +107,13 @@ def export(pack: str, target: str = typer.Option(..., "--target"), out: str = ty
 
 @app.command()
 def link(write_design_md: bool = typer.Option(False, "--write-design-md")) -> None:
-    """In a consuming project: create iconpack.toml."""
+    """In a consuming project: create iconpilot.toml."""
     _not_implemented("link")
 
 
 @app.command(name="install-skill")
 def install_skill() -> None:
-    """Symlink skill/ into ~/.agents/skills/iconpack (+ ~/.claude/skills/)."""
+    """Symlink skill/ into ~/.agents/skills/iconpilot (+ ~/.claude/skills/)."""
     _not_implemented("install-skill")
 
 
