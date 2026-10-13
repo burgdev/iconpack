@@ -20,6 +20,7 @@ from pathlib import Path
 from typing import Any
 from urllib.parse import parse_qs, urlparse
 
+from iconpilot import __version__
 from iconpilot.decide import apply_decisions, parse_decision_text
 from iconpilot.pack import load_pack, revalidate, write_pack_atomic
 from iconpilot.render.contact import contact_sheet
@@ -106,7 +107,7 @@ class ReviewHandler(BaseHTTPRequestHandler):
         if url.path == "/api/pack":
             try:
                 pack, _ = load_pack(self.pack_dir / "pack.json")
-                self._json(200, {"rev": pack.get("rev", 0), "pack": pack})
+                self._json(200, {"rev": pack.get("rev", 0), "version": __version__, "pack": pack})
             except Exception as exc:
                 self._json(500, {"error": str(exc)})
             return

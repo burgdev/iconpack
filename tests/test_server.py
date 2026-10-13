@@ -192,3 +192,42 @@ def test_render_with_custom_colors(server: _Server, srvpack: Path) -> None:
     p = urllib.parse.quote(".runs/r001/mono/hut/a1.svg")
     code, body = server.get(f"/api/render?p={p}&size=24&bg=%231c1c1c&color=%23346751")
     assert code == 200 and body[:4] == b"\x89PNG"
+
+
+def test_page_has_no_bare_state_refs() -> None:
+    # regression: attribute bindings kept bare refs (ai.text crashed at mount)
+    import re as _re
+
+    from iconpilot.server.page import PAGE
+
+    template = PAGE.split("<script")[0]
+    states = [
+        "pack",
+        "rev",
+        "round",
+        "candidates",
+        "styles",
+        "ai",
+        "decisions",
+        "manual",
+        "manualText",
+        "msg",
+        "msgClass",
+        "editing",
+        "dlg",
+        "bgs",
+        "grouped",
+        "lines",
+        "decisionText",
+        "version",
+    ]
+    for name in states:
+        bare = _re.findall(rf"(?<![\w.])\b{name}\b(?!\w)", template)
+        assert not bare, f"template has bare state ref '{name}' ×{len(bare)}"
+
+
+def test_pack_endpoint_reports_version(server: _Server) -> None:
+    _, body = server.get("/api/pack")
+    import iconpilot
+
+    assert json.loads(body)["version"] == iconpilot.__version__

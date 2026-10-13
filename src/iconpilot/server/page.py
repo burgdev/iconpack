@@ -91,17 +91,17 @@ footer { text-align:center; color:var(--muted); font-size:.75rem; padding:20px; 
     <span class="spacer"></span>
     <span class="meta">{{ S.candidates.length }} S.candidates</span>
     <button class="subtle" @click="load(true)">refresh</button>
-    <div v-if="ai.text" class="banner" :class="ai.active ? 'working' : 'ready'">
+    <div v-if="S.ai.text" class="banner" :class="S.ai.active ? 'working' : 'ready'">
       <span class="dot"></span>{{ S.ai.text }}
     </div>
   </header>
 
   <main>
-    <div v-if="msg" :class="msgClass">{{ S.msg }}</div>
+    <div v-if="S.msg" :class="S.msgClass">{{ S.msg }}</div>
 
-    <section v-if="grouped.length">
+    <section v-if="S.grouped.length">
       <h2>Current S.round — rate, then decide</h2>
-      <div class="group" v-for="g in grouped" :key="g.key">
+      <div class="group" v-for="g in S.grouped" :key="g.key">
         <div class="ghead">
           <b>{{ g.icon }} / {{ g.variant }}</b>
           <span class="chip">{{ styleLabel(g.style) }}</span>
@@ -138,27 +138,27 @@ footer { text-align:center; color:var(--muted); font-size:.75rem; padding:20px; 
         ok = <b>approve final</b> (frozen) · keep = <b>refine next S.round</b> · rate 0 = drop ·
         ratings feed the next draft. Generated field is read-only; edit manually if needed.
       </p>
-      <textarea v-if="!manual" readonly :value="decisionText" placeholder="rate or click S.candidates…"></textarea>
-      <textarea v-else v-model="manualText" placeholder='hut/mono: a2 ok · b1 rate 7 · more 2'></textarea>
+      <textarea v-if="!S.manual" readonly :value="S.decisionText" placeholder="rate or click S.candidates…"></textarea>
+      <textarea v-else v-model="S.manualText" placeholder='hut/mono: a2 ok · b1 rate 7 · more 2'></textarea>
       <div class="row">
-        <button class="primary" @click="apply" :disabled="!S.decisionText && !manualText">Apply decisions</button>
-        <button @click="copy">{{ S.manual ? 'copy manual' : 'copy' }}</button>
-        <button v-if="!manual" class="subtle" @click="startManual">edit manually</button>
-        <button v-else class="subtle" @click="manual = false; S.manualText = ''">back to generated</button>
+        <button class="primary" @click="apply" :disabled="!S.decisionText && !S.manualText">Apply S.decisions</button>
+        <button @click="copy">{{ S.manual ? 'copy S.manual' : 'copy' }}</button>
+        <button v-if="!S.manual" class="subtle" @click="startManual">edit manually</button>
+        <button v-else class="subtle" @click="S.manual = false; S.manualText = ''">back to generated</button>
         <span class="muted">{{ S.lines.length }} icon S.lines</span>
       </div>
     </div>
 
     <section>
       <h2>Icons</h2>
-      <div class="group" v-for="(icon, id) in pack.icons" :key="id">
+      <div class="group" v-for="(icon, id) in S.pack.icons" :key="id">
         <div class="ghead">
           <b>{{ id }}</b>
           <span v-if="icon.main_color" class="chip" :style="{background: icon.main_color, color:'#fff'}">{{ icon.main_color }}</span>
-          <input v-if="editing === id" style="flex:1; min-width:120px" :value="icon.brief"
+          <input v-if="S.editing === id" style="flex:1; min-width:120px" :value="icon.brief"
                  @keydown.enter="saveIcon(id, $event.target.value)" @blur="saveIcon(id, $event.target.value)">
-          <span v-else class="muted" style="flex:1; cursor:text" @click="editing = id">{{ icon.brief }}</span>
-          <button class="subtle" @click="editing = S.editing === id ? null : id">edit</button>
+          <span v-else class="muted" style="flex:1; cursor:text" @click="S.editing = id">{{ icon.brief }}</span>
+          <button class="subtle" @click="S.editing = S.editing === id ? null : id">edit</button>
         </div>
         <div class="grid">
           <div class="card" v-for="(v, vid) in icon.variants" :key="vid">
@@ -172,53 +172,53 @@ footer { text-align:center; color:var(--muted); font-size:.75rem; padding:20px; 
         </div>
       </div>
     </section>
-    <footer>iconpilot review · flock-serialized writes · approval is always yours</footer>
+    <footer>iconpilot review v{{ S.version }} · flock-serialized writes · approval is always yours</footer>
   </main>
 
-  <div v-if="dlg" class="overlay" @click.self="dlg = null">
+  <div v-if="S.dlg" class="overlay" @click.self="S.dlg = null">
     <div class="dialog">
       <h3><span>{{ S.dlg.icon }} / {{ S.dlg.variant }} <span class="muted">{{ S.dlg.cand || '' }}</span></span>
-          <button class="subtle" @click="dlg = null">close ✕</button></h3>
+          <button class="subtle" @click="S.dlg = null">close ✕</button></h3>
       <div class="stage" :style="{background: S.dlg.bg}">
-        <img :width="dlg.size * 2" :height="dlg.size * 2"
+        <img :width="S.dlg.size * 2" :height="S.dlg.size * 2"
              :src="render(S.dlg.path, S.dlg.size * 2, S.dlg.bg, S.dlg.color)">
       </div>
       <div class="controls">
         <label>size</label>
         <div class="seg">
           <button v-for="s in [16,24,48,96]" :key="s" :class="{on: S.dlg.size === s}"
-                  @click="dlg.size = s">{{ s }}</button>
+                  @click="S.dlg.size = s">{{ s }}</button>
         </div>
       </div>
       <div class="controls">
         <label>background</label>
         <div class="seg">
-          <button v-for="b in bgs" :key="b.hex" class="swatch" :class="{on: S.dlg.bg === b.hex}"
-                 :style="{background: b.hex}" :title="b.name" @click="dlg.bg = b.hex"></button>
+          <button v-for="b in S.bgs" :key="b.hex" class="swatch" :class="{on: S.dlg.bg === b.hex}"
+                 :style="{background: b.hex}" :title="b.name" @click="S.dlg.bg = b.hex"></button>
         </div>
-        <input type="color" :value="dlg.bg" @input="dlg.bg = $event.target.value" title="custom background">
+        <input type="color" :value="S.dlg.bg" @input="S.dlg.bg = $event.target.value" title="custom background">
       </div>
       <div class="controls">
         <label>icon color</label>
-        <input type="color" :value="dlg.color" @input="dlg.color = $event.target.value">
+        <input type="color" :value="S.dlg.color" @input="S.dlg.color = $event.target.value">
         <span class="muted">applies to currentColor (mono)</span>
       </div>
-      <div class="stylebox" v-if="dlg.styleId">
+      <div class="stylebox" v-if="S.dlg.styleId">
         <b>{{ styleLabel(S.dlg.styleId) }}</b>
         <div class="kv">
-          <template v-if="styles[S.dlg.styleId]">
-            <span>grid</span><b>{{ S.styles[S.dlg.styleId].size || 'pack' }}px</b>
+          <template v-if="S.styles[S.dlg.styleId]">
+            <span>grid</span><b>{{ S.styles[S.dlg.styleId].size || 'S.pack' }}px</b>
             <span>stroke</span><b>{{ S.styles[S.dlg.styleId].stroke?.width || '—' }}</b>
             <span>mode</span><b>{{ S.styles[S.dlg.styleId].construction }} / {{ S.styles[S.dlg.styleId].color_mode }}</b>
             <span>budget</span><b>≤ {{ S.styles[S.dlg.styleId].max_nodes }} nodes · gap {{ S.styles[S.dlg.styleId].min_gap }}</b>
-            <span v-if="styles[S.dlg.styleId].palette">palette</span>
-            <b v-if="styles[S.dlg.styleId].palette">{{ S.styles[S.dlg.styleId].palette.join(' ') }}</b>
+            <span v-if="S.styles[S.dlg.styleId].palette">palette</span>
+            <b v-if="S.styles[S.dlg.styleId].palette">{{ S.styles[S.dlg.styleId].palette.join(' ') }}</b>
           </template>
         </div>
         <div class="controls" style="margin-top:8px">
           <label>switch style</label>
-          <select :value="dlg.styleId" @change="switchStyle(S.dlg, $event.target.value)">
-            <option v-for="(s, sid) in styles" :key="sid" :value="sid">{{ sid }} — {{ s.label }}</option>
+          <select :value="S.dlg.styleId" @change="switchStyle(S.dlg, $event.target.value)">
+            <option v-for="(s, sid) in S.styles" :key="sid" :value="sid">{{ sid }} — {{ s.label }}</option>
           </select>
         </div>
       </div>
@@ -231,7 +231,7 @@ import { createApp, reactive, computed, onMounted } from '/static/vue.esm-browse
 
 const S = reactive({
   pack: { icons: {} }, rev: 0, round: null, candidates: [],
-  styles: {}, ai: { text: '', active: false },
+  styles: {}, ai: { text: '', active: false }, version: '',
   decisions: {}, manual: false, manualText: '',
   msg: '', msgClass: 'muted', editing: null,
   dlg: null,
@@ -359,7 +359,8 @@ async function load(manual) {
     style: p.pack.icons?.[c.icon]?.variants?.[c.variant]?.style,
   }));
   S.styles = styles;
-  S.ai = { text: ai.status || '', active: !!ai.active };  // API: {status, active}
+  S.ai = { text: ai.status || '', active: !!ai.active };
+  S.version = p.version || '';
 }
 
 const App = {
