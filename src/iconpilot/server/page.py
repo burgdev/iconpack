@@ -131,7 +131,9 @@ footer { text-align:center; color:var(--muted); font-size:.75rem; padding:20px; 
           <div class="card" v-for="c in g.cands" :key="c.cand">
             <img class="thumb" loading="lazy" width="64" height="64"
                  :src="render(c.path, 64, '#ffffff')" @click="open(g, c)">
-            <div class="name">{{ c.cand }}</div>
+            <div class="name">{{ c.cand }}
+              <span v-if="chosenCand(g) === c.cand" class="chip approved" title="the approved pick">✓ picked</span>
+            </div>
             <div class="rating">
               <button :class="{ 'armed-x': item(g, c.cand)?.t?.startsWith(c.cand + ' no') }"
                       title="drop (rate 0)" @click="drop(g, c)">✕</button>
@@ -322,12 +324,26 @@ function rating(g, cand) {
   if (it.t.includes(' no') || it.t.endsWith(' keep')) return 0;
   return 5;
 }
+const draftKey = () => `iconpilot.draft.${S.pack.name}.${S.round}`;
+function saveDraft() {
+  try { localStorage.setItem(draftKey(), JSON.stringify(S.decisions)); } catch {}
+}
+function restoreDraft() {
+  try {
+    const raw = localStorage.getItem(draftKey());
+    if (raw) S.decisions = JSON.parse(raw) || {};
+  } catch {}
+}
+function clearDraft() {
+  try { localStorage.removeItem(draftKey()); } catch {}
+}
 function setItem(g, cand, t) {
   const entry = S.decisions[g.key] || (S.decisions[g.key] = { items: [] });
   entry.items = entry.items.filter(i => i.cand !== '*');           // drop stale 'reject all'
   const i = entry.items.findIndex(x => x.cand === cand);
   if (i >= 0) entry.items[i] = { cand, t };                          // update in place
   else entry.items.push({ cand, t });
+  saveDraft();
 }
 function drop(g, c)   { setItem(g, c.cand, c.cand + ' no'); }
 function approve(g, c){ setItem(g, c.cand, c.cand + ' ok'); }
@@ -335,6 +351,14 @@ function keep(g, c)   { setItem(g, c.cand, c.cand + ' keep'); }
 function rate(g, c, n){ setItem(g, c.cand, +n === 0 ? c.cand + ' no' : `${c.cand} rate ${n}`); }
 function rejectAll(g) {
   S.decisions[g.key] = { items: [{ cand: '*', t: '* no' }] };
+  saveDraft();
+}
+function variantStatus(g) {
+  return S.pack.icons?.[g.icon]?.variants?.[g.variant]?.status || '';
+}
+function chosenCand(g) {
+  const v = S.pack.icons?.[g.icon]?.variants?.[g.variant];
+  return v?.chosen?.run === S.round ? v.chosen.variant : null;  // the approved pick this round
 }
 function styleLabel(sid) {
   const s = S.styles[sid];
@@ -376,6 +400,7 @@ async function apply() {
       body: JSON.stringify({ text, round: S.round }) });
     S.msg = 'applied: ' + (r.log || []).join(' | '); S.msgClass = 'ok';
     S.decisions = {}; S.manual = false; S.manualText = '';
+    clearDraft();
     await load();
   } catch (e) { S.msg = e.message; S.msgClass = 'err'; }
 }
@@ -407,6 +432,7 @@ async function load(manual) {
   S.styles = styles;
   S.ai = { text: ai.status || '', active: !!ai.active };
   S.version = p.version || '';
+  restoreDraft();  // bring back in-progress ratings after a reload
 }
 
 const App = {
@@ -422,8 +448,8 @@ const App = {
     });
     return {
       S, render, item, rating, drop, approve, keep, rate, rejectAll,
-      styleLabel, open, openIcon, switchStyle, startManual, apply,
-      copy, saveIcon, edited, load,
+      styleLabel, open, openIcon, openSheet, switchStyle, startManual,
+      apply, copy, saveIcon, edited, load, chosenCand, variantStatus,
     };
   },
 };
