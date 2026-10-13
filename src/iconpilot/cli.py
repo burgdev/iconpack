@@ -10,12 +10,20 @@ import typer
 from iconpilot import __version__
 from iconpilot.context import build_context, render_markdown
 from iconpilot.decide import apply_decisions, parse_decision_text
-from iconpilot.export.export import TARGETS, collect_exportables
+from iconpilot.export.export import (
+    TARGETS,
+    collect_exportables,
+    export_iconify,
+    export_maplibre,
+    export_sprite_svg,
+    export_svg,
+)
 from iconpilot.gate.run import run_gate
 from iconpilot.pack import PackError, load_pack, revalidate, write_pack_atomic
 from iconpilot.render.contact import contact_sheet
 from iconpilot.render.render import hamming, hash_file
-from iconpilot.server.server import pack_lock, serve as serve_review
+from iconpilot.server.server import pack_lock
+from iconpilot.server.server import serve as serve_review
 from iconpilot.styles import resolve_styles, user_styles_path
 
 app = typer.Typer(
@@ -55,7 +63,13 @@ DEFAULT_SPEC = {
     "stroke": {"width": 2, "linecap": "round", "linejoin": "round"},
     "fill": "none",
     "allowed_elements": [
-        "path", "circle", "rect", "line", "polyline", "polygon", "ellipse",
+        "path",
+        "circle",
+        "rect",
+        "line",
+        "polyline",
+        "polygon",
+        "ellipse",
     ],
     "precision": 0.5,
 }
@@ -73,10 +87,16 @@ def new(
     d = Path(pack_dir)
     pack_name = name or d.name
     if not _re.match(r"^[a-z][a-z0-9-]*$", pack_name):
-        typer.secho(f"invalid pack name '{pack_name}' (lowercase kebab-case)", fg=typer.colors.RED, err=True)
+        typer.secho(
+            f"invalid pack name '{pack_name}' (lowercase kebab-case)", fg=typer.colors.RED, err=True
+        )
         raise typer.Exit(code=2)
     if (d / "pack.json").exists():
-        typer.secho(f"{d / 'pack.json'} already exists — refusing to overwrite", fg=typer.colors.RED, err=True)
+        typer.secho(
+            f"{d / 'pack.json'} already exists — refusing to overwrite",
+            fg=typer.colors.RED,
+            err=True,
+        )
         raise typer.Exit(code=2)
     d.mkdir(parents=True, exist_ok=True)
     (d / "icons").mkdir(exist_ok=True)
@@ -121,21 +141,30 @@ def add(
                 typer.secho(f"icon '{icon}' already exists", fg=typer.colors.RED, err=True)
                 raise typer.Exit(code=2)
             if not _re.match(r"^[a-z][a-z0-9-]*$", icon):
-                typer.secho(f"invalid icon name '{icon}' (lowercase kebab-case)", fg=typer.colors.RED, err=True)
+                typer.secho(
+                    f"invalid icon name '{icon}' (lowercase kebab-case)",
+                    fg=typer.colors.RED,
+                    err=True,
+                )
                 raise typer.Exit(code=2)
             specs = variant or ["mono:mono-line"]
             variants: dict = {}
             for spec in specs:
                 vname, _, style_id = spec.partition(":")
                 if not style_id or style_id not in styles:
-                    typer.secho(f"unknown style '{style_id}' in '{spec}' — see iconpilot styles",
-                                fg=typer.colors.RED, err=True)
+                    typer.secho(
+                        f"unknown style '{style_id}' in '{spec}' — see iconpilot styles",
+                        fg=typer.colors.RED,
+                        err=True,
+                    )
                     raise typer.Exit(code=2)
                 variants[vname] = {"style": style_id, "status": "todo"}
             pack_data["icons"][icon] = {"brief": brief, "variants": variants}
             _, errors = revalidate(pack_data)
             if errors:
-                typer.secho("rejected:\n  - " + "\n  - ".join(errors), fg=typer.colors.RED, err=True)
+                typer.secho(
+                    "rejected:\n  - " + "\n  - ".join(errors), fg=typer.colors.RED, err=True
+                )
                 raise typer.Exit(code=2)
             write_pack_atomic(pack_dir, pack_data)
     except TimeoutError as exc:
@@ -156,7 +185,11 @@ def status(pack: str) -> None:
     pack_dir = Path(pack)
     if pack_dir.is_file():
         pack_dir = pack_dir.parent
-    runs = sorted(p.name for p in (pack_dir / ".runs").glob("r*")) if (pack_dir / ".runs").is_dir() else []
+    runs = (
+        sorted(p.name for p in (pack_dir / ".runs").glob("r*"))
+        if (pack_dir / ".runs").is_dir()
+        else []
+    )
 
     counts: dict[str, int] = {}
     for icon_id, icon in pack_data["icons"].items():
@@ -199,7 +232,11 @@ def install_skill(force: bool = typer.Option(False, "--force")) -> None:
         agents.unlink()
     elif agents.exists():
         if not force:
-            typer.secho(f"{agents} exists and is not a symlink — pass --force to replace", fg=typer.colors.RED, err=True)
+            typer.secho(
+                f"{agents} exists and is not a symlink — pass --force to replace",
+                fg=typer.colors.RED,
+                err=True,
+            )
             raise typer.Exit(code=2)
         import shutil as _shutil
 
@@ -244,8 +281,7 @@ def check(pack: str) -> None:
     n_icons = len(pack_data["icons"])
     n_variants = sum(len(i["variants"]) for i in pack_data["icons"].values())
     typer.secho(
-        f"valid — {n_icons} icons, {n_variants} variants, "
-        f"{len(styles)} styles resolvable",
+        f"valid — {n_icons} icons, {n_variants} variants, {len(styles)} styles resolvable",
         fg=typer.colors.GREEN,
     )
 
@@ -283,7 +319,9 @@ def context(
 def contact_sheet_cmd(
     target: str = typer.Argument(..., help="Run dir (.runs/r001) or pack icons/ dir."),
     pack: str = typer.Option(..., "--pack"),
-    out: str = typer.Option(None, "--out", help="Output PNG path (default: <target>/contact-sheet.png)"),
+    out: str = typer.Option(
+        None, "--out", help="Output PNG path (default: <target>/contact-sheet.png)"
+    ),
 ) -> None:
     """Compose a PNG contact sheet of candidates or approved icons."""
     from pathlib import Path as _P
@@ -343,15 +381,22 @@ def decide(
         raise typer.Exit(code=2) from exc
 
     try:
-        log = apply_decisions(pack_dir, pack_data, styles, decisions, round_id,
-                              source="text" if text is not None else "file")
+        log = apply_decisions(
+            pack_dir,
+            pack_data,
+            styles,
+            decisions,
+            round_id,
+            source="text" if text is not None else "file",
+        )
     except ValueError as exc:
         typer.secho(f"rejected: {exc}", fg=typer.colors.RED, err=True)
         raise typer.Exit(code=2) from exc
     for line in log:
         typer.echo(f"  {line}")
-    typer.secho(f"applied {len(decisions)} icon decisions (round {round_id})",
-                fg=typer.colors.GREEN)
+    typer.secho(
+        f"applied {len(decisions)} icon decisions (round {round_id})", fg=typer.colors.GREEN
+    )
 
 
 def _load_pack_arg(pack: str) -> tuple[dict, dict]:
@@ -409,21 +454,28 @@ def gate(
         for svg in sorted(target.rglob("*.svg")):
             rel = svg.relative_to(target).parts
             if len(rel) < 3:
-                typer.secho(f"  ? {svg} — not in <variant>/<icon>/<cand>.svg layout, skipped",
-                            fg=typer.colors.YELLOW)
+                typer.secho(
+                    f"  ? {svg} — not in <variant>/<icon>/<cand>.svg layout, skipped",
+                    fg=typer.colors.YELLOW,
+                )
                 continue
             v_id, i_id = rel[0], rel[1]
             icon = icons.get(i_id)
             v = icon and icon["variants"].get(v_id)
             if not v or "style" not in v:
-                typer.secho(f"  ? {svg} — no authored variant {i_id}#{v_id}, skipped",
-                            fg=typer.colors.YELLOW)
+                typer.secho(
+                    f"  ? {svg} — no authored variant {i_id}#{v_id}, skipped",
+                    fg=typer.colors.YELLOW,
+                )
                 continue
             if _gate_one(svg, pack_data, styles[v["style"]], as_json, write_report=True):
                 passed += 1
             else:
                 failed += 1
-        typer.secho(f"batch: {passed} passed, {failed} failed", fg=typer.colors.GREEN if not failed else typer.colors.RED)
+        typer.secho(
+            f"batch: {passed} passed, {failed} failed",
+            fg=typer.colors.GREEN if not failed else typer.colors.RED,
+        )
         raise typer.Exit(code=0 if not failed else 1)
 
     # single file
@@ -434,7 +486,11 @@ def gate(
                 target_v = icon["variants"][variant]
                 break
         if target_v is None or "style" not in target_v:
-            typer.secho(f"variant '{variant}' not found as an authored variant", fg=typer.colors.RED, err=True)
+            typer.secho(
+                f"variant '{variant}' not found as an authored variant",
+                fg=typer.colors.RED,
+                err=True,
+            )
             raise typer.Exit(code=2)
     else:
         for icon in icons.values():
@@ -543,7 +599,9 @@ def export(
 ) -> None:
     """Export approved variants (+ approved-master links) to a target."""
     if target not in TARGETS:
-        typer.secho(f"unknown target '{target}' (have: {', '.join(TARGETS)})", fg=typer.colors.RED, err=True)
+        typer.secho(
+            f"unknown target '{target}' (have: {', '.join(TARGETS)})", fg=typer.colors.RED, err=True
+        )
         raise typer.Exit(code=2)
     try:
         pack_data, _styles = _load_pack_arg(pack)
@@ -558,9 +616,14 @@ def export(
     out_dir = Path(out)
     out_dir.mkdir(parents=True, exist_ok=True)
 
-    fn = TARGETS[target]
-    result = fn(entries, out_dir, pack_data) if target == "iconify" else fn(entries, out_dir)
-    written = result if isinstance(result, list) else [result]
+    if target == "svg":
+        written = export_svg(entries, out_dir)
+    elif target == "sprite-svg":
+        written = [export_sprite_svg(entries, out_dir)]
+    elif target == "maplibre":
+        written = export_maplibre(entries, out_dir)
+    else:
+        written = [export_iconify(entries, out_dir, pack_data)]
 
     for w in written:
         typer.secho(f"  → {w}", fg=typer.colors.GREEN)

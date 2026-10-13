@@ -109,16 +109,17 @@ def render_markdown(ctx: dict) -> str:
     ]
     if "main_color" in ctx:
         lines += [f"**Main color:** `{ctx['main_color']}`", ""]
-    for key, title in (("anchor_svg", "Anchor (family form baseline)"),
-                       ("reference_svg", "Reference (visually match)")):
+    for key, title in (
+        ("anchor_svg", "Anchor (family form baseline)"),
+        ("reference_svg", "Reference (visually match)"),
+    ):
         if key in ctx:
             lines += [f"**{title}:**", "", "```svg", ctx[key].rstrip(), "```", ""]
     if "comments" in ctx:
         lines += ["**Feedback:**"]
         lines += [f"- [{c['round']}] {c['text']}" for c in ctx["comments"]] + [""]
     if "rejected_ideas" in ctx:
-        lines += ["**Rejected ideas (do not repeat):**",
-                  ", ".join(ctx["rejected_ideas"]), ""]
+        lines += ["**Rejected ideas (do not repeat):**", ", ".join(ctx["rejected_ideas"]), ""]
     if "request" in ctx:
         lines += [f"**User request:** `{ctx['request']}`", ""]
     return "\n".join(lines)

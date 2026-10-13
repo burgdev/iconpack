@@ -14,7 +14,7 @@ import re
 from dataclasses import dataclass
 from pathlib import Path
 
-from lxml import etree
+from lxml import etree  # ty: ignore[unresolved-import]
 from PIL import Image
 
 from iconpilot.render.render import render_png
@@ -40,7 +40,9 @@ def collect_exportables(pack_dir: Path, pack: dict) -> tuple[list[Entry], list[s
                 mi, _, mv = v["link"].partition("#")
                 master = pack["icons"].get(mi, {}).get("variants", {}).get(mv)
                 if master and master.get("status") == "approved":
-                    entries.append(Entry(icon_id, vid, pack_dir / "icons" / mi / f"{mv}.svg", (mi, mv)))
+                    entries.append(
+                        Entry(icon_id, vid, pack_dir / "icons" / mi / f"{mv}.svg", (mi, mv))
+                    )
                 else:
                     skipped.append(f"{icon_id}#{vid} (master not approved)")
             elif v.get("status") == "approved":
@@ -52,7 +54,7 @@ def collect_exportables(pack_dir: Path, pack: dict) -> tuple[list[Entry], list[s
 
 def tidy(svg_text: str) -> str:
     """Whitespace/comment minify without touching geometry."""
-    text = re.sub(r"<!--.*?-->", "", svg_text, flags=re.S)
+    text = re.sub(r"<!--.*?-->", "", svg_text, flags=re.DOTALL)
     text = re.sub(r">\s+<", "><", text.strip())
     return text + "\n"
 
@@ -78,7 +80,10 @@ def export_sprite_svg(entries: list[Entry], out: Path) -> Path:
     for e in sorted(entries, key=lambda e: (e.variant, e.icon)):
         root, children = _inner(e.path)
         sym = etree.SubElement(
-            defs, f"{{{SVG_NS}}}symbol", id=f"{e.variant}-{e.icon}", viewBox=root.get("viewBox", "0 0 24 24")
+            defs,
+            f"{{{SVG_NS}}}symbol",
+            id=f"{e.variant}-{e.icon}",
+            viewBox=root.get("viewBox", "0 0 24 24"),
         )
         for attr in ("fill", "stroke", "stroke-width", "stroke-linecap", "stroke-linejoin"):
             if root.get(attr):
@@ -109,8 +114,12 @@ def export_maplibre(entries: list[Entry], out: Path, size: int = 24) -> list[Pat
             img = render_png(e.path, px)
             atlas.paste(img, (col * px, row * px), img)
             layout[f"{e.variant}-{e.icon}"] = {
-                "x": col * px, "y": row * px, "width": px, "height": px,
-                "pixelRatio": ratio, "sdf": False,
+                "x": col * px,
+                "y": row * px,
+                "width": px,
+                "height": px,
+                "pixelRatio": ratio,
+                "sdf": False,
             }
         suffix = "" if ratio == 1 else f"@{ratio}x"
         atlas.save(out / f"sprite{suffix}.png")

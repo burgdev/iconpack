@@ -43,38 +43,62 @@ def workpack(tmp_path: Path) -> Path:
 
 def test_decide_restart_and_note_are_applied(workpack: Path) -> None:
     # regression: bare regex alternatives parsed to empty dicts — silent no-op (0.0.1)
-    r = runner.invoke(app, [
-        "decide", str(workpack), "--round", "r001", "--text",
-        'hut/mono: a1 ok · selfhut/mono: restart "cutlery concept wrong"',
-    ])
+    r = runner.invoke(
+        app,
+        [
+            "decide",
+            str(workpack),
+            "--round",
+            "r001",
+            "--text",
+            'hut/mono: a1 ok · selfhut/mono: restart "cutlery concept wrong"',
+        ],
+    )
     assert r.exit_code == 0, r.output
     out = json.loads((workpack / "pack.json").read_text())
     hut = out["icons"]["hut"]["variants"]["mono"]
     selfhut = out["icons"]["selfhut"]["variants"]["mono"]
     assert hut["status"] == "approved"
-    assert selfhut["status"] == "todo"          # restart actually applied
+    assert selfhut["status"] == "todo"  # restart actually applied
     assert "chosen" not in selfhut
     assert any("cutlery concept wrong" in c["text"] for c in selfhut["comments"])
 
-    r = runner.invoke(app, [
-        "decide", str(workpack), "--round", "r001", "--text",
-        'hut/mono: note "revisit door proportion"',
-    ])
+    r = runner.invoke(
+        app,
+        [
+            "decide",
+            str(workpack),
+            "--round",
+            "r001",
+            "--text",
+            'hut/mono: note "revisit door proportion"',
+        ],
+    )
     assert r.exit_code == 0, r.output
     out = json.loads((workpack / "pack.json").read_text())
     hut = out["icons"]["hut"]["variants"]["mono"]
     assert any("revisit door proportion" in c["text"] for c in hut["comments"])
-    assert hut["status"] == "approved"          # note alone must not change status
+    assert hut["status"] == "approved"  # note alone must not change status
 
 
 def test_decide_like_request(workpack: Path) -> None:
-    r = runner.invoke(app, [
-        "decide", str(workpack), "--round", "r001", "--text", "hut/mono: like a1 3",
-    ])
+    r = runner.invoke(
+        app,
+        [
+            "decide",
+            str(workpack),
+            "--round",
+            "r001",
+            "--text",
+            "hut/mono: like a1 3",
+        ],
+    )
     assert r.exit_code == 0, r.output
     out = json.loads((workpack / "pack.json").read_text())
     assert out["icons"]["hut"]["variants"]["mono"]["request"] == {
-        "type": "like", "n": 3, "from": "a1",
+        "type": "like",
+        "n": 3,
+        "from": "a1",
     }
 
 

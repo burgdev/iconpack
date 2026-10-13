@@ -9,12 +9,11 @@ The gate never talks to models. It is the only certifier.
 
 from __future__ import annotations
 
-import json
 import re
 from dataclasses import dataclass, field
 from pathlib import Path
 
-from lxml import etree
+from lxml import etree  # ty: ignore[unresolved-import]
 from svgpathtools import parse_path
 
 from iconpilot.render.render import (
@@ -65,7 +64,9 @@ def _parse(svg_path: Path, report: GateReport) -> etree._Element | None:
     return root
 
 
-def _viewbox(root, expected: str | None, report: GateReport) -> tuple[float, float, float, float] | None:
+def _viewbox(
+    root, expected: str | None, report: GateReport
+) -> tuple[float, float, float, float] | None:
     vb = root.get("viewBox")
     if not vb:
         report.fail("viewBox: missing — required for deterministic rendering")
@@ -75,12 +76,11 @@ def _viewbox(root, expected: str | None, report: GateReport) -> tuple[float, flo
         return None
     parts = [float(p) for p in vb.replace(",", " ").split()]
     report.checks.append(f"viewBox: {vb} matches spec")
-    return tuple(parts)  # type: ignore[return-value]
+    return parts[0], parts[1], parts[2], parts[3]
 
 
 def _lint(root, spec: dict, style: Style, report: GateReport) -> None:
     allowed = set(spec.get("allowed_elements", ["path"]))
-    ns = f"{{{SVG_NS}}}"
     for el in root.iter():
         if el is root:
             continue
@@ -105,9 +105,7 @@ def _lint(root, spec: dict, style: Style, report: GateReport) -> None:
         if width is not None:
             try:
                 if abs(float(width) - stroke["width"]) > 1e-6:
-                    report.fail(
-                        f"lint: stroke-width {width} != style width {stroke['width']}"
-                    )
+                    report.fail(f"lint: stroke-width {width} != style width {stroke['width']}")
             except ValueError:
                 report.fail(f"lint: non-numeric stroke-width '{width}'")
     fill = style.fill or "none"
@@ -131,7 +129,7 @@ def _geometry(root, spec: dict, style: Style, viewbox, report: GateReport) -> No
             d = el.get("d", "")
             try:
                 segs = parse_path(d)
-            except Exception as exc:  # svgpathtools raises assorted errors
+            except Exception as exc:  # noqa: BLE001 — svgpathtools raises assorted errors
                 report.fail(f"geometry: unparseable path data: {exc}")
                 continue
             nodes += sum(max(1, len(s)) for s in segs) or len(segs)
@@ -176,7 +174,7 @@ def _render(svg_path: Path, style: Style, report: GateReport) -> None:
     for size in style.render_sizes:
         try:
             img = render_png(svg_path, size)
-        except Exception as exc:  # resvg raises assorted errors on broken SVG
+        except Exception as exc:  # noqa: BLE001 — resvg raises assorted errors on broken SVG
             report.fail(f"render: {size}px failed ({exc})")
             return
         if img.size != (size, size):
@@ -213,5 +211,5 @@ def run_gate(svg_path: str | Path, pack: dict, style: Style) -> GateReport:
     viewbox = _viewbox(root, pack.get("spec", {}).get("viewBox"), report)
     _lint(root, pack.get("spec", {}), style, report)
     _geometry(root, pack.get("spec", {}), style, viewbox, report)
-    _render(svg_path, style, report)
+    _render(path, style, report)
     return report

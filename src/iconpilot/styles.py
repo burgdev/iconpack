@@ -12,7 +12,7 @@ prompts. LLMs may reference or extend styles; they never author thresholds.
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from pathlib import Path
 from tomllib import load as tomllib_load
 
@@ -28,9 +28,9 @@ class Style:
     construction: str
     color_mode: str
     detail: str
-    stroke: dict | None = None          # {"width": float, "linecap": str, "linejoin": str}
-    fill: str | None = None             # "none" | "currentColor" | "accent"
-    weight: str | None = None           # thin | regular | bold
+    stroke: dict | None = None  # {"width": float, "linecap": str, "linejoin": str}
+    fill: str | None = None  # "none" | "currentColor" | "accent"
+    weight: str | None = None  # thin | regular | bold
     terminals: str = "round"
     max_nodes: int = 40
     min_gap: float = 1.5
@@ -69,7 +69,9 @@ BUILTIN_STYLES: dict[str, Style] = {
             max_nodes=14,
             min_gap=2.5,
             style_words=(
-                "ultra-minimal form", "2-3 shapes maximum", "generous counters",
+                "ultra-minimal form",
+                "2-3 shapes maximum",
+                "generous counters",
                 "readable at 12px",
             ),
             avoid=("fine detail", "thin strokes", "texture", "text", "perspective"),
@@ -85,7 +87,9 @@ BUILTIN_STYLES: dict[str, Style] = {
             stroke={"width": 2, "linecap": "round", "linejoin": "round"},
             fill="none",
             style_words=(
-                "geometric", "uniform 2px stroke", "round terminals",
+                "geometric",
+                "uniform 2px stroke",
+                "round terminals",
                 "flat single plane",
             ),
             avoid=("gradients", "3D", "text", "hairlines", "perspective", "shading"),
@@ -127,7 +131,8 @@ BUILTIN_STYLES: dict[str, Style] = {
             fill="currentColor",
             max_nodes=40,
             style_words=(
-                "solid silhouette", "crisp counters cut with even-odd fill",
+                "solid silhouette",
+                "crisp counters cut with even-odd fill",
                 "punchy at 16px",
             ),
             avoid=("hairline strokes", "texture", "half tones"),
@@ -142,7 +147,8 @@ BUILTIN_STYLES: dict[str, Style] = {
             max_nodes=48,
             min_gap=1.25,
             style_words=(
-                "two tones", "primary shape plus accent layer at ~45% opacity",
+                "two tones",
+                "primary shape plus accent layer at ~45% opacity",
                 "depth without noise",
             ),
             avoid=("more than two tones", "gradients", "texture"),
@@ -158,7 +164,9 @@ BUILTIN_STYLES: dict[str, Style] = {
             max_nodes=60,
             min_gap=1.25,
             style_words=(
-                "colored flat fills", "dark outer stroke", "flat colors",
+                "colored flat fills",
+                "dark outer stroke",
+                "flat colors",
                 "playful but precise",
             ),
             avoid=("gradients", "shading", "text", "photo-realism"),

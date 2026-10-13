@@ -17,6 +17,7 @@ import json
 import time
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
+from typing import Any
 from urllib.parse import parse_qs, urlparse
 
 from iconpilot.decide import apply_decisions, parse_decision_text
@@ -30,7 +31,7 @@ EDITABLE_FIELDS = ("brief", "prompt", "main_color")
 @contextlib.contextmanager
 def pack_lock(pack_dir: Path, timeout: float = 5.0):
     lockfile = pack_dir / ".iconpilot.lock"
-    fh = open(lockfile, "w")
+    fh = open(lockfile, "w")  # noqa: SIM115 — closed in finally; this IS the context manager
     deadline = time.monotonic() + timeout
     try:
         while True:
@@ -81,16 +82,18 @@ class ReviewHandler(BaseHTTPRequestHandler):
         length = int(self.headers.get("Content-Length") or 0)
         return json.loads(self.rfile.read(length)) if length else {}
 
-    def log_message(self, *args) -> None:  # quiet
+    def log_message(self, format: str, *args: Any) -> None:  # quiet
+        # base class signature (format, *args: Any); quiet by default
         pass
 
     # --- routes ------------------------------------------------------------
-    def do_GET(self) -> None:  # noqa: N802
+    def do_GET(self) -> None:
         url = urlparse(self.path)
         q = parse_qs(url.query)
 
         if url.path == "/" or url.path == "/index.html":
             from iconpilot.server.page import PAGE
+
             body = PAGE.encode()
             self.send_response(200)
             self.send_header("Content-Type", "text/html; charset=utf-8")
@@ -114,9 +117,7 @@ class ReviewHandler(BaseHTTPRequestHandler):
                 for svg in sorted((self.pack_dir / ".runs" / runs[-1]).rglob("*.svg")):
                     rel = svg.relative_to(self.pack_dir / ".runs" / runs[-1]).parts
                     if len(rel) == 3:
-                        entries.append(
-                            {"variant": rel[0], "icon": rel[1], "cand": rel[2][:-4]}
-                        )
+                        entries.append({"variant": rel[0], "icon": rel[1], "cand": rel[2][:-4]})
             self._json(200, {"round": runs[-1] if runs else None, "candidates": entries})
             return
 
@@ -163,7 +164,7 @@ class ReviewHandler(BaseHTTPRequestHandler):
 
         self._json(404, {"error": "no such route"})
 
-    def do_POST(self) -> None:  # noqa: N802
+    def do_POST(self) -> None:
         url = urlparse(self.path)
         if url.path != "/api/decision":
             self._json(404, {"error": "no such route"})
@@ -176,11 +177,15 @@ class ReviewHandler(BaseHTTPRequestHandler):
             with pack_lock(self.pack_dir):
                 pack, styles = load_pack(self.pack_dir / "pack.json")
                 if round_id is None:
-                    runs = sorted(p.name for p in (self.pack_dir / ".runs").glob("r*") if p.is_dir())
+                    runs = sorted(
+                        p.name for p in (self.pack_dir / ".runs").glob("r*") if p.is_dir()
+                    )
                     if not runs:
                         raise ValueError("no rounds under .runs/")
                     round_id = runs[-1]
-                log = apply_decisions(self.pack_dir, pack, styles, decisions, round_id, source="server")
+                log = apply_decisions(
+                    self.pack_dir, pack, styles, decisions, round_id, source="server"
+                )
             self._json(200, {"rev": pack.get("rev", 0), "log": log})
         except (ValueError, KeyError) as exc:
             self._json(400, {"error": str(exc)})
@@ -189,7 +194,7 @@ class ReviewHandler(BaseHTTPRequestHandler):
         except Exception as exc:  # invalid pack after load etc.
             self._json(500, {"error": str(exc)})
 
-    def do_PUT(self) -> None:  # noqa: N802
+    def do_PUT(self) -> None:
         url = urlparse(self.path)
         if url.path != "/api/icon":
             self._json(404, {"error": "no such route"})

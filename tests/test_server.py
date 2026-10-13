@@ -8,9 +8,9 @@ import urllib.request
 from pathlib import Path
 
 import pytest
-from tests.test_pack_schema import VALID_SVG, example_pack
 
-from iconpilot.server.server import pack_lock, serve
+from iconpilot.server.server import pack_lock
+from tests.test_pack_schema import VALID_SVG, example_pack
 
 
 @pytest.fixture
@@ -28,6 +28,7 @@ def srvpack(tmp_path: Path) -> Path:
 class _Server:
     def __init__(self, pack_dir: Path):
         from http.server import ThreadingHTTPServer
+
         from iconpilot.server.server import ReviewHandler
 
         handler = type("H", (ReviewHandler,), {"pack_dir": pack_dir})
@@ -48,7 +49,9 @@ class _Server:
     def req(self, method: str, path: str, payload: dict):
         data = json.dumps(payload).encode()
         req = urllib.request.Request(
-            self.base + path, data=data, method=method,
+            self.base + path,
+            data=data,
+            method=method,
             headers={"Content-Type": "application/json"},
         )
         try:
@@ -92,10 +95,15 @@ def test_decision_invalid_text_400(server: _Server) -> None:
 
 
 def test_live_edit_icon_fields(server: _Server, srvpack: Path) -> None:
-    code, data = server.req("PUT", "/api/icon", {
-        "icon": "hut", "brief": "Alpine hut: steep roof, tiny window",
-        "main_color": "#224e3b",
-    })
+    code, data = server.req(
+        "PUT",
+        "/api/icon",
+        {
+            "icon": "hut",
+            "brief": "Alpine hut: steep roof, tiny window",
+            "main_color": "#224e3b",
+        },
+    )
     assert code == 200, data
     pack = json.loads((srvpack / "pack.json").read_text())
     assert pack["icons"]["hut"]["brief"] == "Alpine hut: steep roof, tiny window"
@@ -111,7 +119,9 @@ def test_live_edit_rejects_invalid_patch(server: _Server, srvpack: Path) -> None
 
 
 def test_live_edit_cannot_touch_status(server: _Server, srvpack: Path) -> None:
-    code, data = server.req("PUT", "/api/icon", {"icon": "hut", "brief": "x", "status": "approved"})
+    code, _data = server.req(
+        "PUT", "/api/icon", {"icon": "hut", "brief": "x", "status": "approved"}
+    )
     assert code == 200
     pack = json.loads((srvpack / "pack.json").read_text())
     # status is not an editable field → dropped from patch, icon-level anyway
@@ -131,7 +141,6 @@ def test_pack_lock_blocks_concurrent_writer(srvpack: Path) -> None:
 
     with pack_lock(srvpack):
         t0 = time.monotonic()
-        with pytest.raises(TimeoutError):
-            with pack_lock(srvpack, timeout=0.4):
-                pass
+        with pytest.raises(TimeoutError), pack_lock(srvpack, timeout=0.4):
+            pass
         assert time.monotonic() - t0 < 2

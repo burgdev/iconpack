@@ -3,12 +3,11 @@
 from __future__ import annotations
 
 import json
-import shutil
 from pathlib import Path
 
 import pytest
-from typer.testing import CliRunner
 from PIL import Image
+from typer.testing import CliRunner
 
 from iconpilot.cli import app
 from tests.test_pack_schema import VALID_SVG, example_pack
@@ -58,7 +57,14 @@ def test_export_maplibre(exportpack: Path, tmp_path: Path) -> None:
     r = runner.invoke(app, ["export", str(exportpack), "--target", "maplibre", "--out", str(out)])
     assert r.exit_code == 0, r.output
     layout = json.loads((out / "sprite.json").read_text())
-    assert layout["mono-hut"] == {"x": 0, "y": 0, "width": 24, "height": 24, "pixelRatio": 1, "sdf": False}
+    assert layout["mono-hut"] == {
+        "x": 0,
+        "y": 0,
+        "width": 24,
+        "height": 24,
+        "pixelRatio": 1,
+        "sdf": False,
+    }
     assert set(layout) == {"mono-hut", "primitive-hut", "primitive-selfhut"}
     img = Image.open(out / "sprite@2x.png")
     assert img.size == (96, 96)  # 3 icons @48px: 2 cols × 2 rows (shelf pack)

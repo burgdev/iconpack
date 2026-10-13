@@ -2,15 +2,15 @@
 
 from __future__ import annotations
 
-import json
 import copy
+import json
 from pathlib import Path
 
 import jsonschema
 import pytest
 
 from iconpilot.gate.run import run_gate
-from iconpilot.pack import PackError, load_pack, _json_schema
+from iconpilot.pack import PackError, _json_schema, load_pack
 from iconpilot.styles import BUILTIN_STYLES, resolve_styles
 from iconpilot.validate import validate_pack
 
@@ -61,6 +61,7 @@ def example_pack() -> dict:
 
 # --- schema -----------------------------------------------------------------
 
+
 def test_example_pack_schema_valid() -> None:
     jsonschema.validate(example_pack(), _json_schema())
 
@@ -68,7 +69,9 @@ def test_example_pack_schema_valid() -> None:
 def test_variant_cannot_be_both_style_and_link() -> None:
     bad = example_pack()
     bad["icons"]["selfhut"]["variants"]["mono"] = {
-        "style": "mono-line", "status": "todo", "link": "hut#mono",
+        "style": "mono-line",
+        "status": "todo",
+        "link": "hut#mono",
     }
     with pytest.raises(jsonschema.ValidationError):
         jsonschema.validate(bad, _json_schema())
@@ -77,7 +80,8 @@ def test_variant_cannot_be_both_style_and_link() -> None:
 def test_linked_variant_carries_no_state() -> None:
     bad = example_pack()
     bad["icons"]["selfhut"]["variants"]["primitive"] = {
-        "link": "hut#primitive", "status": "approved",
+        "link": "hut#primitive",
+        "status": "approved",
     }
     with pytest.raises(jsonschema.ValidationError):
         jsonschema.validate(bad, _json_schema())
@@ -91,6 +95,7 @@ def test_tags_removed_in_v2() -> None:
 
 
 # --- semantic validator -----------------------------------------------------
+
 
 def test_example_pack_semantically_valid() -> None:
     assert validate_pack(example_pack(), resolve_styles()) == []
@@ -248,7 +253,14 @@ def test_load_pack_raises_on_semantic_error(tmp_path: Path) -> None:
 
 def test_builtin_styles_complete() -> None:
     expected = {
-        "primitive", "mono-line", "mono-line-thin", "mono-bold", "filled",
-        "duotone", "lineal-color", "flat-color", "gradient-color",
+        "primitive",
+        "mono-line",
+        "mono-line-thin",
+        "mono-bold",
+        "filled",
+        "duotone",
+        "lineal-color",
+        "flat-color",
+        "gradient-color",
     }
     assert expected == set(BUILTIN_STYLES)

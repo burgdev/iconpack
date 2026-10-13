@@ -96,9 +96,7 @@ def validate_pack(pack: dict, styles: dict[str, Style]) -> list[str]:
     # --- reference targets + DAG acyclicity -------------------------------
     for icon_id, variant_id, dep in _dependencies(pack):
         if _target(pack, dep) is None:
-            errors.append(
-                f"{icon_id}#{variant_id}: reference target '{dep}' does not exist"
-            )
+            errors.append(f"{icon_id}#{variant_id}: reference target '{dep}' does not exist")
         if dep == f"{icon_id}#{variant_id}":
             errors.append(f"{icon_id}#{variant_id}: references itself")
 
@@ -115,7 +113,7 @@ def validate_pack(pack: dict, styles: dict[str, Style]) -> list[str]:
         for dep in graph.get(node, ()):  # missing targets reported above
             if state.get(dep) == 0:
                 stack.append(dep)
-                return stack[stack.index(dep):]  # cycle
+                return stack[stack.index(dep) :]  # cycle
             if state.get(dep) is None and dep in graph:
                 cycle = visit(dep)
                 if cycle:

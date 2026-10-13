@@ -17,9 +17,7 @@ class PackError(Exception):
 
 
 def _json_schema() -> dict:
-    text = (
-        resources.files("iconpilot.schema").joinpath("pack.schema.json").read_text()
-    )
+    text = resources.files("iconpilot.schema").joinpath("pack.schema.json").read_text()
     return json.loads(text)
 
 

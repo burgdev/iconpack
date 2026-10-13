@@ -24,8 +24,15 @@ iconpilot = "iconpilot.cli:main"
 requires = ["hatchling"]
 build-backend = "hatchling.build"
 
+[tool.ruff]
+line-length = 100
+
+[tool.ruff.lint.per-file-ignores]
+"src/iconpilot/cli.py" = ["B008"]          # typer.Option in defaults is the typer idiom
+"src/iconpilot/server/server.py" = ["BLE001", "A002"]  # HTTP handlers; base-class param name
+
 [dependency-groups]
-dev = ["pytest>=8"]
+dev = ["pytest>=8", "ruff>=0.8", "ty>=0.0.1a23"]
 docs = ["zensical>=0.0.70"]
 
 [tool.hatch.build.targets.wheel]

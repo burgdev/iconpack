@@ -18,8 +18,7 @@ def test_new_add_check_status_flow(tmp_path: Path) -> None:
     r = runner.invoke(app, ["new", str(d)])
     assert r.exit_code == 0, r.output
 
-    r = runner.invoke(app, ["add", str(d), "hut", "--brief",
-                            "Alpine hut: steep roof, small door"])
+    r = runner.invoke(app, ["add", str(d), "hut", "--brief", "Alpine hut: steep roof, small door"])
     assert r.exit_code == 0, r.output
     assert "added hut (mono)" in r.output
 
@@ -44,17 +43,27 @@ def test_new_refuses_overwrite(tmp_path: Path) -> None:
 def test_add_multi_variant_and_unknown_style(tmp_path: Path) -> None:
     d = tmp_path / "alpine"
     runner.invoke(app, ["new", str(d)])
-    r = runner.invoke(app, [
-        "add", str(d), "lake", "--brief", "Mountain lake",
-        "--variant", "primitive:primitive", "--variant", "mono:mono-line",
-        "--variant", "color:lineal-color",
-    ])
+    r = runner.invoke(
+        app,
+        [
+            "add",
+            str(d),
+            "lake",
+            "--brief",
+            "Mountain lake",
+            "--variant",
+            "primitive:primitive",
+            "--variant",
+            "mono:mono-line",
+            "--variant",
+            "color:lineal-color",
+        ],
+    )
     assert r.exit_code == 0, r.output
     pack = json.loads((d / "pack.json").read_text())
     assert set(pack["icons"]["lake"]["variants"]) == {"primitive", "mono", "color"}
 
-    r = runner.invoke(app, ["add", str(d), "peak", "--brief", "Peak",
-                            "--variant", "mono:nope"])
+    r = runner.invoke(app, ["add", str(d), "peak", "--brief", "Peak", "--variant", "mono:nope"])
     assert r.exit_code == 2
     assert "unknown style" in r.output
     # nothing written

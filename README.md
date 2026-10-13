@@ -76,7 +76,9 @@ Rounds live at `<pack>/.runs/<round>/<variant>/<icon>/<cand>.svg`.
 ## Development
 
 ```bash
-uv sync && uv run pytest
+uv sync --all-groups
+just check          # ruff + format + ty + pytest
+just docs-serve     # live docs preview
 ```
 
 ## Roadmap
@@ -97,7 +99,7 @@ MIT
 
 ```bash
 uv run --group docs zensical serve   # live preview at localhost:8000
-uv run --group docs zensical build   # static site → _site/
+uv run --group docs zensical build   # static site → site/
 ```
 
 Docs live in `docs/` (zensical.toml + Markdown). Audience split: `docs/` is

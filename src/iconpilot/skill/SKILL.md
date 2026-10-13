@@ -45,15 +45,24 @@ The gate enforces the numbers; craft.md carries the judgment.
 
 Round layout: `.runs/<round>/<variant>/<icon>/<cand>.svg` (r001, r002, …).
 
-## Role mapping (harness-side, no config)
+## Role mapping (harness-side)
 
-- **drafter** — cheapest capable model you can spawn (fast subagent); give it
-  the `context` output verbatim.
-- **screener** — any vision-capable model; it must see the contact sheet PNG.
-- **reviewer/advisor** — your strongest model, on the whole contact sheet
-  (set-level consistency) or for icons rejected twice.
-- **designer** — you, when creating `pack.json` briefs; then validate with
-  `iconpilot check <pack>`.
+The tool never calls models — the harness picks them. For consistent routing
+across sessions, an optional **advisory** mapping lives at
+`~/.config/iconpilot/models.toml`; if present, honor it when spawning:
+
+```toml
+[roles]
+drafter  = "cheapest capable model"   # drafts candidates; gets `context` verbatim
+screener = "any vision model"         # must see the contact-sheet PNG
+reviewer = "your strongest model"     # set-level consistency on the sheet
+advisor  = "your strongest model"     # escalation only (twice-rejected icons)
+```
+
+Without a config: drafter/screener = cheapest capable model you can spawn,
+reviewer/advisor = your strongest. Keep expensive models on set review and
+escalations only. **designer** is you, writing `pack.json` briefs — validate
+with `iconpilot check <pack>`.
 
 ## Improving an existing pack (imported baseline)
 

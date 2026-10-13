@@ -28,8 +28,7 @@ def contact_sheet(svg_paths: list[Path], out_path: Path, title: str = "") -> Pat
         x, y = col * TILE + PAD, header + row * (TILE + 18) + PAD
         img = render_png(svg, TILE - 2 * PAD, background="#ffffff")
         sheet.paste(img, (x, y), img)
-        draw.text((col * TILE + PAD, y + TILE - 2 * PAD + 4),
-                  svg.stem, fill="black")
+        draw.text((col * TILE + PAD, y + TILE - 2 * PAD + 4), svg.stem, fill="black")
     out_path.parent.mkdir(parents=True, exist_ok=True)
     sheet.save(out_path)
     return out_path

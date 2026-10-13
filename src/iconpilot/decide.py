@@ -183,12 +183,10 @@ def apply_decisions(
         variant_id = _resolve_variant(icon, req_variant or None)
         variant = icon["variants"][variant_id]
         cands = _find_candidates(pack_dir, round_id, icon_id, variant_id)
-        star_reject = False
         for item in payload["items"]:
             comment_text = item.get("comment")
             if "star" in item:
                 variant["status"] = "todo"
-                star_reject = True
                 log.append(f"{icon_id}#{variant_id}: all rejected → todo")
                 if comment_text:
                     comment(variant, comment_text)
