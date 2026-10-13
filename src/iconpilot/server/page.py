@@ -189,17 +189,21 @@ footer { text-align:center; color:var(--muted); font-size:.75rem; padding:20px; 
           <div class="colhead">{{ bgc.name }}</div>
           <div class="stage" :style="{background: bgc.hex}">
             <img v-for="s in [96, 48, 24, 16]" :key="s" :width="s" :height="s"
-                 :src="render(S.dlg.path, s * 2, bgc.hex, S.dlg.color)">
+                 :src="render(S.dlg.path, s * 2, bgc.hex, bgc.iconColor)">
           </div>
           <div class="sizes">96 · 48 · 24 · 16</div>
         </div>
       </div>
       <div class="controls">
-        <label>icon color</label>
-        <input type="color" :value="S.dlg.color" @input="S.dlg.color = $event.target.value">
+        <label>icon on light</label>
+        <input type="color" :value="S.dlg.bgs2[0].iconColor"
+               @input="S.dlg.bgs2[0].iconColor = $event.target.value">
+        <label style="margin-left:12px">icon on dark</label>
+        <input type="color" :value="S.dlg.bgs2[1].iconColor"
+               @input="S.dlg.bgs2[1].iconColor = $event.target.value">
         <label style="margin-left:12px">dark bg</label>
         <input type="color" :value="S.dlg.bgs2[1].hex"
-               @input="S.dlg.bgs2[1] = {name: 'custom', hex: $event.target.value}">
+               @input="S.dlg.bgs2[1].hex = $event.target.value">
       </div>
       <div class="stylebox" v-if="S.dlg.styleId">
         <b>{{ styleLabel(S.dlg.styleId) }}</b>
@@ -300,17 +304,22 @@ function styleLabel(sid) {
   return sid + (s ? ` — ${s.label}` : '');
 }
 function open(g, c) {
-  S.dlg = { icon: g.icon, variant: g.variant, cand: c.cand, path: c.path,
-            color: '#1c1c1c', styleId: g.style,
-            bgs2: [{name: 'LIGHT BG', hex: '#ffffff'}, {name: 'DARK BG', hex: '#1c1c1c'}] };
+  const main = S.pack.icons?.[g.icon]?.main_color;
+  S.dlg = { icon: g.icon, variant: g.variant, cand: c.cand, path: c.path, styleId: g.style,
+            bgs2: [
+              {name: 'LIGHT BG', hex: '#f6f9f7', iconColor: main || '#1c1c1c'},
+              {name: 'DARK BG',  hex: '#22292e', iconColor: '#f2f7f4'},
+            ] };
 }
 function openIcon(id, vid, v) {
   if (v.link) return;
   const icon = S.pack.icons[id];
   S.dlg = { icon: id, variant: vid, cand: null,
-            path: 'icons/' + id + '/' + vid + '.svg',
-            color: icon.main_color || '#1c1c1c', styleId: v.style,
-            bgs2: [{name: 'LIGHT BG', hex: '#ffffff'}, {name: 'DARK BG', hex: '#1c1c1c'}] };
+            path: 'icons/' + id + '/' + vid + '.svg', styleId: v.style,
+            bgs2: [
+              {name: 'LIGHT BG', hex: '#f6f9f7', iconColor: icon.main_color || '#1c1c1c'},
+              {name: 'DARK BG',  hex: '#22292e', iconColor: '#f2f7f4'},
+            ] };
 }
 async function switchStyle(dlg, sid) {
   try {
