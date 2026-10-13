@@ -92,3 +92,13 @@ uv sync && uv run pytest
 ## License
 
 MIT
+
+## Documentation
+
+```bash
+uv run --group docs zensical serve   # live preview at localhost:8000
+uv run --group docs zensical build   # static site → _site/
+```
+
+Docs live in `docs/` (zensical.toml + Markdown). Audience split: `docs/` is
+for humans; `src/iconpilot/skill/` (SKILL.md + craft.md) is for agents.
