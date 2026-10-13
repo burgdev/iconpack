@@ -1,8 +1,8 @@
 # Changelog
 
-## 0.0.1 (unreleased)
+## 0.1.0a1 (unreleased)
 
-Initial release — deterministic tooling + state for designing SVG icon packs,
+Alpha — deterministic tooling + state for designing SVG icon packs,
 agent-driven (no LLM calls in the tool).
 
 - Pack schema v2: variant siblings, styles, anchor/reference DAG, links, per-variant state

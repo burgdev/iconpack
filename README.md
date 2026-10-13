@@ -3,7 +3,7 @@
 Multi-model pipeline for designing consistent SVG icon packs: cheap models draft
 variants, deterministic tools gate them, and you decide each round in a review page.
 
-**Status:** 0.0.1 (unreleased) — gate, agent loop (context/decide), review
+**Status:** 0.1.0a1 (alpha, not on PyPI) — gate, agent loop (context/decide), review
 server, and all four export targets are implemented and tested; MCP, `--static`
 page fallback, and the embedded editor are future work.
 

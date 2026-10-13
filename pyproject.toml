@@ -1,6 +1,6 @@
 [project]
 name = "iconpilot"
-version = "0.0.1"
+version = "0.1.0a1"
 description = "Multi-model pipeline for designing consistent SVG icon packs"
 readme = "README.md"
 license = "MIT"

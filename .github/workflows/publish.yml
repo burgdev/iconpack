@@ -9,6 +9,7 @@ on:
 
 jobs:
   publish:
+    if: false  # disabled until the PyPI environment + trusted publisher exist
     runs-on: ubuntu-latest
     environment: pypi
     permissions:

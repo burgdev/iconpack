@@ -35,7 +35,7 @@ from iconpilot.render.render import (
 from iconpilot.styles import BUILTIN_STYLES, Style, resolve_styles
 from iconpilot.validate import validate_pack
 
-__version__ = "0.0.1"
+__version__ = "0.1.0a1"
 
 __all__ = [
     "BUILTIN_STYLES",
