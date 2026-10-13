@@ -121,29 +121,42 @@ def export_sprite_svg(entries: list[Entry], out: Path) -> Path:
     return dest
 
 
-def export_maplibre(entries: list[Entry], out: Path, size: int = 24) -> list[Path]:
-    """Sprite PNG/JSON at @1x and @2x (no SDF — spreet stays optional)."""
+def export_maplibre(entries: list[Entry], out: Path, size: int | None = None) -> list[Path]:
+    """Sprite PNG/JSON at @1x and @2x (no SDF — spreet stays optional).
+
+    Entries render at their own design grid (entry.size); pass `size` to force
+    one grid for all. Deterministic variable-size shelf packing.
+    """
     if not entries:
         raise ValueError("no approved icons to sprite")
     written: list[Path] = []
-    for ratio, px in ((1, size), (2, size * 2)):
-        ordered = sorted(entries, key=lambda e: (e.variant, e.icon))
-        cols = max(1, math.ceil(math.sqrt(len(ordered))))
-        rows = math.ceil(len(ordered) / cols)
-        atlas = Image.new("RGBA", (cols * px, rows * px), (0, 0, 0, 0))
+    out.mkdir(parents=True, exist_ok=True)
+    base = {e: (size if size else e.size) for e in entries}
+    for ratio in (1, 2):
+        ordered = sorted(entries, key=lambda e: (base[e], e.variant, e.icon), reverse=True)
+        max_px = max(base.values()) * ratio
+        width = max_px * max(1, math.ceil(math.sqrt(len(ordered))))
+        atlas = Image.new("RGBA", (width, width), (0, 0, 0, 0))
         layout: dict[str, dict] = {}
-        for i, e in enumerate(ordered):
-            col, row = i % cols, i // cols
+        x = y = row_h = 0
+        for e in ordered:
+            px = base[e] * ratio
+            if x + px > width:
+                x = 0
+                y += row_h
+                row_h = 0
             img = render_png(e.path, px)
-            atlas.paste(img, (col * px, row * px), img)
+            atlas.paste(img, (x, y), img)
             layout[f"{e.variant}-{e.icon}"] = {
-                "x": col * px,
-                "y": row * px,
+                "x": x,
+                "y": y,
                 "width": px,
                 "height": px,
                 "pixelRatio": ratio,
                 "sdf": False,
             }
+            x += px
+            row_h = max(row_h, px)
         suffix = "" if ratio == 1 else f"@{ratio}x"
         atlas.save(out / f"sprite{suffix}.png")
         (out / f"sprite{suffix}.json").write_text(json.dumps(layout, indent=2))

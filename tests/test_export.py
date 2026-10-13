@@ -58,7 +58,8 @@ def test_export_maplibre(exportpack: Path, tmp_path: Path) -> None:
     r = runner.invoke(app, ["export", str(exportpack), "--target", "maplibre", "--out", str(out)])
     assert r.exit_code == 0, r.output
     layout = json.loads((out / "sprite.json").read_text())
-    assert layout["mono-hut"] == {
+    # deterministic shelf order: size desc, then variant/icon desc
+    assert layout["primitive-selfhut"] == {
         "x": 0,
         "y": 0,
         "width": 24,
@@ -66,9 +67,11 @@ def test_export_maplibre(exportpack: Path, tmp_path: Path) -> None:
         "pixelRatio": 1,
         "sdf": False,
     }
+    assert layout["primitive-hut"]["x"] == 24 and layout["primitive-hut"]["y"] == 0
+    assert layout["mono-hut"]["x"] == 0 and layout["mono-hut"]["y"] == 24
     assert set(layout) == {"mono-hut", "primitive-hut", "primitive-selfhut"}
     img = Image.open(out / "sprite@2x.png")
-    assert img.size == (96, 96)  # 3 icons @48px: 2 cols × 2 rows (shelf pack)
+    assert img.size == (96, 96)  # width = max_px × ceil(sqrt(n)), @2x
     at2x = json.loads((out / "sprite@2x.json").read_text())
     assert at2x["mono-hut"]["pixelRatio"] == 2
 
