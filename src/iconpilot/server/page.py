@@ -66,7 +66,6 @@ textarea[readonly] { color:var(--muted); }
 .dialog { background:var(--card); border:1px solid var(--line); border-radius:14px; max-width:560px; width:100%;
           max-height:92vh; overflow:auto; padding:16px; box-shadow:0 12px 40px rgba(0,0,0,.25); }
 .dialog h3 { margin:0 0 8px; font-size:1rem; display:flex; justify-content:space-between; align-items:center; }
-.dialog .stage { border-radius:10px; display:flex; align-items:center; justify-content:center; padding:20px; margin:10px 0; }
 .dialog .controls { display:flex; flex-wrap:wrap; gap:8px; align-items:center; margin:8px 0; }
 .dialog .controls label { font-size:.78rem; color:var(--muted); min-width:74px; }
 .seg { display:flex; gap:4px; }
@@ -75,6 +74,12 @@ textarea[readonly] { color:var(--muted); }
 .swatch { width:26px; height:26px; border-radius:8px; border:2px solid var(--line); cursor:pointer; padding:0; }
 .swatch.on { border-color:var(--accent); }
 input[type=color] { width:34px; height:28px; padding:0 2px; border:1px solid var(--line); border-radius:8px; background:none; }
+.matrix { display:flex; gap:12px; margin:10px 0; flex-wrap:wrap; }
+.matrix .col { flex:1; min-width:200px; }
+.matrix .colhead { font-size:.72rem; letter-spacing:.08em; color:var(--muted); margin-bottom:4px; }
+.matrix .stage { border-radius:10px; display:flex; align-items:flex-end; justify-content:space-around;
+                 padding:14px 8px; gap:8px; min-height:130px; }
+.matrix .sizes { font-size:.7rem; color:var(--muted); text-align:center; margin-top:4px; }
 .stylebox { background:var(--chip); border-radius:10px; padding:10px; font-size:.82rem; margin-top:10px; }
 .stylebox select { font:inherit; padding:4px 8px; border-radius:8px; border:1px solid var(--line); background:var(--card); color:var(--ink); }
 .kv { display:grid; grid-template-columns:auto 1fr; gap:2px 12px; margin-top:6px; color:var(--muted); }
@@ -179,29 +184,22 @@ footer { text-align:center; color:var(--muted); font-size:.75rem; padding:20px; 
     <div class="dialog">
       <h3><span>{{ S.dlg.icon }} / {{ S.dlg.variant }} <span class="muted">{{ S.dlg.cand || '' }}</span></span>
           <button class="subtle" @click="S.dlg = null">close ✕</button></h3>
-      <div class="stage" :style="{background: S.dlg.bg}">
-        <img :width="S.dlg.size * 2" :height="S.dlg.size * 2"
-             :src="render(S.dlg.path, S.dlg.size * 2, S.dlg.bg, S.dlg.color)">
-      </div>
-      <div class="controls">
-        <label>size</label>
-        <div class="seg">
-          <button v-for="s in [16,24,48,96]" :key="s" :class="{on: S.dlg.size === s}"
-                  @click="S.dlg.size = s">{{ s }}</button>
+      <div class="matrix">
+        <div class="col" v-for="bgc in S.dlg.bgs2" :key="bgc.hex">
+          <div class="colhead">{{ bgc.name }}</div>
+          <div class="stage" :style="{background: bgc.hex}">
+            <img v-for="s in [96, 48, 24, 16]" :key="s" :width="s" :height="s"
+                 :src="render(S.dlg.path, s * 2, bgc.hex, S.dlg.color)">
+          </div>
+          <div class="sizes">96 · 48 · 24 · 16</div>
         </div>
-      </div>
-      <div class="controls">
-        <label>background</label>
-        <div class="seg">
-          <button v-for="b in S.bgs" :key="b.hex" class="swatch" :class="{on: S.dlg.bg === b.hex}"
-                 :style="{background: b.hex}" :title="b.name" @click="S.dlg.bg = b.hex"></button>
-        </div>
-        <input type="color" :value="S.dlg.bg" @input="S.dlg.bg = $event.target.value" title="custom background">
       </div>
       <div class="controls">
         <label>icon color</label>
         <input type="color" :value="S.dlg.color" @input="S.dlg.color = $event.target.value">
-        <span class="muted">applies to currentColor (mono)</span>
+        <label style="margin-left:12px">dark bg</label>
+        <input type="color" :value="S.dlg.bgs2[1].hex"
+               @input="S.dlg.bgs2[1] = {name: 'custom', hex: $event.target.value}">
       </div>
       <div class="stylebox" v-if="S.dlg.styleId">
         <b>{{ styleLabel(S.dlg.styleId) }}</b>
@@ -265,7 +263,7 @@ S.lines = computed(() => {
   }
   return out;
 });
-S.decisionText = computed(() => S.lines.value.join('\\n'));
+S.decisionText = computed(() => S.lines.join('\\n'));  // S.lines auto-unwraps
 
 function render(p, size, bg, color) {
   const q = new URLSearchParams({ p, size, bg: bg || '#ffffff' });
@@ -303,15 +301,16 @@ function styleLabel(sid) {
 }
 function open(g, c) {
   S.dlg = { icon: g.icon, variant: g.variant, cand: c.cand, path: c.path,
-            size: 48, bg: '#ffffff', color: '#1c1c1c', styleId: g.style };
+            color: '#1c1c1c', styleId: g.style,
+            bgs2: [{name: 'LIGHT BG', hex: '#ffffff'}, {name: 'DARK BG', hex: '#1c1c1c'}] };
 }
 function openIcon(id, vid, v) {
   if (v.link) return;
   const icon = S.pack.icons[id];
   S.dlg = { icon: id, variant: vid, cand: null,
             path: 'icons/' + id + '/' + vid + '.svg',
-            size: 48, bg: '#ffffff', color: icon.main_color || '#1c1c1c',
-            styleId: v.style };
+            color: icon.main_color || '#1c1c1c', styleId: v.style,
+            bgs2: [{name: 'LIGHT BG', hex: '#ffffff'}, {name: 'DARK BG', hex: '#1c1c1c'}] };
 }
 async function switchStyle(dlg, sid) {
   try {
@@ -321,9 +320,9 @@ async function switchStyle(dlg, sid) {
     dlg.styleId = sid; await load();
   } catch (e) { S.msg = e.d?.errors ? e.d.errors.join('\\n') : e.message; S.msgClass = 'err'; }
 }
-function startManual() { S.manual = true; S.manualText = S.decisionText.value; }
+function startManual() { S.manual = true; S.manualText = S.decisionText; }
 async function apply() {
-  const text = (S.manual ? S.manualText : S.decisionText.value).trim();
+  const text = (S.manual ? S.manualText : S.decisionText).trim();
   if (!text) return;
   try {
     const r = await api('/api/decision', { method: 'POST', headers: { 'Content-Type': 'application/json' },
@@ -334,7 +333,7 @@ async function apply() {
   } catch (e) { S.msg = e.message; S.msgClass = 'err'; }
 }
 async function copy() {
-  await navigator.clipboard.writeText((S.manual ? S.manualText : S.decisionText.value).trim());
+  await navigator.clipboard.writeText((S.manual ? S.manualText : S.decisionText).trim());
   S.msg = 'copied — paste to your agent'; S.msgClass = 'ok';
 }
 async function saveIcon(id, brief) {
