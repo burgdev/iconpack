@@ -21,6 +21,6 @@ uv run iconpilot --help
   advisor), never model names, in code; routing lives in user config.
 - JSON Schemas in `src/iconpilot/schema/` are validated on every pack load;
   extend them together with any `pack.json` format change and add a test.
-- The skill (`skill/SKILL.md`) is instructions only — no logic. It is installed
+- The skill (`src/iconpilot/skill/SKILL.md`) is instructions only — no logic. It is installed
   by symlink, never copied; keep it in sync with the CLI surface.
 - PR titles are changelog-ready: imperative, capitalized, no conventional-commit tags.

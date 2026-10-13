@@ -12,10 +12,10 @@ from iconpilot.context import build_context, render_markdown
 from iconpilot.decide import apply_decisions, parse_decision_text
 from iconpilot.export.export import TARGETS, collect_exportables
 from iconpilot.gate.run import run_gate
-from iconpilot.pack import PackError, load_pack
+from iconpilot.pack import PackError, load_pack, revalidate, write_pack_atomic
 from iconpilot.render.contact import contact_sheet
 from iconpilot.render.render import hamming, hash_file
-from iconpilot.server.server import serve as serve_review
+from iconpilot.server.server import pack_lock, serve as serve_review
 from iconpilot.styles import resolve_styles, user_styles_path
 
 app = typer.Typer(
@@ -49,16 +49,170 @@ def _main(
     """Design consistent SVG icon packs with deterministic gates and human rounds."""
 
 
-@app.command()
-def new(pack: str, from_design_md: str | None = typer.Option(None, "--from-design-md")) -> None:
-    """Create a pack (designer drafts spec + briefs)."""
-    _not_implemented("new")
+DEFAULT_SPEC = {
+    "viewBox": "0 0 24 24",
+    "live_area": {"padding": 2},
+    "stroke": {"width": 2, "linecap": "round", "linejoin": "round"},
+    "fill": "none",
+    "allowed_elements": [
+        "path", "circle", "rect", "line", "polyline", "polygon", "ellipse",
+    ],
+    "precision": 0.5,
+}
 
 
 @app.command()
-def add(pack: str, icon: str, brief: str | None = typer.Option(None, "--brief")) -> None:
-    """Add an icon to the pack registry."""
-    _not_implemented("add")
+def new(
+    pack_dir: str,
+    name: str = typer.Option(None, "--name", help="Pack name (default: directory name)."),
+) -> None:
+    """Scaffold a pack: spec + empty registry. Fill briefs, then `check`."""
+    import json as _json
+    import re as _re
+
+    d = Path(pack_dir)
+    pack_name = name or d.name
+    if not _re.match(r"^[a-z][a-z0-9-]*$", pack_name):
+        typer.secho(f"invalid pack name '{pack_name}' (lowercase kebab-case)", fg=typer.colors.RED, err=True)
+        raise typer.Exit(code=2)
+    if (d / "pack.json").exists():
+        typer.secho(f"{d / 'pack.json'} already exists — refusing to overwrite", fg=typer.colors.RED, err=True)
+        raise typer.Exit(code=2)
+    d.mkdir(parents=True, exist_ok=True)
+    (d / "icons").mkdir(exist_ok=True)
+    pack = {
+        "schema": 2,
+        "name": pack_name,
+        "version": "0.1.0",
+        "provenance": {"created_by": "user"},
+        "spec": DEFAULT_SPEC,
+        "styles": {},
+        "schedule": [4, 2, 1],
+        "icons": {},
+    }
+    (d / "pack.json").write_text(_json.dumps(pack, indent=2) + "\n")
+    typer.secho(
+        f"created {d / 'pack.json'}\n"
+        f"next: iconpilot add {d} <icon> --brief … [--variant mono:mono-line]\n"
+        f"then: iconpilot check {d}",
+        fg=typer.colors.GREEN,
+    )
+
+
+@app.command()
+def add(
+    pack: str,
+    icon: str,
+    brief: str = typer.Option(..., "--brief"),
+    variant: list[str] = typer.Option(
+        None, "--variant", help="<name>:<style-id>, repeatable. Default: mono:mono-line."
+    ),
+) -> None:
+    """Add an icon with authored variants (status todo)."""
+    import re as _re
+
+    pack_dir = Path(pack)
+    if pack_dir.is_file():
+        pack_dir = pack_dir.parent
+    try:
+        with pack_lock(pack_dir):
+            pack_data, styles = _load_pack_arg(pack)
+            if icon in pack_data["icons"]:
+                typer.secho(f"icon '{icon}' already exists", fg=typer.colors.RED, err=True)
+                raise typer.Exit(code=2)
+            if not _re.match(r"^[a-z][a-z0-9-]*$", icon):
+                typer.secho(f"invalid icon name '{icon}' (lowercase kebab-case)", fg=typer.colors.RED, err=True)
+                raise typer.Exit(code=2)
+            specs = variant or ["mono:mono-line"]
+            variants: dict = {}
+            for spec in specs:
+                vname, _, style_id = spec.partition(":")
+                if not style_id or style_id not in styles:
+                    typer.secho(f"unknown style '{style_id}' in '{spec}' — see iconpilot styles",
+                                fg=typer.colors.RED, err=True)
+                    raise typer.Exit(code=2)
+                variants[vname] = {"style": style_id, "status": "todo"}
+            pack_data["icons"][icon] = {"brief": brief, "variants": variants}
+            _, errors = revalidate(pack_data)
+            if errors:
+                typer.secho("rejected:\n  - " + "\n  - ".join(errors), fg=typer.colors.RED, err=True)
+                raise typer.Exit(code=2)
+            write_pack_atomic(pack_dir, pack_data)
+    except TimeoutError as exc:
+        typer.secho(str(exc), fg=typer.colors.RED, err=True)
+        raise typer.Exit(code=2) from exc
+    typer.secho(f"added {icon} ({', '.join(variants)})", fg=typer.colors.GREEN)
+
+
+@app.command()
+def status(pack: str) -> None:
+    """Per-variant states, open work, and rounds."""
+    try:
+        pack_data, _styles = _load_pack_arg(pack)
+    except PackError as exc:
+        typer.secho(str(exc), fg=typer.colors.RED, err=True)
+        raise typer.Exit(code=2) from exc
+
+    pack_dir = Path(pack)
+    if pack_dir.is_file():
+        pack_dir = pack_dir.parent
+    runs = sorted(p.name for p in (pack_dir / ".runs").glob("r*")) if (pack_dir / ".runs").is_dir() else []
+
+    counts: dict[str, int] = {}
+    for icon_id, icon in pack_data["icons"].items():
+        parts = []
+        color = f" {icon['main_color']}" if icon.get("main_color") else ""
+        for vid, v in icon["variants"].items():
+            if "link" in v:
+                parts.append(f"{vid}→{v['link']}")
+                continue
+            st = v.get("status", "todo")
+            counts[st] = counts.get(st, 0) + 1
+            extra = ""
+            if v.get("chosen"):
+                extra = f" ({v['chosen']['run']}/{v['chosen']['variant']})"
+            if v.get("request"):
+                r = v["request"]
+                extra += f" [{r.get('type')}{' ' + str(r['n']) if r.get('n') else ''}]"
+            parts.append(f"{vid}:{st}{extra}")
+        typer.echo(f"  {icon_id}{color}  {' · '.join(parts)}")
+    summary = " · ".join(f"{k}={v}" for k, v in sorted(counts.items())) or "empty"
+    typer.secho(
+        f"{pack_data['name']} — {summary} · rev {pack_data.get('rev', 0)}"
+        + (f" · rounds {runs[0]}…{runs[-1]}" if runs else " · no rounds"),
+        fg=typer.colors.GREEN,
+    )
+
+
+@app.command(name="install-skill")
+def install_skill(force: bool = typer.Option(False, "--force")) -> None:
+    """Symlink the skill into ~/.agents/skills/iconpilot (+ ~/.claude/skills)."""
+    from importlib import resources as _res
+
+    src = Path(str(_res.files("iconpilot"))) / "skill"
+    if not (src / "SKILL.md").is_file():
+        typer.secho(f"skill not found in package: {src}", fg=typer.colors.RED, err=True)
+        raise typer.Exit(code=2)
+    agents = Path.home() / ".agents" / "skills" / "iconpilot"
+    agents.parent.mkdir(parents=True, exist_ok=True)
+    if agents.is_symlink():
+        agents.unlink()
+    elif agents.exists():
+        if not force:
+            typer.secho(f"{agents} exists and is not a symlink — pass --force to replace", fg=typer.colors.RED, err=True)
+            raise typer.Exit(code=2)
+        import shutil as _shutil
+
+        _shutil.rmtree(agents)
+    agents.symlink_to(src, target_is_directory=True)
+    typer.secho(f"  → {agents} -> {src}", fg=typer.colors.GREEN)
+    claude = Path.home() / ".claude" / "skills" / "iconpilot"
+    if claude.parent.is_dir():
+        if claude.is_symlink():
+            claude.unlink()
+        if not claude.exists():
+            claude.symlink_to(agents, target_is_directory=True)
+            typer.secho(f"  → {claude} -> {agents}", fg=typer.colors.GREEN)
 
 
 @app.command()
@@ -198,12 +352,6 @@ def decide(
         typer.echo(f"  {line}")
     typer.secho(f"applied {len(decisions)} icon decisions (round {round_id})",
                 fg=typer.colors.GREEN)
-
-
-@app.command()
-def status(pack: str) -> None:
-    """Show icon states, costs, and open icons."""
-    _not_implemented("status")
 
 
 def _load_pack_arg(pack: str) -> tuple[dict, dict]:
@@ -425,12 +573,6 @@ def export(
 def link(write_design_md: bool = typer.Option(False, "--write-design-md")) -> None:
     """In a consuming project: create iconpilot.toml."""
     _not_implemented("link")
-
-
-@app.command(name="install-skill")
-def install_skill() -> None:
-    """Symlink skill/ into ~/.agents/skills/iconpilot (+ ~/.claude/skills/)."""
-    _not_implemented("install-skill")
 
 
 def main() -> None:

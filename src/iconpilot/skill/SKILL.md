@@ -16,6 +16,10 @@ each bound to a **style** from the registry; `anchor` = family form baseline,
 variant. Styles are three-tier (built-in < `~/.config/iconpilot/styles.toml` <
 pack-local).
 
+**Craft:** before drafting any variant, read `craft.md` (next to this file) —
+grid, stroke discipline, 16px legibility, silhouette-first, color ratios.
+The gate enforces the numbers; craft.md carries the judgment.
+
 ## The loop (you drive it)
 
 ```

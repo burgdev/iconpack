@@ -40,7 +40,7 @@
     },
     "icons": {
       "type": "object",
-      "minProperties": 1,
+      "description": "Empty is valid — a fresh scaffold awaits its first `add`.",
       "additionalProperties": { "$ref": "#/$defs/icon" }
     }
   },
