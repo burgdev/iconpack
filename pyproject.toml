@@ -10,11 +10,11 @@ dependencies = [
     # CLI + schema validation (available now)
     "typer>=0.12",
     "jsonschema>=4.23",
-    # Gate/render foundations (M1) — import lazily until milestones land
+    # Gate: parsing, geometry, deterministic rendering, similarity
     "lxml>=5.2",
     "svgpathtools>=1.6",
-    # resvg-py and imagehash are added with the M1/M2 implementations,
-    # together with their pinned versions.
+    "resvg-py>=0.5.0",
+    "imagehash>=4.3.2",
 ]
 
 [project.scripts]

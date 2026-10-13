@@ -10,6 +10,7 @@ import typer
 from iconpilot import __version__
 from iconpilot.gate.run import run_gate
 from iconpilot.pack import PackError, load_pack
+from iconpilot.render.render import hamming, hash_file
 from iconpilot.styles import resolve_styles, user_styles_path
 
 app = typer.Typer(
@@ -165,6 +166,46 @@ def gate(
             fg=typer.colors.GREEN if report.passed else typer.colors.RED,
         )
     raise typer.Exit(code=0 if report.passed else 1)
+
+
+@app.command()
+def similar(
+    file: str,
+    pack: str = typer.Option(..., "--pack", help="Pack directory or pack.json path."),
+    threshold: int = typer.Option(
+        8, "--threshold", help="Hamming distance (of 64-bit phash) flagged as near-duplicate."
+    ),
+) -> None:
+    """Find near-duplicate icons in a pack — the link-suggestion primitive."""
+    try:
+        _, _styles = _load_pack_arg(pack)
+    except PackError as exc:
+        typer.secho(str(exc), fg=typer.colors.RED, err=True)
+        raise typer.Exit(code=2) from exc
+
+    pack_dir = Path(pack)
+    if pack_dir.is_file():
+        pack_dir = pack_dir.parent
+    icons_dir = pack_dir / "icons"
+
+    target = hash_file(file)
+    rows: list[tuple[int, Path]] = []
+    for svg in sorted(icons_dir.glob("**/*.svg")) if icons_dir.is_dir() else []:
+        if svg.resolve() == Path(file).resolve():
+            continue
+        rows.append((hamming(target, hash_file(svg)), svg))
+    rows.sort(key=lambda r: r[0])
+
+    if not rows:
+        typer.echo(f"no other SVGs under {icons_dir} — nothing to compare")
+        return
+    for dist, svg in rows:
+        flag = typer.colors.YELLOW if dist <= threshold else None
+        text = f"  {dist:>3}  {svg.relative_to(pack_dir)}"
+        if dist <= threshold:
+            text += "  ≈ near-duplicate — consider a link"
+        typer.secho(text, fg=flag)
+    typer.echo(f"threshold: ≤ {threshold} (64-bit phash hamming distance)")
 
 
 @app.command(name="styles")

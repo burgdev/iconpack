@@ -17,6 +17,12 @@ from pathlib import Path
 from lxml import etree
 from svgpathtools import parse_path
 
+from iconpilot.render.render import (
+    HASH_RENDER_SIZE,
+    hash_file,
+    ink_ratio,
+    render_png,
+)
 from iconpilot.styles import Style
 
 SVG_NS = "http://www.w3.org/2000/svg"
@@ -165,6 +171,33 @@ def _geometry(root, spec: dict, style: Style, viewbox, report: GateReport) -> No
             )
 
 
+def _render(svg_path: Path, style: Style, report: GateReport) -> None:
+    ratios: dict[int, float] = {}
+    for size in style.render_sizes:
+        try:
+            img = render_png(svg_path, size)
+        except Exception as exc:  # resvg raises assorted errors on broken SVG
+            report.fail(f"render: {size}px failed ({exc})")
+            return
+        if img.size != (size, size):
+            report.fail(f"render: requested {size}px, got {img.size}")
+            return
+        ratio = ink_ratio(img)
+        ratios[size] = round(ratio, 4)
+        if ratio == 0.0:
+            report.fail(f"render: {size}px renders no ink (empty or invisible paths)")
+        elif ratio > 0.9:
+            report.fail(f"render: {size}px is nearly solid ({ratio:.0%} ink) — fill/counter error")
+    report.metrics["ink_ratio"] = ratios
+    report.metrics["phash"] = hash_file(svg_path)
+    if report.passed:
+        report.checks.append(
+            f"render: {list(style.render_sizes)}px ok "
+            f"(ink {', '.join(f'{s}px={r:.1%}' for s, r in ratios.items())}; "
+            f"hash@{HASH_RENDER_SIZE}px)"
+        )
+
+
 def run_gate(svg_path: str | Path, pack: dict, style: Style) -> GateReport:
     """Run the deterministic gate on one SVG against a pack spec + style."""
     report = GateReport()
@@ -180,4 +213,5 @@ def run_gate(svg_path: str | Path, pack: dict, style: Style) -> GateReport:
     viewbox = _viewbox(root, pack.get("spec", {}).get("viewBox"), report)
     _lint(root, pack.get("spec", {}), style, report)
     _geometry(root, pack.get("spec", {}), style, viewbox, report)
+    _render(svg_path, style, report)
     return report

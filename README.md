@@ -74,7 +74,7 @@ uv sync && uv run pytest
 ## Roadmap
 
 1. ✅ Schema v2 + styles registry + semantic validator + gate slice
-2. Full gate (render via resvg-py, similarity via imagehash)
+2. ✅ Full gate (render via resvg-py at style sizes, ink checks, phash; `iconpilot similar`)
 3. Model routing + `round` + `new` (todo-only) + `decide`
 4. Review server (locking, optimistic concurrency) + live per-icon editing
 5. Hand-tweak loop materialization (shared with links/export)

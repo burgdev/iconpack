@@ -176,6 +176,42 @@ def test_gate_passes_valid_svg(tmp_path: Path, pack_dir: Path) -> None:
     report = run_gate(svg, pack, styles["mono-line"])
     assert report.passed, report.errors
     assert report.metrics["node_count"] <= styles["mono-line"].max_nodes
+    assert set(report.metrics["ink_ratio"]) == set(styles["mono-line"].render_sizes)
+    assert 0.0 < report.metrics["ink_ratio"][24] < 0.9
+    assert len(report.metrics["phash"]) == 16  # 64-bit phash as hex
+
+
+def test_gate_empty_render_fails(tmp_path: Path, pack_dir: Path) -> None:
+    svg = tmp_path / "empty.svg"
+    svg.write_text(
+        '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" '
+        'fill="none" stroke="currentColor" stroke-width="2">'
+        '<path d="M4 11 M12 4 M20 11"/></svg>'
+    )
+    pack, styles = load_pack(pack_dir / "pack.json")
+    report = run_gate(svg, pack, styles["mono-line"])
+    assert any("no ink" in e for e in report.errors)
+
+
+def test_similarity_detects_duplicate_and_difference(tmp_path: Path, pack_dir: Path) -> None:
+    from iconpilot.render.render import hamming, hash_file
+
+    dupe = pack_dir / "icons" / "selfhut" / "primitive.svg"
+    dupe.parent.mkdir(parents=True)
+    dupe.write_text(VALID_SVG)
+    original = tmp_path / "hut.svg"
+    original.write_text(VALID_SVG)
+    other = tmp_path / "other.svg"
+    other.write_text(
+        '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" '
+        'fill="none" stroke="currentColor" stroke-width="2" '
+        'stroke-linecap="round" stroke-linejoin="round">'
+        '<circle cx="12" cy="12" r="8"/></svg>'
+    )
+
+    h_orig = hash_file(original)
+    assert hamming(h_orig, hash_file(dupe)) == 0
+    assert hamming(h_orig, hash_file(other)) > 8
 
 
 def test_gate_fails_invalid_svg(tmp_path: Path, pack_dir: Path) -> None:
