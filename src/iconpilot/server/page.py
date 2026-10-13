@@ -354,9 +354,12 @@ async function load(manual) {
   ]);
   S.pack = p.pack; S.rev = p.rev; S.round = run.round;
   S.candidates = run.candidates.map(c => ({
-    ...c, path: `.runs/${run.round}/${c.variant}/${c.icon}/${c.cand}.svg`,
+    ...c,
+    path: `.runs/${run.round}/${c.variant}/${c.icon}/${c.cand}.svg`,
+    style: p.pack.icons?.[c.icon]?.variants?.[c.variant]?.style,
   }));
-  S.styles = styles; S.ai = ai;
+  S.styles = styles;
+  S.ai = { text: ai.status || '', active: !!ai.active };  // API: {status, active}
 }
 
 const App = {
@@ -366,7 +369,7 @@ const App = {
       setInterval(async () => {
         try {
           const [p, ai] = await Promise.all([api('/api/pack'), api('/api/ai-status')]);
-          if (p.rev !== S.rev || ai.text !== S.ai.text) await load();
+          if (p.rev !== S.rev || (ai.status || '') !== S.ai.text) await load();
         } catch {}
       }, 2000);
     });
