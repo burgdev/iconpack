@@ -616,7 +616,7 @@ def export(
         raise typer.Exit(code=2) from exc
 
     pack_dir = resolve_pack_dir(pack)
-    entries, skipped = collect_exportables(pack_dir, pack_data)
+    entries, skipped = collect_exportables(pack_dir, pack_data, styles)
     out_dir = Path(out)
     out_dir.mkdir(parents=True, exist_ok=True)
 

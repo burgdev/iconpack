@@ -321,3 +321,25 @@ def test_resolve_default_variant_single_rule() -> None:
     icon["variants"]["mono"]["status"] = "todo"
     assert resolve_default_variant(icon) == "mono"  # mono wins ties
     assert resolve_default_variant({"variants": {}}) is None
+
+
+# --- per-style design grids ---------------------------------------------------
+
+COLOR_GRID_SVG = (
+    '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48" '
+    'fill="none" stroke="currentColor" stroke-width="2" '
+    'stroke-linecap="round" stroke-linejoin="round">'
+    '<path d="M8 22 L24 8 L40 22"/><path d="M12 22 L12 40 L36 40 L36 22"/></svg>'
+)
+
+
+def test_style_grid_overrides_pack_viewbox(tmp_path: Path, pack_dir: Path) -> None:
+    # pack spec is 24; lineal-color designs on its own 48 grid
+    svg = tmp_path / "color.svg"
+    svg.write_text(COLOR_GRID_SVG)
+    pack, styles = load_pack(pack_dir / "pack.json")
+    report = run_gate(svg, pack, styles["lineal-color"])
+    assert report.passed, report.errors
+    # the same 48px SVG must FAIL against a 24-grid style
+    report = run_gate(svg, pack, styles["mono-line"])
+    assert any("viewBox" in e for e in report.errors)

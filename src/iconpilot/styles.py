@@ -37,6 +37,7 @@ class Style:
     style_words: tuple[str, ...] = ()
     avoid: tuple[str, ...] = ()
     render_sizes: tuple[int, ...] = (16, 24, 48)
+    size: int | None = None  # design grid px; None = inherit the pack spec viewBox
     note: str | None = None
 
     def __post_init__(self) -> None:
@@ -83,6 +84,7 @@ BUILTIN_STYLES: dict[str, Style] = {
             ),
             avoid=("fine detail", "thin strokes", "texture", "text", "perspective"),
             render_sizes=(12, 16, 24),
+            size=24,
         ),
         _s(
             "mono-line",
@@ -100,6 +102,7 @@ BUILTIN_STYLES: dict[str, Style] = {
                 "flat single plane",
             ),
             avoid=("gradients", "3D", "text", "hairlines", "perspective", "shading"),
+            size=24,
         ),
         _s(
             "mono-line-thin",
@@ -177,6 +180,7 @@ BUILTIN_STYLES: dict[str, Style] = {
                 "playful but precise",
             ),
             avoid=("gradients", "shading", "text", "photo-realism"),
+            size=48,
         ),
         _s(
             "flat-color",
@@ -189,6 +193,7 @@ BUILTIN_STYLES: dict[str, Style] = {
             min_gap=1.25,
             style_words=("flat colored shapes", "no outline", "bright, friendly"),
             avoid=("outlines", "gradients", "shading"),
+            size=48,
         ),
         _s(
             "gradient-color",
@@ -200,6 +205,7 @@ BUILTIN_STYLES: dict[str, Style] = {
             max_nodes=60,
             note="Marketing sizes only — gradients smear at 16px; gate flags render at 16.",
             render_sizes=(24, 48),
+            size=48,
         ),
     ]
 }

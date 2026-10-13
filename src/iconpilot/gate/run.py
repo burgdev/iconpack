@@ -355,7 +355,10 @@ def run_gate(svg_path: str | Path, pack: dict, style: Style) -> GateReport:
     if root is None:
         return report
 
-    viewbox = _viewbox(root, pack.get("spec", {}).get("viewBox"), report)
+    expected_vb = (
+        f"0 0 {style.size} {style.size}" if style.size else pack.get("spec", {}).get("viewBox")
+    )
+    viewbox = _viewbox(root, expected_vb, report)
     _lint(root, pack.get("spec", {}), style, report)
     _geometry(root, pack.get("spec", {}), style, viewbox, report)
     _render(path, style, report)

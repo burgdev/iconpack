@@ -28,9 +28,12 @@ class Entry:
     variant: str
     path: Path
     master: tuple[str, str] | None = None  # set when materialized via link
+    size: int = 24  # design grid px, resolved from the style
 
 
-def collect_exportables(pack_dir: Path, pack: dict) -> tuple[list[Entry], list[str]]:
+def collect_exportables(
+    pack_dir: Path, pack: dict, styles: dict | None = None
+) -> tuple[list[Entry], list[str]]:
     """Approved variants (+ links to approved masters); skips are reported."""
     entries: list[Entry] = []
     skipped: list[str] = []
@@ -50,6 +53,12 @@ def collect_exportables(pack_dir: Path, pack: dict) -> tuple[list[Entry], list[s
             else:
                 skipped.append(f"{icon_id}#{vid} ({v.get('status', 'todo')})")
     return entries, skipped
+
+
+def _style_size(styles: dict | None, style_id: str | None) -> int:
+    if styles and style_id and style_id in styles and styles[style_id].size:
+        return styles[style_id].size
+    return 24
 
 
 def tidy(svg_text: str) -> str:

@@ -10,6 +10,7 @@ from PIL import Image
 from typer.testing import CliRunner
 
 from iconpilot.cli import app
+from iconpilot.export.export import export_maplibre
 from tests.test_pack_schema import VALID_SVG, example_pack
 
 runner = CliRunner()
@@ -87,3 +88,32 @@ def test_export_iconify(exportpack: Path, tmp_path: Path) -> None:
 def test_export_rejects_unknown_target(exportpack: Path, tmp_path: Path) -> None:
     r = runner.invoke(app, ["export", str(exportpack), "--target", "font", "--out", str(tmp_path)])
     assert r.exit_code == 2
+
+
+COLOR_GRID_SVG = (
+    '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48" '
+    'fill="none" stroke="currentColor" stroke-width="2" '
+    'stroke-linecap="round" stroke-linejoin="round">'
+    '<path d="M8 22 L24 8 L40 22"/><path d="M12 22 L12 40 L36 40 L36 22"/></svg>'
+)
+
+
+def test_export_sprite_uses_design_sizes(exportpack: Path, tmp_path: Path) -> None:
+    from iconpilot.export.export import collect_exportables
+    from iconpilot.pack import load_pack, revalidate, write_pack_atomic
+
+    pack, styles = load_pack(exportpack / "pack.json")
+    pack["icons"]["hut"]["variants"]["color"]["status"] = "approved"
+    (exportpack / "icons" / "hut" / "color.svg").write_text(COLOR_GRID_SVG)
+    _, errors = revalidate(pack)
+    assert not errors, errors
+    write_pack_atomic(exportpack, pack)
+
+    entries, _ = collect_exportables(exportpack, pack, styles)
+    sizes = {(e.variant, e.icon): e.size for e in entries}
+    assert sizes[("mono", "hut")] == 24 and sizes[("color", "hut")] == 48
+    out = tmp_path / "sprite"
+    export_maplibre(entries, out)
+    layout = json.loads((out / "sprite.json").read_text())
+    assert layout["mono-hut"]["width"] == 24
+    assert layout["color-hut"]["width"] == 48

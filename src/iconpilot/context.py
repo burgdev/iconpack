@@ -51,7 +51,7 @@ def build_context(
             "avoid": list(style.avoid),
         },
         "gate": {
-            "viewBox": spec.get("viewBox"),
+            "viewBox": f"0 0 {style.size} {style.size}" if style.size else spec.get("viewBox"),
             "live_area_padding": spec.get("live_area", {}).get("padding", 0),
             "allowed_elements": spec.get("allowed_elements"),
             "precision": spec.get("precision"),
