@@ -43,12 +43,19 @@ mono): the gate rejects it. If two strokes almost meet, join them or open them.
 - One stroke width per icon, always. Never widen "just this segment".
 - Round caps/joins unless the style says square; end strokes on the grid,
   don't let them dangle.
+- **Stroke parity decides your coordinates**: even stroke (2px) → integer
+  coordinates; half stroke (1.5px, 2.5px) → half-integer (×.5) coordinates.
+  Strokes are centered on the path — mismatched parity splits into two fuzzy
+  half-pixels at raster.
 - Inside corners: inner radius = outer radius − stroke width.
 
 ## 6. Small-size legibility (the 16px test)
 
 - Minimum feature 2px at 24 viewBox; any enclosed counter must survive 16px —
   if it would close up, remove it (that detail belongs to the color tier).
+- **Do the arithmetic, don't guess**: effective stroke at render size S =
+  authored stroke × S ÷ viewBox. A 2px stroke on the 24 grid renders at
+  1.33px at 16 — interiors sized against 2px will smudge.
 - Fewer shapes = smaller icon. That's what the primitive tier is for.
 
 ## 7. Matching an anchor or reference SVG
@@ -57,6 +64,15 @@ Mechanical, not artistic: open the anchor SVG and **copy its `stroke-width`,
 `stroke-linecap`, `stroke-linejoin` verbatim**; reuse its corner-radius habit;
 place your icon's visual mass where the anchor's mass sits (same center, same
 weight distribution). Match first, then differentiate on the brief.
+
+### Optical corrections
+
+- Curved shapes read thinner than straight ones: **enlarge the path slightly —
+  never thicken the stroke**.
+- Pointed shapes (arrows, chevrons, roof apexes) overshoot ~0.5px past where a
+  square would stop.
+- Simpler icons sit slightly larger than dense ones so the set reads even.
+- Center asymmetric marks by **visual mass**, not bounding-box center.
 
 ## 8. Form & metaphor
 
@@ -94,7 +110,40 @@ smaller than the stroke (vanishes at 16px):
 </svg>
 ```
 
-## 11. Pre-submit checklist (run it before you hand the SVG to the gate)
+### Per-tier worked examples
+
+Primitive (2 shapes, silhouette, solid):
+
+```svg
+<svg viewBox="0 0 24 24" fill="currentColor">
+  <path d="M4 11 L12 4 L20 11 V20 H4 Z"/>
+</svg>
+```
+
+Color (mono's hut, painted — flat fills from the palette, dark outline kept):
+
+```svg
+<svg viewBox="0 0 48 48" fill="none" stroke="#1c1c1c" stroke-width="2"
+     stroke-linecap="round" stroke-linejoin="round">
+  <path d="M8 22 L24 8 L40 22" stroke="#544e55"/>
+  <path d="M12 22 V40 H36 V22" fill="#89919a"/>
+</svg>
+```
+
+## 11. Screening rubric (for screeners, not drafters)
+
+Score each candidate 0–10 against the brief:
+
+- **0–3** wrong metaphor, gate-visible flaws, or unreadable silhouette
+- **4–6** correct but generic: legible, on-style, no presence
+- **7–8** clean, balanced, family-coherent — ship candidate
+- **9–10** the above plus instant readability at 16px — anchor material
+
+Test family coherence on the **confusable pairs** (hut vs selfhut vs hotel),
+not the easy ones — consistency of drawing ≠ consistency of meaning. Ranking
+orders candidates for the user; it never approves.
+
+## 12. Pre-submit checklist (run it before you hand the SVG to the gate)
 
 - [ ] viewBox `0 0 24 24`, presentation attrs on the root
 - [ ] every coordinate inside 2→22, on the 0.5 grid

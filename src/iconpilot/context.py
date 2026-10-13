@@ -65,6 +65,8 @@ def build_context(
         ctx["main_color"] = icon["main_color"]
     if style.palette:
         ctx["palette"] = list(style.palette)
+    if style.guidance:
+        ctx["style_guidance"] = style.guidance
     dm = pack.get("inherits", {}).get("design_md")
     if dm:
         ctx["design_md"] = dm
@@ -124,6 +126,8 @@ def render_markdown(ctx: dict) -> str:
         lines += [f"**Main color:** `{ctx['main_color']}`", ""]
     if "palette" in ctx:
         lines += [f"**Palette (only these colors):** {', '.join(ctx['palette'])}", ""]
+    if "style_guidance" in ctx:
+        lines += [f"**Style guidance:** {ctx['style_guidance']}", ""]
     if "design_md" in ctx:
         lines += [f"**Design system:** read `{ctx['design_md']}` before drafting.", ""]
     for key, title in (

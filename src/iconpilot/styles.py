@@ -39,6 +39,7 @@ class Style:
     render_sizes: tuple[int, ...] = (16, 24, 48)
     size: int | None = None  # design grid px; None = inherit the pack spec viewBox
     palette: tuple[str, ...] = ()  # allowed hex colors for colored styles; empty = any
+    guidance: str | None = None  # optional freeform prose rendered into context when set
     note: str | None = None
 
     def __post_init__(self) -> None:
