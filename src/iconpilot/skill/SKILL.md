@@ -20,6 +20,19 @@ pack-local).
 grid, stroke discipline, 16px legibility, silhouette-first, color ratios.
 The gate enforces the numbers; craft.md carries the judgment.
 
+## Who writes what (the write contract)
+
+- `pack.json` state (status/chosen/comments/requests/ratings/hashes) is written
+  **only by `iconpilot decide`** — you pass the user's decision text verbatim.
+  Never construct or patch state JSON yourself; use the review server's API for
+  brief/prompt/main_color/style-ref edits.
+- You **do** write directly: candidate SVGs into `.runs/…` (that is drafting)
+  and the `.runs/.ai-status` signal file.
+- Rounds never start themselves. If no variant is `todo`/`stale` but the gate
+  has findings on approved icons, **propose an improvement round** (list the
+  findings, suggest which variant to reopen) and wait for the user's go —
+  reopening is `decide … restart`, a user decision.
+
 ## Finding the pack (multiple packs supported)
 
 `iconpilot packs` lists every discovered pack (roots from
