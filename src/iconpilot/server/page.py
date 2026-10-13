@@ -87,7 +87,7 @@ function renderIcons() {
         <div class="row" style="gap:4px">
           <input style="flex:1" id="brief-${esc(id)}" placeholder="brief" value="${esc(icon.brief)}">
           <input style="flex:1" id="prompt-${esc(id)}" placeholder="prompt (optional)" value="${esc(icon.prompt||'')}">
-          <input style="width:90px" id="color-${esc(id)}" placeholder="#hex" value="${esc(icon.main_color||'')}">
+          <input style="width:90px" id="main_color-${esc(id)}" placeholder="#hex" value="${esc(icon.main_color||'')}">
           <button onclick="saveIcon('${esc(id)}')">Save</button>
         </div>
       </details>`;

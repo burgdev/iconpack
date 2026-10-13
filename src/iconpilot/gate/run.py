@@ -114,7 +114,37 @@ def _lint(root, spec: dict, style: Style, report: GateReport) -> None:
     report.checks.append(f"lint: elements/attributes conform to style '{style.id}'")
 
 
-def _geometry(root, spec: dict, style: Style, viewbox, report: GateReport) -> None:
+def _shape_bbox(el) -> tuple[float, float, float, float] | None:
+    """True bbox for basic shapes (svgpathtools only handles <path>)."""
+    name = etree.QName(el).localname
+    try:
+        if name == "circle":
+            cx, cy, r = float(el.get("cx", 0)), float(el.get("cy", 0)), float(el.get("r", 0))
+            return cx - r, cy - r, cx + r, cy + r
+        if name == "ellipse":
+            cx, cy = float(el.get("cx", 0)), float(el.get("cy", 0))
+            rx, ry = float(el.get("rx", 0)), float(el.get("ry", 0))
+            return cx - rx, cy - ry, cx + rx, cy + ry
+        if name == "rect":
+            x, y = float(el.get("x", 0)), float(el.get("y", 0))
+            w, h = float(el.get("width", 0)), float(el.get("height", 0))
+            return x, y, x + w, y + h
+        if name == "line":
+            x1, y1 = float(el.get("x1", 0)), float(el.get("y1", 0))
+            x2, y2 = float(el.get("x2", 0)), float(el.get("y2", 0))
+            return min(x1, x2), min(y1, y2), max(x1, x2), max(y1, y2)
+        if name in ("polyline", "polygon"):
+            nums = [float(n) for n in re.findall(r"[-+\d.]+", el.get("points", ""))]
+            if len(nums) < 4:
+                return None
+            xs, ys = nums[0::2], nums[1::2]
+            return min(xs), min(ys), max(xs), max(ys)
+    except ValueError:
+        return None
+    return None
+
+
+def _geometry(root, spec, style, viewbox, report):
     if not viewbox:
         return
     _, _, w, h = viewbox
@@ -133,20 +163,20 @@ def _geometry(root, spec: dict, style: Style, viewbox, report: GateReport) -> No
                 report.fail(f"geometry: unparseable path data: {exc}")
                 continue
             nodes += sum(max(1, len(s)) for s in segs) or len(segs)
-            if segs:
-                xmin = min(s.start.real for s in segs)
-                ymin = min(s.start.imag for s in segs)
-                xmax = max(s.end.real for s in segs)
-                ymax = max(s.end.imag for s in segs)
-                bboxes.append((xmin, ymin, xmax, ymax))
+            for seg in segs:
+                bx0, bx1, by0, by1 = seg.bbox()  # svgpathtools order: (xmin, xmax, ymin, ymax)
+                bboxes.append((bx0, by0, bx1, by1))  # includes bezier control-point hull
         elif name in _SHAPE_NODES:
             nodes += _SHAPE_NODES[name]
+            bb = _shape_bbox(el)
+            if bb:
+                bboxes.append(bb)
         elif name in ("polyline", "polygon"):
-            pts = el.get("points", "")
-            coords = re.findall(r"[-\d.]+", pts)
-            nodes += max(1, len(coords) // 2)
-        elif name == "line":
-            nodes += 2
+            nums = re.findall(r"[-+\d.]+", el.get("points", ""))
+            nodes += max(1, len(nums) // 2)
+            bb = _shape_bbox(el)
+            if bb:
+                bboxes.append(bb)
 
     report.metrics["node_count"] = nodes
     if nodes > style.max_nodes:

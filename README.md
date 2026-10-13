@@ -3,8 +3,9 @@
 Multi-model pipeline for designing consistent SVG icon packs: cheap models draft
 variants, deterministic tools gate them, and you decide each round in a review page.
 
-**Status:** scaffold + phase 1 — `gate` (parse/lint/geometry slice) and `styles`
-(registry) work today; rounds/server/export are stubs.
+**Status:** 0.0.2 — gate, agent loop (context/decide), review server, and all four
+export targets are implemented and tested; MCP, `--static` page fallback, and the
+embedded editor are future work.
 
 ## Install
 

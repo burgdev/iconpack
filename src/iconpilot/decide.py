@@ -210,11 +210,19 @@ def apply_decisions(
                         f"{icon_id}#{variant_id}: approved {cand} → {dest.relative_to(pack_dir)}"
                     )
                     if changed:
-                        for dep in _dependents_of(pack, icon_id, variant_id):
-                            pack["icons"][dep.split("#")[0]]["variants"][dep.split("#")[1]][
-                                "status"
-                            ] = "stale"
-                            log.append(f"{dep}: stale (dependency {icon_id}#{variant_id} changed)")
+                        # transitive: staling a node stales its dependents too
+                        queue = [f"{icon_id}#{variant_id}"]
+                        seen: set[str] = set()
+                        while queue:
+                            node = queue.pop(0)
+                            for dep in _dependents_of(pack, *node.split("#")):
+                                if dep in seen:
+                                    continue
+                                seen.add(dep)
+                                di, _, dv = dep.partition("#")
+                                pack["icons"][di]["variants"][dv]["status"] = "stale"
+                                log.append(f"{dep}: stale (dependency {node} changed)")
+                                queue.append(dep)
                 elif action == "keep":
                     dest.parent.mkdir(parents=True, exist_ok=True)
                     shutil.copyfile(cands[cand], dest)
@@ -245,6 +253,13 @@ def apply_decisions(
                     log.append(f"{icon_id}#{variant_id}: restart")
                 if comment_text:
                     comment(variant, comment_text)
+
+    # never persist a pack we just broke
+    from iconpilot.pack import revalidate as _revalidate
+
+    _, errors = _revalidate(pack)
+    if errors:
+        raise ValueError("decisions would produce an invalid pack:\n  - " + "\n  - ".join(errors))
 
     # persist: decisions echo + pack.json (atomic, rev bump)
     runs = pack_dir / ".runs" / round_id

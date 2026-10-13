@@ -101,10 +101,13 @@ def render_markdown(ctx: dict) -> str:
     g = ctx["gate"]
     lines += [
         "**The gate enforces (deterministic, your SVG must pass):**",
-        f"- viewBox `{g['viewBox']}`, live area padding {g['live_area_padding']}",
+        f"- viewBox `{g['viewBox']}`, live area padding {g['live_area_padding']} (true bbox incl. beziers/shapes)",
         f"- elements: {', '.join(g['allowed_elements'] or [])}",
-        f"- ≤ {g['max_nodes']} nodes; min gap {g['min_gap']}; precision {g['precision']}",
+        f"- ≤ {g['max_nodes']} nodes; stroke/fill/width/caps per style",
         f"- renders at {g['render_sizes']}px, no inline styles, no transforms, no ids",
+        "",
+        "**Style targets (not yet machine-enforced — follow them):**",
+        f"- min gap {g['min_gap']}, coordinate precision {g['precision']}",
         "",
     ]
     if "main_color" in ctx:

@@ -9,6 +9,8 @@ import pytest
 from typer.testing import CliRunner
 
 from iconpilot.cli import app
+from iconpilot.gate.run import run_gate
+from iconpilot.pack import load_pack
 from tests.test_pack_schema import VALID_SVG, example_pack
 
 runner = CliRunner()
@@ -292,3 +294,96 @@ def test_contact_sheet(workpack: Path) -> None:
     sheet = workpack / ".runs" / "r001" / "contact-sheet.png"
     assert sheet.is_file()
     assert sheet.stat().st_size > 500
+
+
+# --- review-fix regressions ---------------------------------------------------
+
+BEZIER_SVG = (
+    '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" '
+    'fill="none" stroke="currentColor" stroke-width="2" '
+    'stroke-linecap="round" stroke-linejoin="round">'
+    '<path d="M4 12 C4 -6 20 -6 20 12"/></svg>'
+)
+
+CIRCLE_OUT_SVG = (
+    '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" '
+    'fill="none" stroke="currentColor" stroke-width="2" '
+    'stroke-linecap="round" stroke-linejoin="round">'
+    '<circle cx="12" cy="23" r="8"/></svg>'
+)
+
+
+def test_gate_catches_bezier_overshoot(workpack: Path) -> None:
+    # regression: segment start/end-only bbox missed bezier bulges (false PASS)
+    svg = workpack / ".runs" / "r001" / "mono" / "hut" / "bez.svg"
+    svg.parent.mkdir(parents=True, exist_ok=True)
+    svg.write_text(BEZIER_SVG)
+    pack, styles = load_pack(workpack / "pack.json")
+    report = run_gate(svg, pack, styles["mono-line"])
+    assert any("live area" in e for e in report.errors), report.checks
+
+
+def test_gate_catches_outside_circle(workpack: Path) -> None:
+    # regression: shapes contributed zero geometry (false PASS)
+    svg = workpack / ".runs" / "r001" / "mono" / "hut" / "circ.svg"
+    svg.write_text(CIRCLE_OUT_SVG)
+    pack, styles = load_pack(workpack / "pack.json")
+    report = run_gate(svg, pack, styles["mono-line"])
+    assert any("live area" in e for e in report.errors)
+
+
+def test_staleness_is_transitive(workpack: Path) -> None:
+    # lake/mono references hut/mono; peak/mono references lake/mono
+    pack = json.loads((workpack / "pack.json").read_text())
+    pack["icons"]["lake"] = {
+        "brief": "lake",
+        "variants": {
+            "mono": {
+                "style": "mono-line",
+                "status": "approved",
+                "reference": "hut#mono",
+                "chosen": {"run": "r000", "variant": "x"},
+            }
+        },
+    }
+    pack["icons"]["peak"] = {
+        "brief": "peak",
+        "variants": {
+            "mono": {
+                "style": "mono-line",
+                "status": "approved",
+                "reference": "lake#mono",
+                "chosen": {"run": "r000", "variant": "x"},
+            }
+        },
+    }
+    (workpack / "pack.json").write_text(json.dumps(pack))
+
+    r = runner.invoke(
+        app,
+        [
+            "decide",
+            str(workpack),
+            "--round",
+            "r001",
+            "--text",
+            "hut/mono: a2 ok",
+        ],
+    )
+    assert r.exit_code == 0, r.output
+    out = json.loads((workpack / "pack.json").read_text())
+    assert out["icons"]["lake"]["variants"]["mono"]["status"] == "stale"
+    assert out["icons"]["peak"]["variants"]["mono"]["status"] == "stale"  # transitive
+
+
+def test_page_field_ids_match_saveicon() -> None:
+    # regression: Save read main_color-<id> but the input was color-<id>
+    import re as _re
+
+    from iconpilot.server.page import PAGE
+
+    fields = _re.search(r"for \(const f of \[([^\]]+)\]", PAGE).group(1)
+    names = [f.strip().strip("'\"") for f in fields.split(",")]
+    assert "main_color" in names
+    for n in names:
+        assert f'id="{n}-$' in PAGE, f"page has no input id {n}-<icon>"
