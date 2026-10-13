@@ -10,6 +10,7 @@ import typer
 from iconpilot import __version__
 from iconpilot.context import build_context, render_markdown
 from iconpilot.decide import apply_decisions, parse_decision_text
+from iconpilot.export.export import TARGETS, collect_exportables
 from iconpilot.gate.run import run_gate
 from iconpilot.pack import PackError, load_pack
 from iconpilot.render.contact import contact_sheet
@@ -379,9 +380,37 @@ def styles(
 
 
 @app.command()
-def export(pack: str, target: str = typer.Option(..., "--target"), out: str = typer.Option(..., "--out")) -> None:
-    """Export approved icons (svg, sprite-svg, maplibre, iconify, font)."""
-    _not_implemented("export")
+def export(
+    pack: str,
+    target: str = typer.Option(..., "--target", help="svg | sprite-svg | maplibre | iconify"),
+    out: str = typer.Option(..., "--out"),
+) -> None:
+    """Export approved variants (+ approved-master links) to a target."""
+    if target not in TARGETS:
+        typer.secho(f"unknown target '{target}' (have: {', '.join(TARGETS)})", fg=typer.colors.RED, err=True)
+        raise typer.Exit(code=2)
+    try:
+        pack_data, _styles = _load_pack_arg(pack)
+    except PackError as exc:
+        typer.secho(str(exc), fg=typer.colors.RED, err=True)
+        raise typer.Exit(code=2) from exc
+
+    pack_dir = Path(pack)
+    if pack_dir.is_file():
+        pack_dir = pack_dir.parent
+    entries, skipped = collect_exportables(pack_dir, pack_data)
+    out_dir = Path(out)
+    out_dir.mkdir(parents=True, exist_ok=True)
+
+    fn = TARGETS[target]
+    result = fn(entries, out_dir, pack_data) if target == "iconify" else fn(entries, out_dir)
+    written = result if isinstance(result, list) else [result]
+
+    for w in written:
+        typer.secho(f"  → {w}", fg=typer.colors.GREEN)
+    for s in skipped:
+        typer.secho(f"  – skipped {s}", fg=typer.colors.YELLOW)
+    typer.secho(f"{target}: {len(entries)} exported, {len(skipped)} skipped", fg=typer.colors.GREEN)
 
 
 @app.command()
