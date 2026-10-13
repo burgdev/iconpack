@@ -198,6 +198,9 @@ def _geometry(root, spec, style, viewbox, report):
                 f"geometry: bbox inside live area; {nodes}/{style.max_nodes} nodes"
             )
 
+    _precision(root, spec, report)
+    _min_gap(root, style, report)
+
 
 def _render(svg_path: Path, style: Style, report: GateReport) -> None:
     ratios: dict[int, float] = {}
@@ -224,6 +227,120 @@ def _render(svg_path: Path, style: Style, report: GateReport) -> None:
             f"(ink {', '.join(f'{s}px={r:.1%}' for s, r in ratios.items())}; "
             f"hash@{HASH_RENDER_SIZE}px)"
         )
+
+
+_NUM_ATTRS = {
+    "circle": ("cx", "cy", "r"),
+    "ellipse": ("cx", "cy", "rx", "ry"),
+    "rect": ("x", "y", "width", "height"),
+    "line": ("x1", "y1", "x2", "y2"),
+}
+
+
+def _coord_values(root):
+    """Yield every designer-placed coordinate: path anchors/controls + shape attrs."""
+    for el in root.iter():
+        name = etree.QName(el).localname
+        if name == "path":
+            d = el.get("d", "")
+            try:
+                segs = parse_path(d)
+            except Exception:  # noqa: BLE001, S112 — reported by geometry
+                continue
+            for seg in segs:
+                for pt in (
+                    seg.start,
+                    seg.end,
+                    getattr(seg, "control1", None),
+                    getattr(seg, "control2", None),
+                ):
+                    if pt is not None:
+                        yield pt.real
+                        yield pt.imag
+        elif name in _NUM_ATTRS:
+            for attr in _NUM_ATTRS[name]:
+                if el.get(attr) is not None:
+                    try:
+                        yield float(el.get(attr))
+                    except ValueError:
+                        continue
+
+
+def _precision(root, spec, report) -> None:
+    step = spec.get("precision")
+    if not step:
+        return
+    worst = 0.0
+    for v in _coord_values(root):
+        dev = abs(v - round(v / step) * step)
+        worst = max(worst, dev)
+    report.metrics["precision_deviation"] = round(worst, 4)
+    if worst > 0.01:
+        report.fail(
+            f"geometry: coordinates off the {step} grid by up to {worst:.2f} "
+            f"(snap anchors and control points to {step})"
+        )
+    else:
+        report.checks.append(f"geometry: coordinates on the {step} grid (max dev {worst:.2f})")
+
+
+def _element_points(root, per_segment: int = 12):
+    """Sampled point cloud per top-level drawn element, for gap measurement."""
+    import svgpathtools as spt
+
+    for el in root.iter():
+        name = etree.QName(el).localname
+        pts: list[tuple[float, float]] = []
+        if name == "path":
+            try:
+                segs = spt.parse_path(el.get("d", ""))
+            except Exception:  # noqa: BLE001, S112
+                continue
+            for seg in segs:
+                for i in range(per_segment + 1):
+                    p = seg.point(i / per_segment)
+                    pts.append((p.real, p.imag))
+        else:
+            bb = _shape_bbox(el)
+            if not bb:
+                continue
+            x0, y0, x1, y1 = bb
+            for fx in (0.0, 0.5, 1.0):
+                for fy in (0.0, 0.5, 1.0):
+                    pts.append((x0 + fx * (x1 - x0), y0 + fy * (y1 - y0)))
+        if len(pts) >= 2:
+            yield el, pts
+
+
+def _min_gap(root, style, report) -> None:
+    gap = style.min_gap
+    if not gap or gap <= 0:
+        return
+    contact_eps = 0.5  # closer than this counts as touching, not a gap
+    clouds = [pts for _, pts in _element_points(root)]
+    if len(clouds) < 2:
+        return
+    worst_gap = None
+    for i in range(len(clouds)):
+        for j in range(i + 1, len(clouds)):
+            d = _min_distance(clouds[i], clouds[j])
+            if contact_eps < d < gap and (worst_gap is None or d < worst_gap):
+                worst_gap = d
+    if worst_gap is not None:
+        report.fail(
+            f"geometry: near-miss gap {worst_gap:.2f} < min_gap {gap} "
+            f"(join the strokes or open the gap)"
+        )
+    else:
+        report.checks.append(f"geometry: no near-miss gaps below {gap}")
+
+
+def _min_distance(a: list[tuple[float, float]], b: list[tuple[float, float]]) -> float:
+    best = float("inf")
+    for xa, ya in a:
+        for xb, yb in b:
+            best = min(best, ((xa - xb) ** 2 + (ya - yb) ** 2) ** 0.5)
+    return best
 
 
 def run_gate(svg_path: str | Path, pack: dict, style: Style) -> GateReport:

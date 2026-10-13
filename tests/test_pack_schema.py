@@ -32,7 +32,6 @@ def example_pack() -> dict:
         "provenance": {"created_by": "user"},
         "spec": copy.deepcopy(SPEC),
         "styles": {},
-        "schedule": [4, 2, 1],
         "icons": {
             "hut": {
                 "brief": "Alpine hut: steep roof, small door, no chimney",
@@ -153,7 +152,7 @@ VALID_SVG = """<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"
   fill="none" stroke="currentColor" stroke-width="2"
   stroke-linecap="round" stroke-linejoin="round">
   <path d="M4 11 L12 4 L20 11"/>
-  <path d="M6 10 L6 20 L18 20 L18 10"/>
+  <path d="M6 9.5 L6 20 L18 20 L18 9.5"/>
   <path d="M10 20 L10 15 L14 15 L14 20"/>
 </svg>
 """
@@ -264,3 +263,61 @@ def test_builtin_styles_complete() -> None:
         "gradient-color",
     }
     assert expected == set(BUILTIN_STYLES)
+
+
+# --- 0.0.1 backlog: enforced checks ------------------------------------------
+
+NEAR_MISS_SVG = (
+    '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" '
+    'fill="none" stroke="currentColor" stroke-width="2" '
+    'stroke-linecap="round" stroke-linejoin="round">'
+    '<path d="M5 6 L19 6"/><path d="M5 6.8 L19 6.8"/></svg>'
+)
+
+OFFGRID_SVG = (
+    '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" '
+    'fill="none" stroke="currentColor" stroke-width="2" '
+    'stroke-linecap="round" stroke-linejoin="round">'
+    '<path d="M5.13 6 L19 6 L19 18"/></svg>'
+)
+
+
+def test_gate_flags_near_miss_gap(tmp_path: Path, pack_dir: Path) -> None:
+    svg = tmp_path / "near.svg"
+    svg.write_text(NEAR_MISS_SVG)
+    pack, styles = load_pack(pack_dir / "pack.json")
+    report = run_gate(svg, pack, styles["mono-line"])
+    assert any("near-miss gap" in e for e in report.errors)
+
+
+def test_gate_allows_touching_strokes(tmp_path: Path, pack_dir: Path) -> None:
+    svg = tmp_path / "touch.svg"
+    svg.write_text(NEAR_MISS_SVG.replace("6.8", "6.25"))  # 0.25 ≤ contact eps
+    pack, styles = load_pack(pack_dir / "pack.json")
+    report = run_gate(svg, pack, styles["mono-line"])
+    assert not any("near-miss" in e for e in report.errors)
+
+
+def test_gate_flags_offgrid_coordinates(tmp_path: Path, pack_dir: Path) -> None:
+    svg = tmp_path / "off.svg"
+    svg.write_text(OFFGRID_SVG)
+    pack, styles = load_pack(pack_dir / "pack.json")
+    report = run_gate(svg, pack, styles["mono-line"])
+    assert any("grid" in e for e in report.errors)
+    assert report.metrics["precision_deviation"] > 0
+
+
+def test_resolve_default_variant_single_rule() -> None:
+    from iconpilot.pack import resolve_default_variant
+
+    icon = {
+        "variants": {
+            "primitive": {"style": "primitive", "status": "approved"},
+            "mono": {"style": "mono-line", "status": "approved"},
+            "color": {"style": "lineal-color", "status": "todo"},
+        }
+    }
+    assert resolve_default_variant(icon) == "color"  # single non-approved
+    icon["variants"]["mono"]["status"] = "todo"
+    assert resolve_default_variant(icon) == "mono"  # mono wins ties
+    assert resolve_default_variant({"variants": {}}) is None

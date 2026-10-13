@@ -67,10 +67,11 @@ Unknown style ids are load errors — register or fix, never invent.
 ## State machine
 
 ```
-todo → drafting → in_review → approved (frozen)
-                     │  ↑            │
-                     └──┘ (keep)     └→ stale (a dependency changed)
-         restart (explicit) → todo    reopen (explicit user action)
+todo → in_review → approved (frozen)
+         │  ↑          │
+         └──┘ (keep)   └→ stale (a dependency changed, or the icons/
+                        file was hand-edited after approval)
+restart (explicit) → todo
 ```
 
 - Round state lives **per variant**; icon-level status is derived, never stored.
@@ -92,8 +93,17 @@ round (and your hand-tweaks) always start from the current best file.
 
 ## The write path
 
-`pack.json` has exactly two sanctioned writers: the CLI and the review server
-(atomic writes + advisory flock, monotonic `rev`). Decisions flow through
-`decisions.json` → `decide`; live page editing patches per-icon fields only —
-global spec numbers stay CLI-side so past gate results can't be silently
-invalidated.
+`pack.json` has exactly two sanctioned writers: the CLI and the review server,
+**flock-serialized** (atomic writes; a monotonic `rev` counter lets the page
+detect changes and reload — serialized last-writer under the lock, not
+compare-and-swap). Decisions flow through `decisions.json` → `decide`; live
+page editing patches per-icon fields only — global spec numbers stay CLI-side
+so past gate results can't be silently invalidated.
+
+## Hand-edit detection
+
+Every `ok`/`keep` records a `content_hash` of the materialized SVG. When
+`icons/<icon>/<variant>.svg` later differs (you edited it by hand — supported!),
+`decide` flips that variant to `in_review` and stales its dependents;
+`status` marks it `✎edited`, and `context` tells the drafter the edited file
+is the new refinement base.

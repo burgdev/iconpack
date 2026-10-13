@@ -387,3 +387,86 @@ def test_page_field_ids_match_saveicon() -> None:
     assert "main_color" in names
     for n in names:
         assert f'id="{n}-$' in PAGE, f"page has no input id {n}-<icon>"
+
+
+def test_hand_edit_stales_dependents(workpack: Path) -> None:
+    # approve hut/mono, then hand-edit its file → decide flags + stales chain
+    runner.invoke(app, ["decide", str(workpack), "--round", "r001", "--text", "hut/mono: a1 ok"])
+    hut_mono = workpack / "icons" / "hut" / "mono.svg"
+    original = hut_mono.read_text()
+    hut_mono.write_text(original.replace("M10 20", "M11 20"))
+
+    # selfhut/mono references hut#mono → must go stale via the edit
+    pack = json.loads((workpack / "pack.json").read_text())
+    pack["icons"]["selfhut"]["variants"]["mono"]["status"] = "approved"
+    pack["icons"]["selfhut"]["variants"]["mono"]["chosen"] = {"run": "r000", "variant": "x"}
+    (workpack / "pack.json").write_text(json.dumps(pack))
+
+    r = runner.invoke(
+        app,
+        [
+            "decide",
+            str(workpack),
+            "--round",
+            "r001",
+            "--text",
+            'selfhut/mono: a1 keep "pinning base"',
+        ],
+    )
+    assert r.exit_code == 0, r.output
+    out = json.loads((workpack / "pack.json").read_text())
+    assert out["icons"]["hut"]["variants"]["mono"]["status"] == "in_review"  # edit flagged
+    assert out["icons"]["selfhut"]["variants"]["mono"]["status"] == "in_review"  # own decision
+
+
+def test_hand_edit_flags_reference_chain(workpack: Path) -> None:
+    runner.invoke(app, ["decide", str(workpack), "--round", "r001", "--text", "hut/mono: a1 ok"])
+    hut_mono = workpack / "icons" / "hut" / "mono.svg"
+    hut_mono.write_text(hut_mono.read_text().replace("M10 20", "M11 20"))
+    pack = json.loads((workpack / "pack.json").read_text())
+    pack["icons"]["selfhut"]["variants"]["mono"]["status"] = "approved"
+    pack["icons"]["selfhut"]["variants"]["mono"]["chosen"] = {"run": "r000", "variant": "x"}
+    (workpack / "pack.json").write_text(json.dumps(pack))
+    # any decision run applies edit-staleness first
+    runner.invoke(app, ["decide", str(workpack), "--round", "r001", "--text", "hut/mono: a1 ok"])
+    out = json.loads((workpack / "pack.json").read_text())
+    assert out["icons"]["selfhut"]["variants"]["mono"]["status"] == "stale"
+
+
+def test_status_reports_edited(workpack: Path) -> None:
+    runner.invoke(app, ["decide", str(workpack), "--round", "r001", "--text", "hut/mono: a1 ok"])
+    f = workpack / "icons" / "hut" / "mono.svg"
+    f.write_text(f.read_text().replace("M10 20", "M11 20"))
+    r = runner.invoke(app, ["status", str(workpack)])
+    assert "✎edited" in r.output
+
+
+def test_rejected_ideas_recorded(workpack: Path) -> None:
+    r = runner.invoke(
+        app,
+        [
+            "decide",
+            str(workpack),
+            "--round",
+            "r001",
+            "--text",
+            'selfhut/mono: restart "cutlery next to door"',
+        ],
+    )
+    assert r.exit_code == 0, r.output
+    out = json.loads((workpack / "pack.json").read_text())
+    ideas = out["icons"]["selfhut"]["variants"]["mono"].get("rejected_ideas", [])
+    assert any("cutlery next to door" in i for i in ideas)
+
+
+def test_new_author_designer(tmp_path: Path) -> None:
+    d = tmp_path / "designed"
+    r = runner.invoke(app, ["new", str(d), "--author", "designer"])
+    assert r.exit_code == 0, r.output
+    pack = json.loads((d / "pack.json").read_text())
+    assert pack["provenance"]["created_by"] == "designer"
+    assert "schedule" not in pack
+    r = runner.invoke(app, ["check", str(d)])
+    assert r.exit_code == 0
+    r = runner.invoke(app, ["new", str(tmp_path / "x"), "--author", "llm"])
+    assert r.exit_code == 2

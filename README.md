@@ -3,9 +3,9 @@
 Multi-model pipeline for designing consistent SVG icon packs: cheap models draft
 variants, deterministic tools gate them, and you decide each round in a review page.
 
-**Status:** 0.0.2 — gate, agent loop (context/decide), review server, and all four
-export targets are implemented and tested; MCP, `--static` page fallback, and the
-embedded editor are future work.
+**Status:** 0.0.1 (unreleased) — gate, agent loop (context/decide), review
+server, and all four export targets are implemented and tested; MCP, `--static`
+page fallback, and the embedded editor are future work.
 
 ## Install
 
@@ -64,9 +64,8 @@ Rounds live at `<pack>/.runs/<round>/<variant>/<icon>/<cand>.svg`.
 
 ## Rules of the road
 
-- `pack.json` is written only by the CLI and the review server (atomic writes +
-  lock; decisions flow through `decisions.json` → `decide`, never straight to
-  status). Never edit it by hand.
+- `pack.json` is written only by the CLI and the review server (flock-serialized atomic writes; decisions flow through `decisions.json` →
+  `decide`, never straight to status). Never edit it by hand.
 - `icons/*.svg` are yours to edit between rounds — the gate re-validates; the
   next round refines from your edited file. Approval is always a human action.
 - LLMs never self-certify; the deterministic gate is the only certifier.

@@ -42,7 +42,7 @@ peak/color: * no · restart "too abstract"
 | `<cand> no ["c"]` | drop candidate |
 | `* no` | reject all → back to `todo` |
 | `more <N>` / `like <cand> <N>` | recorded request for the next round |
-| `restart ["note"]` | back to concept; comments + rejected ideas carry forward |
+| `restart ["note"]` | back to concept; the note is recorded as a rejected idea |
 | `note "text"` | icon-level comment |
 
 `<variant>` defaults to the icon's single non-approved variant, else `mono`.
@@ -57,4 +57,7 @@ iconpilot gate icons/hut/mono.svg --pack <pack>
 ```
 
 Small fixes never need a full round; the next drafting pass refines from your
-edited file.
+edited file. Edits are detected via `content_hash`: `status` shows `✎edited`,
+and the next `decide` moves the variant to `in_review` (and stales its
+dependents) — nothing silently drifts. To approve a hand-edit as-is, copy the
+file into the run dir as a candidate and `ok` it.

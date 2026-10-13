@@ -77,6 +77,13 @@ def build_context(
         ctx["rejected_ideas"] = variant["rejected_ideas"]
     if variant.get("request"):
         ctx["request"] = variant["request"]
+    if variant.get("content_hash"):
+        f = pack_dir / "icons" / icon_id / f"{variant_id}.svg"
+        if f.is_file():
+            from iconpilot.pack import file_sha256
+
+            if file_sha256(f) != variant["content_hash"]:
+                ctx["hand_edited"] = True
     ctx = {k: v for k, v in ctx.items() if v not in (None, [], {})}
     return ctx
 
@@ -104,10 +111,8 @@ def render_markdown(ctx: dict) -> str:
         f"- viewBox `{g['viewBox']}`, live area padding {g['live_area_padding']} (true bbox incl. beziers/shapes)",
         f"- elements: {', '.join(g['allowed_elements'] or [])}",
         f"- ≤ {g['max_nodes']} nodes; stroke/fill/width/caps per style",
+        f"- no near-miss gaps below {g['min_gap']}; coordinates snapped to the {g['precision']} grid",
         f"- renders at {g['render_sizes']}px, no inline styles, no transforms, no ids",
-        "",
-        "**Style targets (not yet machine-enforced — follow them):**",
-        f"- min gap {g['min_gap']}, coordinate precision {g['precision']}",
         "",
     ]
     if "main_color" in ctx:
@@ -121,6 +126,12 @@ def render_markdown(ctx: dict) -> str:
     if "comments" in ctx:
         lines += ["**Feedback:**"]
         lines += [f"- [{c['round']}] {c['text']}" for c in ctx["comments"]] + [""]
+    if "hand_edited" in ctx:
+        note = (
+            "**Note:** the current `icons/` file was **hand-edited after the last "
+            "decision** — your draft refines from that edited file."
+        )
+        lines += [note, ""]
     if "rejected_ideas" in ctx:
         lines += ["**Rejected ideas (do not repeat):**", ", ".join(ctx["rejected_ideas"]), ""]
     if "request" in ctx:

@@ -1,16 +1,21 @@
 # Changelog
 
-## 0.0.2 (unreleased)
+## 0.0.1 (unreleased)
 
-- Fix decide writing pack.json without the pack lock (lost-update race with the review server)
-- Fix review page Save button (field id mismatch made every save throw)
-- Gate: true geometry — bezier control points via segment.bbox(), shape bboxes (circle/ellipse/rect/line/polyline/polygon) counted, variable shadowing fixed
-- Gate: lint stroke-linecap/linejoin against the style when present
-- Staleness is now transitive across the dependency chain
-- decide revalidates the pack before persisting (no broken state on disk)
-- Drafting context no longer advertises unenforced checks (min_gap/precision are style targets)
+Initial release — deterministic tooling + state for designing SVG icon packs,
+agent-driven (no LLM calls in the tool).
 
-## 0.0.1
-
-- Initial scaffold: pack schema v2, style registry, semantic validator, deterministic gate,
-  agent loop (context/gate/contact-sheet/decide), review server, exports, skill, docs, CI
+- Pack schema v2: variant siblings, styles, anchor/reference DAG, links, per-variant state
+- Three-tier style registry (built-ins, user config, pack-local) with validated vocabularies
+- Deterministic gate: parse, lint, true geometry (bezier-aware bbox, shapes),
+  node budget, near-miss gap check, coordinate-grid precision check, resvg
+  renders, ink checks, phash
+- Semantic validator: link targets, DAG cycles, color-link soundness, todo-only
+  designer packs
+- Agent loop: `context` (drafting contract), batch gate, `contact-sheet`,
+  `decide` (decision grammar + state machine, transitive staleness, hand-edit
+  detection via content hashes)
+- Review server: live per-icon editing, decisions through one code path,
+  flock-serialized writes, rev polling
+- Exports: svg, sprite-svg, maplibre sprites (@1x/@2x), iconify JSON with aliases
+- Skill (SKILL.md + craft.md), zensical docs, CI (ruff/ty/pytest), Docker image

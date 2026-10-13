@@ -7,10 +7,10 @@ Everything is non-interactive by default; JSON where useful.
 
 | Command | Purpose |
 |---|---|
-| `iconpilot new <dir> [--name N]` | Scaffold spec + empty registry (refuses to overwrite) |
+| `iconpilot new <dir> [--name N] [--author user|designer]` | Scaffold spec + empty registry; designer packs are todo-only |
 | `iconpilot add <pack> <icon> --brief "…" [--variant mono:mono-line …]` | Add an icon with authored variants (todo); repeatable `--variant name:style` |
 | `iconpilot check <pack>` | Full validation: JSON schema, semantics, style resolution, links, DAG |
-| `iconpilot status <pack>` | Per-variant states, links, requests, rev, rounds |
+| `iconpilot status <pack>` | Per-variant states, links, requests, rev, rounds, `✎edited` markers |
 
 ## The loop
 

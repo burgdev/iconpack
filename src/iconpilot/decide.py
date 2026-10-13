@@ -31,6 +31,8 @@ import shutil
 from datetime import UTC, datetime
 from pathlib import Path
 
+from iconpilot.edits import detect_edits
+from iconpilot.pack import file_sha256
 from iconpilot.styles import Style
 
 _CAND = r"[a-z][a-z0-9-]*"
@@ -153,9 +155,36 @@ def _dependents_of(pack: dict, icon_id: str, variant_id: str) -> list[str]:
             deps = list(v.get("reference") and [v["reference"]] or [])
             if anchor and anchor[0] != vid:
                 deps.append(f"{iid}#{anchor[0]}")
-            if target in deps and v.get("status") == "approved":
+            if target in deps and v.get("status") in ("approved", "stale"):
                 out.append(f"{iid}#{vid}")
     return out
+
+
+def _stale_dependents(pack: dict, icon_id: str, variant_id: str, log: list[str]) -> None:
+    """Transitive: staling a node stales its dependents too."""
+    queue = [f"{icon_id}#{variant_id}"]
+    seen: set[str] = set()
+    while queue:
+        node = queue.pop(0)
+        for dep in _dependents_of(pack, *node.split("#")):
+            if dep in seen:
+                continue
+            seen.add(dep)
+            di, _, dv = dep.partition("#")
+            pack["icons"][di]["variants"][dv]["status"] = "stale"
+            log.append(f"{dep}: stale (dependency {node} changed)")
+            queue.append(dep)
+
+
+def _apply_hand_edit_staleness(pack_dir: Path, pack: dict, log: list[str]) -> None:
+    """Hand-edited originals need re-review; their dependents go stale."""
+    for edit in detect_edits(pack_dir, pack):
+        iid, vid = edit["icon"], edit["variant"]
+        v = pack["icons"][iid]["variants"][vid]
+        if v.get("status") == "approved":
+            v["status"] = "in_review"
+            log.append(f"{iid}#{vid}: icons file hand-edited since approval → in_review")
+            _stale_dependents(pack, iid, vid, log)
 
 
 def apply_decisions(
@@ -170,6 +199,7 @@ def apply_decisions(
     log: list[str] = []
     icons_dir = pack_dir / "icons"
     icons_dir.mkdir(exist_ok=True)
+    _apply_hand_edit_staleness(pack_dir, pack, log)
 
     def comment(v: dict, text: str) -> None:
         v.setdefault("comments", []).append({"round": round_id, "text": text})
@@ -190,6 +220,7 @@ def apply_decisions(
                 log.append(f"{icon_id}#{variant_id}: all rejected → todo")
                 if comment_text:
                     comment(variant, comment_text)
+                    variant.setdefault("rejected_ideas", []).append(comment_text)
             elif "action" in item:
                 cand = item["cand"]
                 action = item["action"]
@@ -206,27 +237,17 @@ def apply_decisions(
                     shutil.copyfile(cands[cand], dest)
                     variant["status"] = "approved"
                     variant["chosen"] = {"run": round_id, "variant": cand}
+                    variant["content_hash"] = file_sha256(dest)
                     log.append(
                         f"{icon_id}#{variant_id}: approved {cand} → {dest.relative_to(pack_dir)}"
                     )
                     if changed:
-                        # transitive: staling a node stales its dependents too
-                        queue = [f"{icon_id}#{variant_id}"]
-                        seen: set[str] = set()
-                        while queue:
-                            node = queue.pop(0)
-                            for dep in _dependents_of(pack, *node.split("#")):
-                                if dep in seen:
-                                    continue
-                                seen.add(dep)
-                                di, _, dv = dep.partition("#")
-                                pack["icons"][di]["variants"][dv]["status"] = "stale"
-                                log.append(f"{dep}: stale (dependency {node} changed)")
-                                queue.append(dep)
+                        _stale_dependents(pack, icon_id, variant_id, log)
                 elif action == "keep":
                     dest.parent.mkdir(parents=True, exist_ok=True)
                     shutil.copyfile(cands[cand], dest)
                     variant["status"] = "in_review"
+                    variant["content_hash"] = file_sha256(dest)
                     log.append(
                         f"{icon_id}#{variant_id}: kept {cand} → {dest.relative_to(pack_dir)} (working copy)"
                     )
@@ -251,6 +272,8 @@ def apply_decisions(
                     variant["status"] = "todo"
                     variant.pop("chosen", None)
                     log.append(f"{icon_id}#{variant_id}: restart")
+                    if comment_text:
+                        variant.setdefault("rejected_ideas", []).append(comment_text)
                 if comment_text:
                     comment(variant, comment_text)
 

@@ -43,6 +43,8 @@ iconpilot gate my-icon.svg --pack ~/packs/alpine
   ✓ viewBox: 0 0 24 24 matches spec
   ✓ lint: elements/attributes conform to style 'mono-line'
   ✓ geometry: bbox inside live area; 16/40 nodes
+  ✓ geometry: no near-miss gaps below 1.5
+  ✓ geometry: coordinates on the 0.5 grid
   ✓ render: [16, 24, 48]px ok (ink 16px=33.6%, …; hash@48px)
 ```
 

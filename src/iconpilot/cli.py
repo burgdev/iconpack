@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import re
 from pathlib import Path
 
 import typer
@@ -79,14 +80,17 @@ DEFAULT_SPEC = {
 def new(
     pack_dir: str,
     name: str = typer.Option(None, "--name", help="Pack name (default: directory name)."),
+    author: str = typer.Option(
+        "user", "--author", help="user | designer (designer packs are todo-only)."
+    ),
 ) -> None:
     """Scaffold a pack: spec + empty registry. Fill briefs, then `check`."""
-    import json as _json
-    import re as _re
-
     d = Path(pack_dir)
     pack_name = name or d.name
-    if not _re.match(r"^[a-z][a-z0-9-]*$", pack_name):
+    if author not in ("user", "designer"):
+        typer.secho("--author must be 'user' or 'designer'", fg=typer.colors.RED, err=True)
+        raise typer.Exit(code=2)
+    if not re.match(r"^[a-z][a-z0-9-]*$", pack_name):
         typer.secho(
             f"invalid pack name '{pack_name}' (lowercase kebab-case)", fg=typer.colors.RED, err=True
         )
@@ -104,13 +108,12 @@ def new(
         "schema": 2,
         "name": pack_name,
         "version": "0.1.0",
-        "provenance": {"created_by": "user"},
+        "provenance": {"created_by": author},
         "spec": DEFAULT_SPEC,
         "styles": {},
-        "schedule": [4, 2, 1],
         "icons": {},
     }
-    (d / "pack.json").write_text(_json.dumps(pack, indent=2) + "\n")
+    (d / "pack.json").write_text(json.dumps(pack, indent=2) + "\n")
     typer.secho(
         f"created {d / 'pack.json'}\n"
         f"next: iconpilot add {d} <icon> --brief … [--variant mono:mono-line]\n"
@@ -131,9 +134,7 @@ def add(
     """Add an icon with authored variants (status todo)."""
     import re as _re
 
-    pack_dir = Path(pack)
-    if pack_dir.is_file():
-        pack_dir = pack_dir.parent
+    pack_dir = resolve_pack_dir(pack)
     try:
         with pack_lock(pack_dir):
             pack_data, styles = _load_pack_arg(pack)
@@ -182,14 +183,16 @@ def status(pack: str) -> None:
         typer.secho(str(exc), fg=typer.colors.RED, err=True)
         raise typer.Exit(code=2) from exc
 
-    pack_dir = Path(pack)
-    if pack_dir.is_file():
-        pack_dir = pack_dir.parent
+    pack_dir = resolve_pack_dir(pack)
     runs = (
         sorted(p.name for p in (pack_dir / ".runs").glob("r*"))
         if (pack_dir / ".runs").is_dir()
         else []
     )
+
+    from iconpilot.edits import detect_edits
+
+    edited = {(e["icon"], e["variant"]) for e in detect_edits(pack_dir, pack_data)}
 
     counts: dict[str, int] = {}
     for icon_id, icon in pack_data["icons"].items():
@@ -207,6 +210,8 @@ def status(pack: str) -> None:
             if v.get("request"):
                 r = v["request"]
                 extra += f" [{r.get('type')}{' ' + str(r['n']) if r.get('n') else ''}]"
+            if (icon_id, vid) in edited:
+                extra += " ✎edited"
             parts.append(f"{vid}:{st}{extra}")
         typer.echo(f"  {icon_id}{color}  {' · '.join(parts)}")
     summary = " · ".join(f"{k}={v}" for k, v in sorted(counts.items())) or "empty"
@@ -264,9 +269,7 @@ def review(
     except PackError as exc:
         typer.secho(str(exc), fg=typer.colors.RED, err=True)
         raise typer.Exit(code=2) from exc
-    pack_dir = Path(pack)
-    if pack_dir.is_file():
-        pack_dir = pack_dir.parent
+    pack_dir = resolve_pack_dir(pack)
     serve_review(pack_dir, host, port)
 
 
@@ -293,9 +296,7 @@ def context(
     variant: str = typer.Option(None, "--variant"),
     as_json: bool = typer.Option(False, "--json"),
 ) -> None:
-    """Emit the deterministic drafting context for one icon variant."""
-    import json as _json
-
+    """Emit the deterministic context for one icon variant."""
     try:
         pack_data, styles = _load_pack_arg(pack)
     except PackError as exc:
@@ -305,14 +306,15 @@ def context(
         typer.secho(f"unknown icon '{icon}'", fg=typer.colors.RED, err=True)
         raise typer.Exit(code=2)
     if variant is None:
-        authored = [v for v, d in pack_data["icons"][icon]["variants"].items() if "style" in d]
-        variant = authored[0] if len(authored) == 1 else "mono"
+        from iconpilot.pack import resolve_default_variant
+
+        variant = resolve_default_variant(pack_data["icons"][icon]) or "mono"
     try:
         ctx = build_context(Path(pack), pack_data, styles, icon, variant)
     except (KeyError, ValueError) as exc:
         typer.secho(str(exc), fg=typer.colors.RED, err=True)
         raise typer.Exit(code=2) from exc
-    typer.echo(_json.dumps(ctx, indent=2) if as_json else render_markdown(ctx))
+    typer.echo(json.dumps(ctx, indent=2) if as_json else render_markdown(ctx))
 
 
 @app.command(name="contact-sheet")
@@ -397,6 +399,12 @@ def decide(
     typer.secho(
         f"applied {len(decisions)} icon decisions (round {round_id})", fg=typer.colors.GREEN
     )
+
+
+def resolve_pack_dir(pack: str) -> Path:
+    """Accept a pack.json path or a pack directory; return the directory."""
+    p = Path(pack)
+    return p.parent if p.is_file() else p
 
 
 def _load_pack_arg(pack: str) -> tuple[dict, dict]:
@@ -529,9 +537,7 @@ def similar(
         typer.secho(str(exc), fg=typer.colors.RED, err=True)
         raise typer.Exit(code=2) from exc
 
-    pack_dir = Path(pack)
-    if pack_dir.is_file():
-        pack_dir = pack_dir.parent
+    pack_dir = resolve_pack_dir(pack)
     icons_dir = pack_dir / "icons"
 
     target = hash_file(file)
@@ -609,9 +615,7 @@ def export(
         typer.secho(str(exc), fg=typer.colors.RED, err=True)
         raise typer.Exit(code=2) from exc
 
-    pack_dir = Path(pack)
-    if pack_dir.is_file():
-        pack_dir = pack_dir.parent
+    pack_dir = resolve_pack_dir(pack)
     entries, skipped = collect_exportables(pack_dir, pack_data)
     out_dir = Path(out)
     out_dir.mkdir(parents=True, exist_ok=True)

@@ -37,8 +37,15 @@ class Style:
     style_words: tuple[str, ...] = ()
     avoid: tuple[str, ...] = ()
     render_sizes: tuple[int, ...] = (16, 24, 48)
-    render_backgrounds: tuple[str, ...] = ("light", "dark")
     note: str | None = None
+
+    def __post_init__(self) -> None:
+        if self.construction not in CONSTRUCTIONS:
+            raise ValueError(f"style '{self.id}': unknown construction '{self.construction}'")
+        if self.color_mode not in COLOR_MODES:
+            raise ValueError(f"style '{self.id}': unknown color_mode '{self.color_mode}'")
+        if self.detail not in DETAILS:
+            raise ValueError(f"style '{self.id}': unknown detail '{self.detail}'")
 
     def as_dict(self) -> dict:
         d: dict = {}
@@ -207,7 +214,7 @@ def _style_from_dict(style_id: str, d: dict, base: Style | None) -> Style:
     src = base.as_dict() if base else {"id": style_id}
     src.update({k: v for k, v in d.items() if k != "id"})
     src["id"] = style_id
-    for tuple_key in ("style_words", "avoid", "render_sizes", "render_backgrounds"):
+    for tuple_key in ("style_words", "avoid", "render_sizes"):
         if tuple_key in src and isinstance(src[tuple_key], list):
             src[tuple_key] = tuple(src[tuple_key])
     if "stroke" in src and isinstance(src["stroke"], dict) and base and base.stroke:

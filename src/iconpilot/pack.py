@@ -54,6 +54,26 @@ def load_pack(path: str | Path) -> tuple[dict, dict[str, Style]]:
     return pack, styles
 
 
+def resolve_default_variant(icon: dict) -> str | None:
+    """One rule for every caller: the icon's single non-approved authored
+    variant, else 'mono' when authored, else the first authored variant."""
+    authored = [v for v, d in icon.get("variants", {}).items() if "style" in d]
+    if not authored:
+        return None
+    open_variants = [v for v in authored if icon["variants"][v].get("status") != "approved"]
+    if len(open_variants) == 1:
+        return open_variants[0]
+    if "mono" in authored:
+        return "mono"
+    return authored[0]
+
+
+def file_sha256(path: Path) -> str:
+    import hashlib
+
+    return hashlib.sha256(path.read_bytes()).hexdigest()
+
+
 def write_pack_atomic(pack_dir: Path, pack: dict) -> None:
     """Atomic pack.json write (tmp + rename). Callers hold the pack lock."""
     pack["rev"] = pack.get("rev", 0) + 1
