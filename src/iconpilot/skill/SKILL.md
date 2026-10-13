@@ -29,18 +29,27 @@ The gate enforces the numbers; craft.md carries the judgment.
              <pack>/.runs/<round>/<variant>/<icon>/<cand>.svg (a1, a2, …).
              Follow the context exactly: style_words, avoid, node budget.
 3. GATE      iconpilot gate <pack>/.runs/<round> --pack <pack>
-             → <cand>.gate.json beside every SVG. Fix failures and re-gate
-             until survivors pass. Never claim a pass the gate didn't make.
+             → <cand>.gate.json beside every SVG. Fix failures and re-gate,
+             but bounded: after ~2 failed fix attempts on a candidate, drop
+             it and draft fresh from the gate feedback. If ALL candidates
+             fail, go back to DRAFT with the failure reasons as constraints —
+             never re-gate the same geometry forever, and never screen an
+             empty round. Never claim a pass the gate didn't make.
 4. SCREEN    iconpilot contact-sheet <pack>/.runs/<round> --pack <pack>
              → one PNG. Attach it to a vision-capable subagent (or inspect
              yourself): score each candidate 0–10, one-line critique, rank.
+             Ranking orders candidates FOR THE USER — it never selects or
+             approves; only `decide` (step 5) changes state.
              Also check family coherence against anchors.
 5. DECIDE    The USER decides — review page, or compact text they paste:
              hut/mono: a2 keep "thinner roof" · b1 no · more 2
              → iconpilot decide <pack> --text "…" (verbatim; CLI is the
              only parser). Approval/keep materialize to icons/, dependents
              of changed anchors go stale automatically.
-6. REPEAT    until every variant is approved; then export.
+6. REPEAT    `iconpilot status <pack>` shows what's outstanding (todo,
+             in_review, `stale` — stale variants must be re-run; `✎edited`
+             means the icons/ file changed after approval). Loop until every
+             variant is approved; then export.
 ```
 
 Round layout: `.runs/<round>/<variant>/<icon>/<cand>.svg` (r001, r002, …).
@@ -59,10 +68,8 @@ reviewer = "your strongest model"     # set-level consistency on the sheet
 advisor  = "your strongest model"     # escalation only (twice-rejected icons)
 ```
 
-Without a config: drafter/screener = cheapest capable model you can spawn,
-reviewer/advisor = your strongest. Keep expensive models on set review and
-escalations only. **designer** is you, writing `pack.json` briefs — validate
-with `iconpilot check <pack>`.
+Without a config: drafter/screener = cheapest capable, reviewer/advisor =
+your strongest. **designer** is you — validate briefs with `iconpilot check`.
 
 ## Improving an existing pack (imported baseline)
 
@@ -86,11 +93,23 @@ Packs often start as an import of already-shipped icons (`status: approved`,
 
 Never bulk-reopen: improve one variant at a time; the set stays shippable.
 
+## Failure paths
+
+- **Pack locked** (`pack is locked` / HTTP 423): another writer (review
+  server, concurrent decide) holds the flock. Wait and retry — never delete
+  the lock file or force a write.
+- **No candidates survive the gate**: return to DRAFT; feed every gate error
+  into the next drafting prompt as hard constraints.
+- **Stale variants**: a dependency changed (or was hand-edited) after
+  approval — `status` lists them; re-run their rounds before exporting.
+- **Decisions rejected** (`decide` exits 2): the error lists every problem;
+  fix the text or run `iconpilot check` to see pack-level issues.
+
 ## Hard rules
 
-- **Never edit `pack.json` by hand except briefs/prompts/main_color** — status,
-  chosen, comments, requests are written only by `iconpilot decide`. The review
-  server shares this contract.
+- **Never edit `pack.json` by hand except briefs, prompts, main_color, and a
+  variant's style ref** — status, chosen, comments, requests, and links are
+  written only by `iconpilot decide`. After any hand edit: `iconpilot check <pack>`.
 - **`icons/*.svg` are hand-editable between rounds** (by you or the user):
   edit, then `iconpilot gate <file> --pack <pack>` re-validates; the next
   round refines from the edited file.
