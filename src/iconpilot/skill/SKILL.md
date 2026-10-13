@@ -55,6 +55,28 @@ Round layout: `.runs/<round>/<variant>/<icon>/<cand>.svg` (r001, r002, …).
 - **designer** — you, when creating `pack.json` briefs; then validate with
   `iconpilot check <pack>`.
 
+## Improving an existing pack (imported baseline)
+
+Packs often start as an import of already-shipped icons (`status: approved`,
+`chosen: {run: "<import>", variant: "source"}`, import styles marked
+*transitional*). To improve over that baseline:
+
+1. **Reopen what you want to improve** — approval is only undone explicitly:
+   `iconpilot decide <pack> --text 'hut/mono: restart "align to new style family"'`
+   → the variant goes back to `todo`; the current SVG stays in `icons/` as the
+   starting point, rejected ideas and comments carry forward.
+2. **Set the target style** — swap the variant's transitional import style for
+   a built-in (edit `pack.json` styles refs — allowed, they're structural
+   metadata — then `iconpilot check`).
+3. **Run normal rounds** — `context` now emits the target style's gate
+   thresholds and vocabulary; approved siblings arrive as references. The
+   imported SVG is the refinement base, so drafts evolve from it, not from
+   zero.
+4. **Hand-tweaks count too** — edit `icons/<icon>/<variant>.svg` directly and
+   re-gate; small fixes never need a full round.
+
+Never bulk-reopen: improve one variant at a time; the set stays shippable.
+
 ## Hard rules
 
 - **Never edit `pack.json` by hand except briefs/prompts/main_color** — status,

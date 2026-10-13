@@ -12,7 +12,8 @@
       "type": "object",
       "additionalProperties": false,
       "properties": {
-        "created_by": { "enum": ["user", "designer"] }
+        "created_by": { "enum": ["user", "designer"] },
+        "source": { "type": "string", "description": "Where an imported baseline came from (PR, repo, URL)." }
       }
     },
     "inherits": {
