@@ -16,6 +16,11 @@ iconpilot install-skill               # symlink skill into ~/.agents/skills/ (+ 
 
 ## Concepts
 
+**Agent-driven, not standalone**: the AI running this skill (Claude, pi, …) is
+the model layer — drafting, screening, reviewing. iconpilot is deterministic
+tooling + state: no API keys, no model adapters. The CLI validates, gates,
+hashes, composes, and applies decisions.
+
 **Pack** — a directory: `pack.json` (spec + icons), `icons/<icon>/<variant>.svg`
 (readable originals — the source of truth), `.runs/` (scratch), `export/`
 (regenerated assets; never hand-edited).
@@ -43,15 +48,18 @@ require equal `main_color` on both icons.
 ## Usage
 
 ```bash
-iconpilot new <pack-dir>               # LLM designer drafts spec + briefs (todo-only)
-iconpilot add <pack> hut --brief "…"
-iconpilot styles [--pack P]            # inspect the style registry
-iconpilot gate hut.svg --pack P [--variant mono]   # deterministic check on any SVG
-iconpilot round <pack>                 # generate → gate → screen → review
-iconpilot review <pack>                # review page (live per-icon editing)
-iconpilot decide <pack> --text 'hut: a2 ok · b1 no · more 2'
+iconpilot new <pack-dir>               # scaffold (agent fills briefs, then check)
+iconpilot check <pack>                 # schema + semantic validation
+iconpilot context <pack> --icon hut --variant mono   # drafting contract
+iconpilot gate <run-dir> --pack P      # batch gate (writes .gate.json per candidate)
+iconpilot gate hut.svg --pack P        # gate any single SVG (hand tweaks)
+iconpilot contact-sheet <run-dir> --pack P           # one PNG for screening
+iconpilot similar <file> --pack P      # near-duplicates → link suggestions
+iconpilot decide <pack> --text 'hut/mono: a2 ok · b1 no · more 2'
 iconpilot export <pack> --target maplibre --out <dir>
 ```
+
+Rounds live at `<pack>/.runs/<round>/<variant>/<icon>/<cand>.svg`.
 
 ## Rules of the road
 
@@ -74,12 +82,12 @@ uv sync && uv run pytest
 ## Roadmap
 
 1. ✅ Schema v2 + styles registry + semantic validator + gate slice
-2. ✅ Full gate (render via resvg-py at style sizes, ink checks, phash; `iconpilot similar`)
-3. Model routing + `round` + `new` (todo-only) + `decide`
+2. ✅ Full gate (resvg renders, ink checks, phash) + `similar`
+3. ✅ Agent-loop plumbing: `check`, `context`, batch gate, `contact-sheet`,
+   `decide` (state machine, materialization, staleness)
 4. Review server (locking, optimistic concurrency) + live per-icon editing
-5. Hand-tweak loop materialization (shared with links/export)
-6. Export targets (svg, sprite-svg, maplibre, iconify)
-7. Optional: embedded gate-constrained SVG editor (custom, mirrors gate rules)
+5. Export targets (svg, sprite-svg, maplibre, iconify) + shared materialization
+6. Optional: embedded gate-constrained SVG editor (custom, mirrors gate rules)
 
 ## License
 

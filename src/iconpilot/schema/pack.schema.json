@@ -139,7 +139,18 @@
             }
           }
         },
-        "rejected_ideas": { "type": "array", "items": { "type": "string" } }
+        "rejected_ideas": { "type": "array", "items": { "type": "string" } },
+        "request": {
+          "type": "object",
+          "description": "Transient next-round request produced by decide (more/like/restart).",
+          "required": ["type"],
+          "additionalProperties": false,
+          "properties": {
+            "type": { "enum": ["more", "like", "restart"] },
+            "n": { "type": "integer", "minimum": 1 },
+            "from": { "type": "string" }
+          }
+        }
       }
     },
     "linked_variant": {
