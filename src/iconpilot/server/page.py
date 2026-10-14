@@ -360,7 +360,7 @@ footer { text-align:center; color:var(--muted); font-size:.75rem; padding:20px 0
       <h3><span>Compare: {{ S.compare[0].cand }} vs {{ S.compare[1].cand }}</span>
           <button class="subtle" @click="S.compare = null">✕</button></h3>
       <div class="compare-grid">
-        <div v-for="c in S.compare" :key="c.cand" class="compare-col">
+        <div v-for="c in S.compare" :key="c.icon + '/' + c.variant + '/' + c.cand" class="compare-col">
           <div class="compare-label">{{ c.icon }} / {{ c.variant }} · {{ c.cand }}</div>
           <div class="stage" style="background:#f6f9f7">
             <img :width="96" :height="96" :src="render(c.path, 96, '#f6f9f7')">
@@ -574,15 +574,22 @@ function batchApprove(minScore) {
   flash('batch: approved all rated ≥ ' + minScore, true);
 }
 function batchReject(maxScore) {
-  // reject all candidates rated <= maxScore
+  // reject all candidates rated <= maxScore (0 = reject unrated/unrejected)
   for (const g of S.grouped) {
     for (const vg of variantGroups(g)) {
       for (const c of vg.cands) {
-        if (rating(c) > 0 && rating(c) <= maxScore) drop(c);
+        const r = rating(c);
+        const hasDecision = !!item(c);
+        if (maxScore === 0) {
+          // reject unrated = no explicit decision yet
+          if (!hasDecision) drop(c);
+        } else if (r > 0 && r <= maxScore) {
+          drop(c);
+        }
       }
     }
   }
-  flash('batch: rejected all rated ≤ ' + maxScore, true);
+  flash('batch: rejected ' + (maxScore === 0 ? 'unrated' : 'all rated ≤ ' + maxScore), true);
 }
 function rejectAllIcon(g) {
   for (const vg of variantGroups(g)) {
@@ -882,8 +889,8 @@ const App = {
 
     // keyboard shortcuts
     const onKey = (e) => {
-      if (S.dlg || S.sheet || S.noteDlg || S.vNoteDlg || S.settingsDlg) {
-        if (e.key === 'Escape') { S.dlg = null; S.sheet = null; S.noteDlg = null; S.vNoteDlg = null; S.settingsDlg = false; }
+      if (S.dlg || S.sheet || S.noteDlg || S.vNoteDlg || S.settingsDlg || S.compare) {
+        if (e.key === 'Escape') { S.dlg = null; S.sheet = null; S.noteDlg = null; S.vNoteDlg = null; S.settingsDlg = false; S.compare = null; }
         return;
       }
       if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA' || e.target.tagName === 'SELECT') return;

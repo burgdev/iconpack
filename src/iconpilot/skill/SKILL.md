@@ -150,7 +150,7 @@ and style numbers always win over DESIGN.md prose).
               "candidates_generated": 4, "gate_fixes": 2,
               "estimated_cost_usd": 0.05}
              Update after each phase (draft/gate/fix/screen).
-6b. REPEAT   When `wait` return:
+6b. REPEAT   When `wait` returns:
              a) read .runs/<round>/decisions.json — applied items + instructions
              b) `iconpilot status <pack>` — see ✎edited markers and new notes
              c) re-run `context` for every variant you'll draft next

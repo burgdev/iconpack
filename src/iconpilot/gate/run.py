@@ -324,8 +324,8 @@ def _element_points(root, per_segment: int = 12):
             yield el, pts
 
 
-def _min_gap(root, style, report, threshold_scale: float = 1.0) -> None:
-    gap = style.min_gap * threshold_scale if threshold_scale > 1.0 else style.min_gap
+def _min_gap(root, style, report) -> None:
+    gap = style.min_gap
     if not gap or gap <= 0:
         return
     contact_eps = 0.5  # closer than this counts as touching, not a gap
@@ -364,10 +364,10 @@ def run_gate(svg_path: str | Path, pack: dict, style: Style) -> GateReport:
     report = GateReport()
     strictness = pack.get("strictness", 1.0)
     if strictness < 1.0:
-        # Loose mode: scale min_gap tolerance (2x at strictness=0, 1x at 1.0)
+        # Loose mode: LOWER min_gap (at strictness=0 disable near-miss check entirely)
         import dataclasses
 
-        style = dataclasses.replace(style, min_gap=style.min_gap * (2.0 - strictness))
+        style = dataclasses.replace(style, min_gap=style.min_gap * strictness)
 
     path = Path(svg_path)
     if not path.is_file():

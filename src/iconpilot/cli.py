@@ -266,17 +266,32 @@ def style_import(
     if profile.get("styles"):
         pack_data.setdefault("styles", {}).update(profile["styles"])
     if profile.get("rules"):
-        existing = set(pack_data.get("rules", []))
-        pack_data["rules"] = list(existing | set(profile["rules"]))
+        existing = pack_data.get("rules", [])
+        new_rules = [r for r in profile["rules"] if r not in existing]
+        pack_data["rules"] = existing + new_rules
     if profile.get("note") and not pack_data.get("note"):
         pack_data["note"] = profile["note"]
 
-    # import anchor SVGs as reference files
+    # import anchor SVGs: copy to icons/ AND register as pinned variants
     for ref_id, data in profile.get("anchors", {}).items():
         iid, _, vid = ref_id.partition("#")
-        ref_dir = pack_dir / ".style-refs" / iid
-        ref_dir.mkdir(parents=True, exist_ok=True)
-        (ref_dir / f"{vid}.svg").write_text(data["svg"])
+        # copy the SVG to icons/ so context.py can read it
+        icon_dir = pack_dir / "icons" / iid
+        icon_dir.mkdir(parents=True, exist_ok=True)
+        svg_file = icon_dir / f"{vid}.svg"
+        if not svg_file.exists():
+            svg_file.write_text(data["svg"])
+        # register as a pinned reference variant in pack.json
+        icon = pack_data["icons"].setdefault(iid, {"brief": data.get("brief", ""), "variants": {}})
+        if vid not in icon["variants"]:
+            icon["variants"][vid] = {
+                "style": "mono-line",
+                "status": "approved",
+                "pinned": True,
+                "chosen": {"run": "style-import", "variant": "ref"},
+            }
+        else:
+            icon["variants"][vid].setdefault("pinned", True)
 
     _, errors = revalidate(pack_data)
     if errors:

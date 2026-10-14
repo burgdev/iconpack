@@ -255,7 +255,13 @@ class ReviewHandler(BaseHTTPRequestHandler):
                         info["candidates"] = len(cands)
                     # quality metrics from gate reports
                     gates = list((runs_dir / run).rglob("*.gate.json"))
-                    n_pass = sum(1 for g in gates if json.loads(g.read_text()).get("passed"))
+                    n_pass = 0
+                    for g in gates:
+                        try:
+                            if json.loads(g.read_text()).get("passed"):
+                                n_pass += 1
+                        except (ValueError, OSError):
+                            pass  # mid-write gate file
                     info["metrics"] = {
                         "gate_total": len(gates),
                         "gate_passed": n_pass,
