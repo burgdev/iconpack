@@ -234,11 +234,15 @@ def test_pack_endpoint_reports_version(server: _Server) -> None:
 
 
 def test_put_pack_settings(server: _Server, srvpack: Path) -> None:
-    code, data = server.req("PUT", "/api/pack", {
-        "version": "0.2.0",
-        "rules": ["Door gap at least 2 units"],
-        "spec": {"stroke": {"width": 2.5}, "live_area": {"padding": 2}, "precision": 0.5},
-    })
+    code, data = server.req(
+        "PUT",
+        "/api/pack",
+        {
+            "version": "0.2.0",
+            "rules": ["Door gap at least 2 units"],
+            "spec": {"stroke": {"width": 2.5}, "live_area": {"padding": 2}, "precision": 0.5},
+        },
+    )
     assert code == 200, data
     pack = json.loads((srvpack / "pack.json").read_text())
     assert pack["version"] == "0.2.0"
@@ -248,4 +252,4 @@ def test_put_pack_settings(server: _Server, srvpack: Path) -> None:
     before = (srvpack / "pack.json").read_text()
     code, data = server.req("PUT", "/api/pack", {"spec": {"stroke": {"width": "fat"}}})
     assert code == 400
-    assert (srvpack / "pack.json").read_text() != before  # rev untouched on reject
+    assert (srvpack / "pack.json").read_text() == before  # rejected → nothing written
