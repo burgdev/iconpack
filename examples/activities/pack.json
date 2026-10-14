@@ -34,7 +34,8 @@
         "#2f855a",
         "#c05621",
         "#4a5568"
-      ]
+      ],
+      "min_gap": 0.5
     },
     "lineal-color": {
       "palette": [
@@ -42,7 +43,8 @@
         "#2f855a",
         "#c05621",
         "#4a5568"
-      ]
+      ],
+      "min_gap": 0.5
     }
   },
   "icons": {
@@ -57,7 +59,7 @@
             "run": "import",
             "variant": "source"
           },
-          "content_hash": "a077ca5c66608c07992bd173360a39d16d17cb7907f19bb6140bc2341291d774"
+          "content_hash": "710641beedd6afaefc1f2562dde062d32135af18a58f550582cedc56278da20c"
         },
         "flat": {
           "style": "flat-color",
@@ -66,7 +68,7 @@
             "run": "import",
             "variant": "source"
           },
-          "content_hash": "0dcd897999f8f8c425798a118623eae809fa08daa784cbcfd44d991395c75bd2"
+          "content_hash": "b473a38c52bb8b54d49de3dd2825bc757e4aa85a47a55b06c044d23d6ef23ba6"
         },
         "detail": {
           "style": "lineal-color",
@@ -75,7 +77,7 @@
             "run": "import",
             "variant": "source"
           },
-          "content_hash": "2bb347522cdef0ee45577e1a6d0758e2be0cac52360cf81b68fab97abc43765c"
+          "content_hash": "c8c4c3a473dcf69242b52e582a1dc5e5773d281af0d99c0677a6a854138fb7af"
         }
       }
     },
@@ -90,7 +92,7 @@
             "run": "import",
             "variant": "source"
           },
-          "content_hash": "5221ef1aeaa9f36d6433f668aad26fe8834e439a6bf2d3871980cd1bd5f2c1eb"
+          "content_hash": "4d1a21582abc0da880eb6dd43f5186ffef3fa2579344f1b5520284aa34dd4731"
         },
         "flat": {
           "style": "flat-color",
@@ -99,7 +101,7 @@
             "run": "import",
             "variant": "source"
           },
-          "content_hash": "b35a8a6931d69eb9979dda6045fd638acd80534d05e990e92f0f85cc03f3c0bd"
+          "content_hash": "8395c74bc0a160fa9f7136a58c201657ab3d512aedb116c42d835d82b79466c5"
         },
         "detail": {
           "style": "lineal-color",
@@ -108,7 +110,7 @@
             "run": "import",
             "variant": "source"
           },
-          "content_hash": "77ac242396c6d2e1c72fd73ed145b1e4e6bec658d93c4c40a9b54d14b5c012db"
+          "content_hash": "9c10c864862f7adfaace68bcd9869de73652157c2418eea586082365b5572307"
         }
       }
     },
@@ -123,7 +125,7 @@
             "run": "import",
             "variant": "source"
           },
-          "content_hash": "01a688289e5198caefbbf99f6f8b147349cfec04ec41d2672a46dacd3d5b795a"
+          "content_hash": "29a61fe62ebeef44997fcecfbd6c98dd96dfc7654673a0873178f461c2dbbb39"
         },
         "flat": {
           "style": "flat-color",
@@ -132,7 +134,7 @@
             "run": "import",
             "variant": "source"
           },
-          "content_hash": "5320f03172e11c1dcc941c849d996c74621075e15ff72cb305de808cf0ad1d61"
+          "content_hash": "da43ac811955f5f6350e1ef5e5e65b1e6634d9cef533f59b16f111522938c3bb"
         },
         "detail": {
           "style": "lineal-color",
@@ -141,7 +143,7 @@
             "run": "import",
             "variant": "source"
           },
-          "content_hash": "ddbc180c0d81e70c497f1527a8b000b33771fb50a8073240e01d73e8f9d2493a"
+          "content_hash": "3e068a60bf9c1bc094b05368e181b12899a506582e35e8e7a45adf7208185956"
         }
       }
     },
@@ -156,7 +158,7 @@
             "run": "import",
             "variant": "source"
           },
-          "content_hash": "6ff54ba581b929773f0031771287ac1d2e86a67d745311faaae40c7851b31e4b"
+          "content_hash": "99fff3aa5132c873baf4907175aac3ad9b5e3133a7fcd77f8101cb1a897911ff"
         },
         "flat": {
           "style": "flat-color",
@@ -165,7 +167,7 @@
             "run": "import",
             "variant": "source"
           },
-          "content_hash": "2806841d4c2ccda61fe90e89594e697071d8dbe18a3b993fc832e2d18c37363d"
+          "content_hash": "8a56b369b731c22a3ff5efc6963298c1ce8c6517727064d05ce96e236df232d6"
         },
         "detail": {
           "style": "lineal-color",
@@ -174,7 +176,7 @@
             "run": "import",
             "variant": "source"
           },
-          "content_hash": "672f8e8ae5e7b48befb5484f1d39d04a7fc1717e1261c06561fe84be4e784bce"
+          "content_hash": "368e14179e401ad863d87fba7979f093afc5aa76d94a05151551007cd14ccbe2"
         }
       }
     }
