@@ -231,3 +231,21 @@ def test_pack_endpoint_reports_version(server: _Server) -> None:
     import iconpilot
 
     assert json.loads(body)["version"] == iconpilot.__version__
+
+
+def test_put_pack_settings(server: _Server, srvpack: Path) -> None:
+    code, data = server.req("PUT", "/api/pack", {
+        "version": "0.2.0",
+        "rules": ["Door gap at least 2 units"],
+        "spec": {"stroke": {"width": 2.5}, "live_area": {"padding": 2}, "precision": 0.5},
+    })
+    assert code == 200, data
+    pack = json.loads((srvpack / "pack.json").read_text())
+    assert pack["version"] == "0.2.0"
+    assert pack["spec"]["stroke"]["width"] == 2.5
+    assert pack["rules"] == ["Door gap at least 2 units"]
+    # invalid spec is rejected, nothing written
+    before = (srvpack / "pack.json").read_text()
+    code, data = server.req("PUT", "/api/pack", {"spec": {"stroke": {"width": "fat"}}})
+    assert code == 400
+    assert (srvpack / "pack.json").read_text() != before  # rev untouched on reject

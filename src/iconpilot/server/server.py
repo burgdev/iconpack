@@ -252,6 +252,39 @@ class ReviewHandler(BaseHTTPRequestHandler):
 
     def do_PUT(self) -> None:
         url = urlparse(self.path)
+        if url.path == "/api/pack":
+            data = self._body()
+            try:
+                with pack_lock(self.pack_dir):
+                    pack, _styles = load_pack(self.pack_dir / "pack.json")
+                    if "version" in data:
+                        pack["version"] = data["version"]
+                    if "rules" in data and isinstance(data["rules"], list):
+                        pack["rules"] = [str(r) for r in data["rules"] if str(r).strip()]
+                    spec_in = data.get("spec") or {}
+                    spec = pack.setdefault("spec", {})
+                    for k in ("stroke", "live_area"):
+                        if isinstance(spec_in.get(k), dict):
+                            spec.setdefault(k, {}).update(
+                                {kk: vv for kk, vv in spec_in[k].items() if vv is not None}
+                            )
+                    for k in ("precision",):
+                        if spec_in.get(k) is not None:
+                            spec[k] = spec_in[k]
+                    if isinstance(data.get("styles"), dict):
+                        pack["styles"] = data["styles"]
+                    _, errors = revalidate(pack)
+                    if errors:
+                        self._json(400, {"errors": errors})
+                        return
+                    write_pack_atomic(self.pack_dir, pack)
+                self._json(200, {"rev": pack.get("rev", 0)})
+            except TimeoutError as exc:
+                self._json(423, {"error": str(exc)})
+            except Exception as exc:
+                self._json(500, {"error": str(exc)})
+            return
+
         if url.path == "/api/variant":
             data = self._body()
             icon_id = data.get("icon")

@@ -99,7 +99,33 @@ input[type=color] { width:34px; height:28px; padding:0 2px; border:1px solid var
 .kv { display:grid; grid-template-columns:auto 1fr; gap:2px 12px; margin-top:6px; color:var(--muted); }
 .kv b { color:var(--ink); font-weight:600; }
 .muted { color:var(--muted); font-size:.82rem; }
-footer { text-align:center; color:var(--muted); font-size:.75rem; padding:20px; }
+footer { text-align:center; color:var(--muted); font-size:.75rem; padding:20px 0 96px; }
+/* sticky action bar */
+.actionbar { position:fixed; bottom:0; left:0; right:0; z-index:20; display:flex; align-items:center;
+             gap:12px; padding:10px 16px calc(10px + env(safe-area-inset-bottom));
+             background:var(--card); border-top:1px solid var(--line); box-shadow:0 -4px 16px rgba(10,16,22,.12); }
+.actionbar.ready { border-top-color:color-mix(in srgb, var(--accent) 40%, transparent); }
+.ab-status { flex:1; font-size:.85rem; color:var(--muted); display:flex; align-items:center; gap:8px; min-width:0; }
+.actionbar.ready .ab-status { color:var(--accent); font-weight:600; }
+.dot.green { background:var(--accent); }
+.dot.amber { background:var(--warn); animation:pulse 1.6s infinite; }
+.dot.gray { background:var(--line); }
+.ab-apply { min-width:120px; }
+/* group meta row (brief + color + style) */
+.gmeta { display:flex; align-items:center; gap:8px; margin:-2px 0 10px; flex-wrap:wrap; }
+.gmeta .brief { flex:1 1 160px; cursor:text; min-width:120px; font-size:.85rem; }
+.brief-input { flex:1 1 160px; font:inherit; font-size:.85rem; padding:4px 8px; border-radius:8px;
+               border:1px solid var(--accent); background:var(--card); color:var(--ink); min-width:120px; }
+.colorchip { width:30px; height:30px; flex:none; }
+.gmeta select { font:inherit; font-size:.8rem; padding:4px 6px; border-radius:8px;
+                border:1px solid var(--line); background:var(--card); color:var(--ink); max-width:140px; }
+@media (max-width: 640px) {
+  main { padding:12px; }
+  .grid { grid-template-columns:repeat(auto-fill,minmax(130px,1fr)); gap:10px; }
+  .rating button, .ratebtn { min-height:44px; min-width:44px; }   /* thumb targets */
+  .ab-apply { min-height:44px; }
+  .ghead { gap:6px; }
+}
 </style>
 </head>
 <body>
@@ -130,7 +156,7 @@ footer { text-align:center; color:var(--muted); font-size:.75rem; padding:20px; 
         <div class="grid">
           <div class="card" v-for="c in g.cands" :key="c.cand">
             <img class="thumb" loading="lazy" width="64" height="64"
-                 :src="render(c.path, 64, '#ffffff')" @click="open(g, c)">
+                 :src="render(c.path, 64, '#f6f9f7', mainColor(g))" @click="open(g, c)">
             <div class="name">{{ c.cand }}
               <span v-if="chosenCand(g) === c.cand" class="chip approved" title="the approved pick">✓ picked</span>
             </div>
@@ -198,6 +224,30 @@ footer { text-align:center; color:var(--muted); font-size:.75rem; padding:20px; 
     </section>
     <footer>iconpilot review v{{ S.version }} · flock-serialized writes · approval is always yours</footer>
   </main>
+
+  <div class="actionbar" :class="{ ready: actionBar.ready }">
+    <span class="ab-status">
+      <span v-if="actionBar.working" class="dot amber"></span>
+      <span v-else-if="actionBar.ready" class="dot green"></span>
+      <span v-else class="dot gray"></span>
+      {{ actionBar.text }}
+    </span>
+    <button class="primary ab-apply" @click="apply"
+            :disabled="!S.decisionEdit.trim()">Apply {{ S.lines.length ? '· ' + S.lines.length : '' }}</button>
+  </div>
+
+  <div v-if="S.noteDlg" class="overlay" @click.self="S.noteDlg = null">
+    <div class="dialog">
+      <h3><span>💬 {{ S.noteDlg.g.icon }} / {{ S.noteDlg.g.variant }}</span>
+          <button class="subtle" @click="S.noteDlg = null">✕</button></h3>
+      <p class="muted" style="margin:0 0 8px">Tells the agent directly what to change — carried into the next draft.</p>
+      <textarea v-model="S.noteDlg.text" placeholder="thinner roof, door on the right, less mass at the base…"></textarea>
+      <div class="row" style="margin-top:8px">
+        <button class="primary" @click="saveNote">Save note</button>
+        <button class="subtle" v-if="hasNote(S.noteDlg.g)" @click="S.noteDlg.text = ''; saveNote()">Remove</button>
+      </div>
+    </div>
+  </div>
 
   <div v-if="S.sheet" class="overlay sheet" @click.self="S.sheet = null">
     <div class="sheetbox">
@@ -275,7 +325,8 @@ const S = reactive({
   styles: {}, ai: { text: '', active: false }, version: '',
   decisions: {}, manual: false, manualText: '',
   msg: '', msgClass: 'muted', editing: null,
-  dlg: null, sheet: null,
+  dlg: null, sheet: null, noteDlg: null, settingsDlg: false,
+  decisionEdit: '', showGen: false, editingBrief: null,
   bgs: [
     { name: 'white', hex: '#ffffff' }, { name: 'paper', hex: '#f6f9f7' },
     { name: 'night', hex: '#112119' }, { name: 'ink', hex: '#1c1c1c' },
@@ -307,6 +358,16 @@ S.lines = computed(() => {
   return out;
 });
 S.decisionText = computed(() => S.lines.join('\\n'));  // S.lines auto-unwraps
+S.actionBar = computed(() => {
+  if (S.ai.active) return { working: true, ready: false, text: S.ai.text || 'agent working…' };
+  if (S.candidates.length) {
+    const n = S.lines.length;
+    return { working: false, ready: true,
+             text: n ? `${n} decision${n > 1 ? 's' : ''} ready — yours to apply`
+                     : `your move — rate ${S.candidates.length} candidates` };
+  }
+  return { working: false, ready: false, text: 'all decided — agent may continue' };
+});
 
 function render(p, size, bg, color) {
   const q = new URLSearchParams({ p, size, bg: bg || '#ffffff' });
@@ -337,6 +398,11 @@ function restoreDraft() {
 function clearDraft() {
   try { localStorage.removeItem(draftKey()); } catch {}
 }
+let editDirty = false;
+S._editSync = computed(() => {   // keep edit box in sync until the user types
+  if (!editDirty) S.decisionEdit = S.decisionText;
+  return null;
+});
 function setItem(g, cand, t) {
   const entry = S.decisions[g.key] || (S.decisions[g.key] = { items: [] });
   entry.items = entry.items.filter(i => i.cand !== '*');           // drop stale 'reject all'
@@ -353,6 +419,49 @@ function rejectAll(g) {
   S.decisions[g.key] = { items: [{ cand: '*', t: '* no' }] };
   saveDraft();
 }
+function mainColor(g) { return S.pack.icons?.[g.icon]?.main_color; }
+function packBrief(g) {
+  const v = S.pack.icons?.[g.icon];
+  return v?.variants?.[g.variant]?.brief || v?.brief || '';
+}
+async function saveBrief(g, brief) {
+  S.editingBrief = null;
+  if (!brief || brief === packBrief(g)) return;
+  try {
+    const r = await api('/api/icon', { method: 'PUT', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ icon: g.icon, brief }) });
+    S.msg = `brief saved (rev ${r.rev})`; S.msgClass = 'ok'; await load();
+  } catch (e) { S.msg = e.d?.errors ? e.d.errors.join('\\n') : e.message; S.msgClass = 'err'; }
+}
+async function saveMainColor(g, color) {
+  try {
+    const r = await api('/api/icon', { method: 'PUT', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ icon: g.icon, main_color: color }) });
+    S.msg = `main color saved (rev ${r.rev})`; S.msgClass = 'ok'; await load();
+  } catch (e) { S.msg = e.message; S.msgClass = 'err'; }
+}
+function hasNote(g) {
+  return (S.decisions[g.key]?.items || []).some(i => i.cand === '__note');
+}
+function openNote(g) { S.noteDlg = { g, text: noteText(g) }; }
+function noteText(g) {
+  const it = (S.decisions[g.key]?.items || []).find(i => i.cand === '__note');
+  return it ? (it.t.match(/"([^"]*)"/) || ['', ''])[1] : '';
+}
+function saveNote() {
+  const g = S.noteDlg.g, text = S.noteDlg.text.trim();
+  const entry = S.decisions[g.key] || (S.decisions[g.key] = { items: [] });
+  entry.items = entry.items.filter(i => i.cand !== '__note');
+  if (text) entry.items.push({ cand: '__note', t: `note "${text}"` });
+  saveDraft(); S.noteDlg = null;
+}
+async function switchStyle(icon, variant, sid) {
+  try {
+    const r = await api('/api/variant', { method: 'PUT', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ icon, variant, style: sid }) });
+    S.msg = `style → ${sid} (rev ${r.rev})`; S.msgClass = 'ok'; await load();
+  } catch (e) { S.msg = e.d?.errors ? e.d.errors.join('\\n') : e.message; S.msgClass = 'err'; }
+}
 function variantStatus(g) {
   return S.pack.icons?.[g.icon]?.variants?.[g.variant]?.status || '';
 }
@@ -365,6 +474,7 @@ function styleLabel(sid) {
   return sid + (s ? ` — ${s.label}` : '');
 }
 function openSheet(g, c) { S.sheet = { g, c }; }
+function markDirty() { editDirty = true; }
 function open(g, c) {
   const main = S.pack.icons?.[g.icon]?.main_color;
   S.dlg = { icon: g.icon, variant: g.variant, cand: c.cand, path: c.path, styleId: g.style,
@@ -393,20 +503,53 @@ async function switchStyle(dlg, sid) {
 }
 function startManual() { S.manual = true; S.manualText = S.decisionText; }
 async function apply() {
-  const text = (S.manual ? S.manualText : S.decisionText).trim();
+  const text = S.decisionEdit.trim();
   if (!text) return;
   try {
     const r = await api('/api/decision', { method: 'POST', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ text, round: S.round }) });
     S.msg = 'applied: ' + (r.log || []).join(' | '); S.msgClass = 'ok';
-    S.decisions = {}; S.manual = false; S.manualText = '';
+    S.decisions = {}; editDirty = false; S.decisionEdit = '';
     clearDraft();
     await load();
   } catch (e) { S.msg = e.message; S.msgClass = 'err'; }
 }
+function decisionsJson() {
+  const icons = {};
+  for (const [key, entry] of Object.entries(S.decisions)) {
+    if (entry.items.length) {
+      icons[key] = { items: entry.items.map(i => {
+        const m = i.t.match(/^([^ ]+) (ok|keep|no|rate [0-9]+|more [0-9]+|like [^ ]+ [0-9]+|restart|note)/);
+        const o = { t: i.t };
+        if (m) { o.cand = m[1]; const rest = m[2];
+          if (rest.startsWith('rate')) { o.rate_cand = m[1]; o.rate_n = rest.split(' ')[1]; }
+          else if (['ok', 'keep', 'no'].includes(rest)) { o.cand = m[1]; o.action = rest; }
+          else if (rest.startsWith('more')) o.more = rest.split(' ')[1];
+          else if (rest.startsWith('like')) { o.like_cand = rest.split(' ')[1]; o.like_n = rest.split(' ')[2]; }
+          else if (rest === 'restart') o.restart = 'restart';
+          else if (rest === 'note') o.note = 'note';
+        }
+        if (i.cand === '__note') { o.note = 'note'; delete o.cand; }
+        return o;
+      }) };
+    }
+  }
+  return { pack: S.pack.name, round: S.round, source: 'page', icons,
+           decision_text: S.decisionEdit.trim() };
+}
 async function copy() {
-  await navigator.clipboard.writeText((S.manual ? S.manualText : S.decisionText).trim());
-  S.msg = 'copied — paste to your agent'; S.msgClass = 'ok';
+  const payload = JSON.stringify(decisionsJson(), null, 2);
+  let ok = false;
+  try { await navigator.clipboard.writeText(payload); ok = true; } catch {}
+  if (!ok) {  // http:// (non-secure context) fallback
+    const ta = document.createElement('textarea');
+    ta.value = payload; ta.style.position = 'fixed'; ta.style.opacity = '0';
+    document.body.appendChild(ta); ta.select();
+    try { ok = document.execCommand('copy'); } catch {}
+    ta.remove();
+  }
+  S.msg = ok ? 'decisions JSON copied' : 'copy blocked — select the textarea manually';
+  S.msgClass = ok ? 'ok' : 'err';
 }
 async function saveIcon(id, brief) {
   S.editing = null;
@@ -447,9 +590,11 @@ const App = {
       }, 2000);
     });
     return {
-      S, render, item, rating, drop, approve, keep, rate, rejectAll,
+      S, render, item, rating, drop, approve, keep, rate, rejectAll, actionBar,
       styleLabel, open, openIcon, openSheet, switchStyle, startManual,
       apply, copy, saveIcon, edited, load, chosenCand, variantStatus,
+      mainColor, packBrief, saveBrief, saveMainColor, hasNote, openNote, saveNote,
+      markDirty,
     };
   },
 };
