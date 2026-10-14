@@ -216,7 +216,6 @@ footer { text-align:center; color:var(--muted); font-size:.75rem; padding:20px 0
         <textarea v-if="S.showGen" readonly :value="S.decisionText"></textarea>
       </details>
     </div>
-    </div>
 
     <section>
       <h2>Icons</h2>
