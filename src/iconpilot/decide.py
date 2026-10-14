@@ -201,6 +201,7 @@ def apply_decisions(
     decisions: dict,
     round_id: str,
     source: str,
+    instructions: str | None = None,
 ) -> list[str]:
     """Apply parsed decisions to pack.json + icons/. Returns a change log."""
     log: list[str] = []
@@ -313,6 +314,7 @@ def apply_decisions(
                 "round": round_id,
                 "decided_at": datetime.now(UTC).isoformat(),
                 "source": source,
+                "instructions": instructions,
                 "icons": decisions,
             },
             indent=2,

@@ -26,7 +26,7 @@ from iconpilot.pack import load_pack, revalidate, write_pack_atomic
 from iconpilot.render.contact import contact_sheet
 from iconpilot.render.render import render_png_text
 
-EDITABLE_FIELDS = ("brief", "prompt", "main_color")
+EDITABLE_FIELDS = ("brief", "prompt", "main_color", "note")
 _HEX_RE = __import__("re").compile(r"^#[0-9a-fA-F]{6}$")
 
 
@@ -240,7 +240,13 @@ class ReviewHandler(BaseHTTPRequestHandler):
                         raise ValueError("no rounds under .runs/")
                     round_id = runs[-1]
                 log = apply_decisions(
-                    self.pack_dir, pack, styles, decisions, round_id, source="server"
+                    self.pack_dir,
+                    pack,
+                    styles,
+                    decisions,
+                    round_id,
+                    source="server",
+                    instructions=(data.get("instructions") or None),
                 )
             self._json(200, {"rev": pack.get("rev", 0), "log": log})
         except (ValueError, KeyError) as exc:
@@ -259,6 +265,8 @@ class ReviewHandler(BaseHTTPRequestHandler):
                     pack, _styles = load_pack(self.pack_dir / "pack.json")
                     if "version" in data:
                         pack["version"] = data["version"]
+                    if isinstance(data.get("note"), str):
+                        pack["note"] = data["note"]
                     if "rules" in data and isinstance(data["rules"], list):
                         pack["rules"] = [str(r) for r in data["rules"] if str(r).strip()]
                     spec_in = data.get("spec") or {}

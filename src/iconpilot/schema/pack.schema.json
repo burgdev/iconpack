@@ -76,6 +76,10 @@
         "type": "string"
       },
       "description": "Pack-level design rules injected into every drafting context."
+    },
+    "note": {
+      "type": "string",
+      "description": "Pack-global note: standing instructions for every drafting round."
     }
   },
   "$defs": {
@@ -175,6 +179,10 @@
           "additionalProperties": {
             "$ref": "#/$defs/variant"
           }
+        },
+        "note": {
+          "type": "string",
+          "description": "Persistent per-icon note for the agent."
         }
       }
     },

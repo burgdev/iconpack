@@ -89,8 +89,12 @@ and style numbers always win over DESIGN.md prose).
              → iconpilot decide <pack> --text "…" (verbatim; CLI is the
              only parser). Approval/keep materialize to icons/, dependents
              of changed anchors go stale automatically.
-6. REPEAT    When `wait` returns: read the decisions (status + decisions.json),
-             act on requests (`more N`, `like`, `restart`) and continue    `iconpilot status <pack>` shows what's outstanding (todo,
+6. REPEAT    When `wait` returns: read .runs/<round>/decisions.json — it carries
+             the applied items AND the user's free-text `instructions` for the
+             next round; honor both. Persistent guidance arrives automatically
+             via `context`: the pack-global note (pack.note) and per-icon notes
+             (icons.<id>.note) — never override them, they are standing orders.
+             Act on requests (`more N`, `like`, `restart`) and continue    `iconpilot status <pack>` shows what's outstanding (todo,
              in_review, `stale` — stale variants must be re-run; `✎edited`
              means the icons/ file changed after approval). Loop until every
              variant is approved; then export.

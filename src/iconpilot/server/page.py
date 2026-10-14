@@ -211,6 +211,8 @@ footer { text-align:center; color:var(--muted); font-size:.75rem; padding:20px 0
         </p>
         <textarea v-model="S.decisionEdit" @input="markDirty"
                   placeholder="hut/mono: a2 ok · b1 rate 7 · more 2"></textarea>
+        <input v-model="S.instructions" style="margin-top:6px"
+               placeholder="instructions for the agent with this apply (optional) — e.g. 'try a2 with a steeper roof'">
         <div class="row">
           <button class="subtle" @click="S.showGen = !S.showGen">{{ S.showGen ? 'hide' : 'show' }} generated</button>
           <button class="subtle" @click="markDirty(); S.decisionEdit = S.decisionText">reset to generated</button>
@@ -267,6 +269,8 @@ footer { text-align:center; color:var(--muted); font-size:.75rem; padding:20px 0
           <button class="subtle" @click="S.settingsDlg = false">✕</button></h3>
       <div class="controls"><label>version</label>
         <input v-model="S.set.version" style="width:110px"></div>
+      <div class="controls" style="align-items:flex-start"><label>global note</label>
+        <textarea v-model="S.set.note" placeholder="standing instructions for every draft — e.g. 'no chimneys anywhere'"></textarea></div>
       <div class="controls" style="align-items:flex-start"><label>rules</label>
         <textarea v-model="S.set.rules" placeholder="one rule per line — injected into every drafting context"></textarea></div>
       <div class="controls"><label>stroke width</label>
@@ -293,11 +297,11 @@ footer { text-align:center; color:var(--muted); font-size:.75rem; padding:20px 0
     <div class="dialog">
       <h3><span>💬 {{ S.noteDlg.g.icon }} / {{ S.noteDlg.g.variant }}</span>
           <button class="subtle" @click="S.noteDlg = null">✕</button></h3>
-      <p class="muted" style="margin:0 0 8px">Tells the agent directly what to change — carried into the next draft.</p>
+      <p class="muted" style="margin:0 0 8px">Persistent note for this icon — saved immediately, shown to the agent in every future round (on top of the pack note).</p>
       <textarea v-model="S.noteDlg.text" placeholder="thinner roof, door on the right, less mass at the base…"></textarea>
       <div class="row" style="margin-top:8px">
         <button class="primary" @click="saveNote">Save note</button>
-        <button class="subtle" v-if="hasNote(S.noteDlg.g)" @click="S.noteDlg.text = ''; saveNote()">Remove</button>
+        <button class="subtle" v-if="S.noteDlg.text" @click="S.noteDlg.text = ''; saveNote()">Clear</button>
       </div>
     </div>
   </div>
@@ -380,7 +384,7 @@ const S = reactive({
   msg: '', msgClass: 'muted', editing: null,
   dlg: null, sheet: null, noteDlg: null, settingsDlg: false,
   decisionEdit: '', showGen: false, editingBrief: null,
-  flash: '', flashOk: true, applying: false,
+  flash: '', flashOk: true, applying: false, instructions: '',
   set: { version: '', rules: '', strokeWidth: 2, linecap: 'round', linejoin: 'round', padding: 2, precision: 0.5, palette: null, errors: '' },
   bgs: [
     { name: 'white', hex: '#ffffff' }, { name: 'paper', hex: '#f6f9f7' },
@@ -493,21 +497,17 @@ async function saveMainColor(g, color) {
   } catch (e) { S.msg = e.message; S.msgClass = 'err'; }
 }
 function hasNote(g) {
-  return (S.decisions[g.key]?.items || []).some(i => i.cand === '__note');
+  return !!S.pack.icons?.[g.icon]?.note;
 }
-function openNote(g) { S.noteDlg = { g, text: noteText(g) }; }
-function noteText(g) {
-  const it = (S.decisions[g.key]?.items || []).find(i => i.cand === '__note');
-  return it ? (it.t.match(/"([^"]*)"/) || ['', ''])[1] : '';
-}
-function saveNote() {
+function openNote(g) { S.noteDlg = { g, text: S.pack.icons?.[g.icon]?.note || '' }; }
+async function saveNote() {
   const g = S.noteDlg.g;
-  const NL = String.fromCharCode(10);
-  const text = S.noteDlg.text.trim().replace(/"/g, "'").split(NL).join(' ');
-  const entry = S.decisions[g.key] || (S.decisions[g.key] = { items: [] });
-  entry.items = entry.items.filter(i => i.cand !== '__note');
-  if (text) entry.items.push({ cand: '__note', t: `note "${text}"` });
-  syncEdit(); saveDraft(); S.noteDlg = null;
+  try {
+    const r = await api('/api/icon', { method: 'PUT', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ icon: g.icon, note: S.noteDlg.text.trim() }) });
+    S.msg = `note saved (rev ${r.rev})`; S.msgClass = 'ok';
+    S.noteDlg = null; await load();
+  } catch (e) { S.msg = e.d?.errors ? e.d.errors.join(' ') : e.message; S.msgClass = 'err'; }
 }
 async function switchStyle(icon, variant, sid) {
   try {
@@ -532,6 +532,7 @@ function openSettings() {
   const sp = S.pack.spec || {};
   S.set = {
     version: S.pack.version || '',
+    note: S.pack.note || '',
     rules: (S.pack.rules || []).join('\\n'),
     strokeWidth: sp.stroke?.width ?? 2,
     linecap: sp.stroke?.linecap || 'round',
@@ -549,6 +550,7 @@ async function saveSettings() {
     const r = await api('/api/pack', { method: 'PUT', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         version: S.set.version,
+        note: S.set.note.trim(),
         rules: S.set.rules.split('\\n').map(s => s.trim()).filter(Boolean),
         spec: { stroke: { width: +S.set.strokeWidth, linecap: S.set.linecap, linejoin: S.set.linejoin },
                 live_area: { padding: +S.set.padding }, precision: +S.set.precision },
@@ -590,8 +592,8 @@ async function apply() {
   flash('applying…', true);
   try {
     const r = await api('/api/decision', { method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ text, round: S.round }) });
-    S.decisions = {}; editDirty = false; S.decisionEdit = '';
+      body: JSON.stringify({ text, round: S.round, instructions: S.instructions.trim() }) });
+    S.decisions = {}; editDirty = false; S.decisionEdit = ''; S.instructions = '';
     clearDraft();
     await load();
     flash('✓ applied ' + (r.log || []).length + ' change(s)', true);

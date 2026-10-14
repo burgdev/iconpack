@@ -262,3 +262,32 @@ def test_put_pack_settings(server: _Server, srvpack: Path) -> None:
     code, data = server.req("PUT", "/api/pack", {"spec": {"stroke": {"width": "fat"}}})
     assert code == 400
     assert (srvpack / "pack.json").read_text() == before  # rejected → nothing written
+
+
+def test_notes_flow(server: _Server, srvpack: Path) -> None:
+    # per-icon persistent note
+    code, data = server.req("PUT", "/api/icon", {"icon": "hut", "note": "no chimneys, ever"})
+    assert code == 200, data
+    # pack-global note
+    code, data = server.req("PUT", "/api/pack", {"note": "calm geometry across the set"})
+    assert code == 200, data
+    pack = json.loads((srvpack / "pack.json").read_text())
+    assert pack["icons"]["hut"]["note"] == "no chimneys, ever"
+    assert pack["note"] == "calm geometry across the set"
+    # instructions ride along with a decision apply
+    code, data = server.req(
+        "POST",
+        "/api/decision",
+        {"text": "hut/mono: a1 ok", "instructions": "try steeper roofs next time"},
+    )
+    assert code == 200, data
+    dec = json.loads((srvpack / ".runs" / "r001" / "decisions.json").read_text())
+    assert dec["instructions"] == "try steeper roofs next time"
+    # context surfaces both notes
+    from iconpilot.context import build_context
+    from iconpilot.pack import load_pack
+
+    p, styles = load_pack(srvpack / "pack.json")
+    ctx = build_context(srvpack, p, styles, "hut", "mono")
+    assert ctx.get("pack_note") == "calm geometry across the set"
+    assert ctx.get("icon_note") == "no chimneys, ever"
