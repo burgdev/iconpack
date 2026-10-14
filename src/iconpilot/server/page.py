@@ -146,13 +146,29 @@ footer { text-align:center; color:var(--muted); font-size:.75rem; padding:20px 0
     <div v-if="S.msg" :class="S.msgClass">{{ S.msg }}</div>
 
     <section v-if="S.grouped.length">
-      <h2>Current S.round — rate, then decide</h2>
+      <h2>Current round — rate, then decide</h2>
       <div class="group" v-for="g in S.grouped" :key="g.key">
         <div class="ghead">
           <b>{{ g.icon }} / {{ g.variant }}</b>
-          <span class="chip">{{ styleLabel(g.style) }}</span>
-          <span class="muted">{{ g.cands.length }} S.candidates</span>
-          <button class="subtle armed-x" @click="rejectAll(g)">drop entire icon</button>
+          <span v-if="variantStatus(g)" class="chip" :class="variantStatus(g)">{{ variantStatus(g) }}</span>
+          <span class="muted">{{ g.cands.length }} candidates</span>
+          <span class="spacer"></span>
+          <button class="subtle" :class="{ armed: hasNote(g) }" title="comment for the agent"
+                  @click="openNote(g)">💬</button>
+          <button class="subtle armed-x" @click="rejectAll(g)">drop icon</button>
+        </div>
+        <div class="gmeta">
+          <input v-if="S.editingBrief === g.key" class="brief-input"
+                 :value="packBrief(g)" placeholder="brief — what this icon IS"
+                 @keydown.enter="saveBrief(g, $event.target.value)"
+                 @blur="saveBrief(g, $event.target.value)">
+          <span v-else class="muted brief" @click="S.editingBrief = g.key">{{ packBrief(g) }}</span>
+          <input type="color" class="colorchip" :value="mainColor(g) || '#89919a'"
+                 title="main color"
+                 @input="saveMainColor(g, $event.target.value)">
+          <select :value="g.style" @change="switchStyle(g.icon, g.variant, $event.target.value)" title="style">
+            <option v-for="(st, sid) in S.styles" :key="sid" :value="sid">{{ sid }}</option>
+          </select>
         </div>
         <div class="grid">
           <div class="card" v-for="c in g.cands" :key="c.cand">
@@ -179,25 +195,27 @@ footer { text-align:center; color:var(--muted); font-size:.75rem; padding:20px 0
       </div>
     </section>
     <section v-else>
-      <h2>Current S.round</h2>
-      <p class="muted">no S.candidates in the latest run — the AI banner above shows progress.</p>
+      <h2>Current round</h2>
+      <p class="muted">no candidates in the latest run — the status above shows agent progress.</p>
     </section>
 
     <div class="composer">
-      <h2 style="margin:0 0 8px">Decision text</h2>
-      <p class="muted" style="margin:0 0 8px">
-        ok = <b>approve final</b> (frozen) · keep = <b>refine next S.round</b> · rate 0 = drop ·
-        ratings feed the next draft. Generated field is read-only; edit manually if needed.
-      </p>
-      <textarea v-if="!S.manual" readonly :value="S.decisionText" placeholder="rate or click S.candidates…"></textarea>
-      <textarea v-else v-model="S.manualText" placeholder='hut/mono: a2 ok · b1 rate 7 · more 2'></textarea>
-      <div class="row">
-        <button class="primary" @click="apply" :disabled="!S.decisionText && !S.manualText">Apply S.decisions</button>
-        <button @click="copy">{{ S.manual ? 'copy S.manual' : 'copy' }}</button>
-        <button v-if="!S.manual" class="subtle" @click="startManual">edit manually</button>
-        <button v-else class="subtle" @click="S.manual = false; S.manualText = ''">back to generated</button>
-        <span class="muted">{{ S.lines.length }} icon S.lines</span>
-      </div>
+      <details>
+        <summary>Decision text · {{ S.lines.length }} lines</summary>
+        <p class="muted" style="margin:6px 0">
+          ok = <b>approve final</b> · keep = <b>refine</b> · rate 0 = drop.
+          Free-text editable; the generated line list stays underneath.
+        </p>
+        <textarea v-model="S.decisionEdit" @input="markDirty"
+                  placeholder="hut/mono: a2 ok · b1 rate 7 · more 2"></textarea>
+        <div class="row">
+          <button class="subtle" @click="S.showGen = !S.showGen">{{ S.showGen ? 'hide' : 'show' }} generated</button>
+          <button class="subtle" @click="markDirty(); S.decisionEdit = S.decisionText">reset to generated</button>
+          <button @click="copy">copy JSON</button>
+        </div>
+        <textarea v-if="S.showGen" readonly :value="S.decisionText"></textarea>
+      </details>
+    </div>
     </div>
 
     <section>
