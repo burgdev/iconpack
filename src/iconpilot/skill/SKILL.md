@@ -70,7 +70,19 @@ and style numbers always win over DESIGN.md prose).
              Ranking orders candidates FOR THE USER — it never selects or
              approves; only `decide` (step 5) changes state.
              Also check family coherence against anchors.
-5. DECIDE    Hand the review page to the user, then block:
+5. DECIDE    Announce, then hand over, then block.
+             BEFORE waiting you MUST tell the user (chat message):
+               - a 1–3 line round summary: what was drafted, gate results,
+                 the screener's top pick
+               - the review URL as a markdown link, e.g.
+                 [iconpilot review — accommodation](http://home:8765)
+               Build the URL with tailscale when active (works from any device):
+                 HOST=$(tailscale status --json 2>/dev/null \
+                        | jq -r '.Self.DNSName // empty' | sed 's/\.$//')
+                 URL="http://${HOST:-127.0.0.1}:8765"
+               Start the server if not running (bind all interfaces):
+                 iconpilot review <pack> --host 0.0.0.0 &
+             THEN block:
              iconpilot wait <pack>          # returns when they Apply
              The USER decides — page buttons or compact text they paste:
              hut/mono: a2 keep "thinner roof" · b1 rate 7 · more 2

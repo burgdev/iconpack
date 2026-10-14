@@ -508,7 +508,7 @@ function openSettings() {
   const sp = S.pack.spec || {};
   S.set = {
     version: S.pack.version || '',
-    rules: (S.pack.rules || []).join('\n'),
+    rules: (S.pack.rules || []).join('\\n'),
     strokeWidth: sp.stroke?.width ?? 2,
     linecap: sp.stroke?.linecap || 'round',
     linejoin: sp.stroke?.linejoin || 'round',
@@ -525,13 +525,13 @@ async function saveSettings() {
     const r = await api('/api/pack', { method: 'PUT', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         version: S.set.version,
-        rules: S.set.rules.split('\n').map(s => s.trim()).filter(Boolean),
+        rules: S.set.rules.split('\\n').map(s => s.trim()).filter(Boolean),
         spec: { stroke: { width: +S.set.strokeWidth, linecap: S.set.linecap, linejoin: S.set.linejoin },
                 live_area: { padding: +S.set.padding }, precision: +S.set.precision },
       }) });
     S.msg = `settings saved (rev ${r.rev})`; S.msgClass = 'ok';
     S.settingsDlg = false; await load();
-  } catch (e) { S.set.errors = e.d?.errors ? e.d.errors.join('\n') : e.message; }
+  } catch (e) { S.set.errors = e.d?.errors ? e.d.errors.join('\\n') : e.message; }
 }
 function markDirty() { editDirty = true; }
 function open(g, c) {
@@ -551,14 +551,6 @@ function openIcon(id, vid, v) {
               {name: 'LIGHT BG', hex: '#f6f9f7', iconColor: icon.main_color || '#1c1c1c'},
               {name: 'DARK BG',  hex: '#22292e', iconColor: '#f2f7f4'},
             ] };
-}
-async function switchStyle(dlg, sid) {
-  try {
-    const r = await api('/api/variant', { method: 'PUT', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ icon: dlg.icon, variant: dlg.variant, style: sid }) });
-    S.msg = `style → ${sid} (rev ${r.rev})`; S.msgClass = 'ok';
-    dlg.styleId = sid; await load();
-  } catch (e) { S.msg = e.d?.errors ? e.d.errors.join('\\n') : e.message; S.msgClass = 'err'; }
 }
 function startManual() { S.manual = true; S.manualText = S.decisionText; }
 async function apply() {

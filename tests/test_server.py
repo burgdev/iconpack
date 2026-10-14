@@ -195,12 +195,15 @@ def test_render_with_custom_colors(server: _Server, srvpack: Path) -> None:
 
 
 def test_page_has_no_bare_state_refs() -> None:
-    # regression: attribute bindings kept bare refs (ai.text crashed at mount)
+    # regression: attribute bindings kept bare refs (ai.text crashed at mount).
+    # Scan ONLY binding contexts: {{ ... }} mustaches and attr="..." values.
     import re as _re
 
     from iconpilot.server.page import PAGE
 
     template = PAGE.split("<script")[0]
+    bindings = " ".join(_re.findall(r"\{\{(.*?)\}\}", template))
+    bindings += " " + " ".join(_re.findall(r'="([^"]*)"', template))
     states = [
         "pack",
         "rev",
@@ -220,10 +223,16 @@ def test_page_has_no_bare_state_refs() -> None:
         "lines",
         "decisionText",
         "version",
+        "set",
     ]
     for name in states:
-        bare = _re.findall(rf"(?<![\w.])\b{name}\b(?!\w)", template)
-        assert not bare, f"template has bare state ref '{name}' ×{len(bare)}"
+        pat = _re.compile(r"(?<![\w.'])" + name + r"(?![\w])")
+        bare = [
+            m
+            for m in pat.finditer(bindings)
+            if not bindings[max(0, m.start() - 2) : m.start()].endswith("S.")
+        ]
+        assert not bare, f"binding has bare state ref '{name}'"
 
 
 def test_pack_endpoint_reports_version(server: _Server) -> None:
