@@ -139,7 +139,13 @@ and style numbers always win over DESIGN.md prose).
              → iconpilot decide <pack> --text "…" (verbatim; CLI is the
              only parser). Approval/keep materialize to icons/, dependents
              of changed anchors go stale automatically.
-6. REPEAT    When `wait` returns:
+6. LEARN     After each round, before repeating: analyze which candidates
+             scored highest and lowest. If a pattern emerges (e.g. "icons with
+             thinner strokes consistently score 8+") suggest adding it to the
+             pack's style_words via the review page. If a pattern fails
+             consistently, suggest adding it to avoid. The user confirms —
+             style evolution is a human decision, but you propose.
+6b. REPEAT   When `wait` return:
              a) read .runs/<round>/decisions.json — applied items + instructions
              b) `iconpilot status <pack>` — see ✎edited markers and new notes
              c) re-run `context` for every variant you'll draft next

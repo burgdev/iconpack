@@ -124,6 +124,10 @@ footer { text-align:center; color:var(--muted); font-size:.75rem; padding:20px 0
 .vargrid { display:flex; flex-direction:column; gap:10px; }
 .vargroup { border-left:3px solid var(--line); padding-left:10px; }
 .varhead { display:flex; align-items:center; gap:8px; margin-bottom:6px; }
+.compare-grid { display:flex; gap:16px; }
+.compare-col { flex:1; text-align:center; }
+.compare-label { font-weight:600; margin-bottom:8px; }
+.compare-sizes { display:flex; justify-content:center; gap:12px; align-items:flex-end; margin-top:8px; }
 .card.kbactive { outline: 3px solid var(--accent); outline-offset: 2px; }
 .iconbtn { padding:3px 7px; font-size:.85rem; border:none; background:none; cursor:pointer;
              color:var(--muted); border-radius:6px; }
@@ -204,6 +208,7 @@ footer { text-align:center; color:var(--muted); font-size:.75rem; padding:20px 0
             </div>
             <button class="subtle" :class="{ armed: item(c)?.t === c.cand + ' keep' }"
                     @click="keep(c)">keep (refine)</button>
+            <button class="iconbtn" title="compare" @click="toggleCompare(c)">⇄</button>
           </div>
             </div>
           </div>
@@ -230,6 +235,13 @@ footer { text-align:center; color:var(--muted); font-size:.75rem; padding:20px 0
           <button class="subtle" @click="S.showGen = !S.showGen">{{ S.showGen ? 'hide' : 'show' }} generated</button>
           <button class="subtle" @click="markDirty(); S.decisionEdit = S.decisionText">reset to generated</button>
           <button @click="copy">copy JSON</button>
+        </div>
+        <div class="row" style="margin-top:6px">
+          <span class="muted">batch:</span>
+          <button class="subtle" @click="batchApprove(7)" title="approve all rated ≥7">✓ all ≥7</button>
+          <button class="subtle" @click="batchApprove(8)" title="approve all rated ≥8">✓ all ≥8</button>
+          <button class="subtle armed-x" @click="batchReject(3)" title="reject all rated ≤3">✕ all ≤3</button>
+          <button class="subtle armed-x" @click="batchReject(0)" title="reject all unrated (rated 0)">✕ unrated</button>
         </div>
         <textarea v-if="S.showGen" readonly :value="S.decisionText"></textarea>
       </details>
@@ -342,6 +354,35 @@ footer { text-align:center; color:var(--muted); font-size:.75rem; padding:20px 0
     </div>
   </div>
 
+
+  <div v-if="S.compare && S.compare.length === 2" class="overlay" @click.self="S.compare = null">
+    <div class="dialog" style="max-width:700px">
+      <h3><span>Compare: {{ S.compare[0].cand }} vs {{ S.compare[1].cand }}</span>
+          <button class="subtle" @click="S.compare = null">✕</button></h3>
+      <div class="compare-grid">
+        <div v-for="c in S.compare" :key="c.cand" class="compare-col">
+          <div class="compare-label">{{ c.icon }} / {{ c.variant }} · {{ c.cand }}</div>
+          <div class="stage" style="background:#f6f9f7">
+            <img :width="96" :height="96" :src="render(c.path, 96, '#f6f9f7')">
+          </div>
+          <div class="stage" style="background:#22292e">
+            <img :width="96" :height="96" :src="render(c.path, 96, '#22292e', '#f2f7f4')">
+          </div>
+          <div class="compare-sizes">
+            <img :width="48" :height="48" :src="render(c.path, 48, '#f6f9f7')">
+            <img :width="24" :height="24" :src="render(c.path, 24, '#f6f9f7')">
+            <img :width="16" :height="16" :src="render(c.path, 16, '#f6f9f7')">
+          </div>
+          <div class="rating" style="margin-top:6px">
+            <button :class="{ armed: item(c)?.t === c.cand + ' ok' }" @click="approve(c)">✓</button>
+            <button class="ratebtn" @click="openSheet(c)">★ {{ rating(c) }}</button>
+            <button :class="{ 'armed-x': item(c)?.t?.startsWith(c.cand + ' no') }" @click="drop(c)">✕</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
   <div v-if="S.noteDlg" class="overlay" @click.self="S.noteDlg = null">
     <div class="dialog">
       <h3><span>💬 {{ S.noteDlg.g.icon }} / {{ S.noteDlg.g.variant }}</span>
@@ -434,7 +475,7 @@ const S = reactive({
   dlg: null, sheet: null, noteDlg: null, settingsDlg: false,
   decisionEdit: '', showGen: false, editingBrief: null,
   flash: '', flashOk: true, applying: false, instructions: '', vNoteDlg: null,
-  kbFocus: 0, kbVariant: 0, kbCand: 0,
+  kbFocus: 0, kbVariant: 0, kbCand: 0, compare: null,
   history: [], showHistory: false,
   set: { version: '', rules: '', strokeWidth: 2, linecap: 'round', linejoin: 'round', padding: 2, precision: 0.5, palette: null, errors: '' },
   bgs: [
@@ -520,6 +561,28 @@ async function saveVariantNote() {
     S.msg = `variant note saved (rev ${r.rev})`; S.msgClass = 'ok';
     S.vNoteDlg = null; await load();
   } catch (e) { S.msg = e.d?.errors ? e.d.errors.join(' ') : e.message; S.msgClass = 'err'; }
+}
+function batchApprove(minScore) {
+  // approve all candidates rated >= minScore
+  for (const g of S.grouped) {
+    for (const vg of variantGroups(g)) {
+      for (const c of vg.cands) {
+        if (rating(c) >= minScore) approve(c);
+      }
+    }
+  }
+  flash('batch: approved all rated ≥ ' + minScore, true);
+}
+function batchReject(maxScore) {
+  // reject all candidates rated <= maxScore
+  for (const g of S.grouped) {
+    for (const vg of variantGroups(g)) {
+      for (const c of vg.cands) {
+        if (rating(c) > 0 && rating(c) <= maxScore) drop(c);
+      }
+    }
+  }
+  flash('batch: rejected all rated ≤ ' + maxScore, true);
 }
 function rejectAllIcon(g) {
   for (const vg of variantGroups(g)) {
@@ -643,6 +706,17 @@ function styleLabel(sid) {
   return sid + (s ? ` — ${s.label}` : '');
 }
 function openSheet(c) { S.sheet = { c }; }
+function toggleCompare(c) {
+  if (!S.compare) { S.compare = [c]; S.msg = 'compare: selected ' + c.icon + '/' + c.variant + '/' + c.cand; }
+  else if (S.compare.length < 2) {
+    S.compare.push(c);
+    S.msg = 'comparing ' + S.compare.map(x => x.cand).join(' vs ');
+  } else {
+    S.compare = [c];
+    S.msg = 'compare: selected ' + c.cand;
+  }
+  S.msgClass = 'ok';
+}
 function openSettings() {
   const sp = S.pack.spec || {};
   S.set = {
@@ -857,6 +931,7 @@ const App = {
       openSettings, saveSettings, markDirty,
       variantGroups, packBriefIcon, mainColorIcon, saveMainColorIcon, rejectAllIcon,
       variantNote, openVariantNote, saveVariantNote, copyPath, togglePin, isPinned, undo,
+      batchApprove, batchReject, toggleCompare,
     };
   },
 };

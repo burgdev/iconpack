@@ -234,6 +234,10 @@ class ReviewHandler(BaseHTTPRequestHandler):
         if url.path == "/api/history":
             rounds = []
             runs_dir = self.pack_dir / ".runs"
+            try:
+                pack, _ = load_pack(self.pack_dir / "pack.json")
+            except Exception:
+                pack = {"icons": {}}
             if runs_dir.is_dir():
                 for run in sorted(p.name for p in runs_dir.glob("r*") if p.is_dir()):
                     info = {"round": run, "decided": False, "icons": {}, "instructions": None}
@@ -249,7 +253,22 @@ class ReviewHandler(BaseHTTPRequestHandler):
                     if not info["decided"]:
                         cands = [c.stem for c in (runs_dir / run).rglob("*.svg")]
                         info["candidates"] = len(cands)
-                    # what was approved this round (from pack state)
+                    # quality metrics from gate reports
+                    gates = list((runs_dir / run).rglob("*.gate.json"))
+                    n_pass = sum(1 for g in gates if json.loads(g.read_text()).get("passed"))
+                    info["metrics"] = {
+                        "gate_total": len(gates),
+                        "gate_passed": n_pass,
+                        "gate_rate": round(n_pass / len(gates), 2) if gates else None,
+                    }
+                    # approval metrics from pack state
+                    approved = sum(
+                        1
+                        for icon in pack.get("icons", {}).values()
+                        for vv in icon.get("variants", {}).values()
+                        if vv.get("chosen", {}).get("run") == run
+                    )
+                    info["metrics"]["approved"] = approved
                     rounds.append(info)
             self._json(200, {"rounds": rounds})
             return

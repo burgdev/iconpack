@@ -203,6 +203,71 @@ def wait(
 
 
 @app.command()
+def diff(pack: str) -> None:
+    """Show what changed since the last round: statuses, briefs, notes, SVG edits."""
+    from iconpilot.edits import detect_edits
+
+    try:
+        pack_data, _styles = _load_pack_arg(pack)
+    except PackError as exc:
+        typer.secho(str(exc), fg=typer.colors.RED, err=True)
+        raise typer.Exit(code=2) from exc
+
+    pack_dir = resolve_pack_dir(pack)
+
+    # find the last two rounds with decisions
+    runs = sorted(p.name for p in (pack_dir / ".runs").glob("r*") if p.is_dir())
+    decided_runs = []
+    for run in reversed(runs):
+        if (pack_dir / ".runs" / run / "decisions.json").is_file():
+            decided_runs.append(run)
+        if len(decided_runs) >= 2:
+            break
+
+    typer.echo(f"── {pack_data['name']} — changes in {decided_runs[0] if decided_runs else '—'}")
+
+    # 1) hand-edited SVGs (content_hash mismatches)
+    edited = detect_edits(pack_dir, pack_data)
+    if edited:
+        typer.secho("  ✎ hand-edited SVGs:", fg=typer.colors.YELLOW)
+        for e in edited:
+            typer.echo(f"    {e['icon']}#{e['variant']}")
+
+    # 2) decisions from last round
+    if decided_runs:
+        dec_path = pack_dir / ".runs" / decided_runs[0] / "decisions.json"
+        try:
+            dec = json.loads(dec_path.read_text())
+            typer.secho(f"  decisions in {decided_runs[0]}:", fg=typer.colors.GREEN)
+            for key, payload in dec.get("icons", {}).items():
+                items = payload.get("items", [])
+                summary = " · ".join(i.get("t", "?") for i in items)
+                typer.echo(f"    {key}: {summary}")
+            if dec.get("instructions"):
+                typer.secho(f"  instructions: {dec['instructions']}", fg=typer.colors.CYAN)
+        except (ValueError, OSError):
+            pass
+
+    # 3) variant status summary
+    counts: dict[str, int] = {}
+    for icon in pack_data["icons"].values():
+        for v in icon["variants"].values():
+            if "style" in v:
+                st = v.get("status", "todo")
+                counts[st] = counts.get(st, 0) + 1
+    summary = " · ".join(f"{k}={v}" for k, v in sorted(counts.items()))
+    typer.secho(f"  pack: {summary}", fg=typer.colors.GREEN)
+
+    # 4) notes (pack, icon, variant)
+    if pack_data.get("note"):
+        typer.secho(f"  pack note: {pack_data['note'][:80]}", fg=typer.colors.CYAN)
+    for iid, icon in pack_data["icons"].items():
+        for vid, v in icon["variants"].items():
+            if v.get("note"):
+                typer.secho(f"  note {iid}#{vid}: {v['note'][:60]}", fg=typer.colors.CYAN)
+
+
+@app.command()
 def step(pack: str) -> None:
     """One round step: gate all candidates + contact sheet + status signal."""
     import subprocess
@@ -724,13 +789,13 @@ def export(
         )
         raise typer.Exit(code=2)
     try:
-        pack_data, _styles = _load_pack_arg(pack)
+        pack_data, styles = _load_pack_arg(pack)
     except PackError as exc:
         typer.secho(str(exc), fg=typer.colors.RED, err=True)
         raise typer.Exit(code=2) from exc
 
     pack_dir = resolve_pack_dir(pack)
-    entries, skipped = collect_exportables(pack_dir, pack_data, _styles)
+    entries, skipped = collect_exportables(pack_dir, pack_data, styles)
     out_dir = Path(out)
     out_dir.mkdir(parents=True, exist_ok=True)
 
