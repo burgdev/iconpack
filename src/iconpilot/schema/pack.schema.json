@@ -86,6 +86,26 @@
       "minimum": 0,
       "maximum": 1,
       "description": "0=loose (early exploration), 1=strict (final polish). Scales gate tolerance."
+    },
+    "recraft": {
+      "type": "object",
+      "description": "Recraft seeder configuration (created by `iconpilot recraft-style`).",
+      "properties": {
+        "style_id": {
+          "type": "string"
+        },
+        "model": {
+          "type": "string"
+        },
+        "name": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "style_id",
+        "model"
+      ],
+      "additionalProperties": false
     }
   },
   "$defs": {

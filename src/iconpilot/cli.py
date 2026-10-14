@@ -202,6 +202,197 @@ def wait(
         typer.echo(f"  {result['summary']}")
 
 
+@app.command(name="recraft-style")
+def recraft_style(
+    pack: str,
+    match: str = typer.Option("precise", help="Style match: precise or flexible."),
+) -> None:
+    """Create a Recraft custom style from approved/pinned icons; store its id in pack.json."""
+    import iconpilot.recraft as rc
+
+    try:
+        pack_data, _styles = _load_pack_arg(pack)
+    except PackError as exc:
+        typer.secho(str(exc), fg=typer.colors.RED, err=True)
+        raise typer.Exit(code=2) from exc
+
+    token = rc.resolve_token()
+    if not token:
+        typer.secho(
+            "no Recraft token — set RECRAFT_API_TOKEN or [recraft] token in "
+            + str(rc.models_path()),
+            fg=typer.colors.RED,
+            err=True,
+        )
+        raise typer.Exit(code=2)
+
+    pack_dir = resolve_pack_dir(pack)
+
+    # collect references: pinned first, then approved+chosen; max 10 (Recraft limit)
+    refs: list[str] = []
+    seen: set[tuple[str, str]] = set()
+
+    def add_ref(iid: str, vid: str) -> None:
+        if (iid, vid) in seen or len(refs) >= 10:
+            return
+        f = pack_dir / "icons" / iid / f"{vid}.svg"
+        if f.is_file():
+            refs.append(f.read_text())
+            seen.add((iid, vid))
+
+    for pri in (True, False):  # pinned pass, then approved pass
+        for iid, icon in pack_data["icons"].items():
+            for vid, v in icon.get("variants", {}).items():
+                if (pri and v.get("pinned")) or (
+                    not pri and v.get("status") == "approved" and v.get("chosen")
+                ):
+                    add_ref(iid, vid)
+    if not refs:
+        typer.secho(
+            "no reference SVGs — approve (or pin) at least one variant first",
+            fg=typer.colors.RED,
+            err=True,
+        )
+        raise typer.Exit(code=2)
+
+    try:
+        style = rc.create_style(token, refs, match=match)
+    except rc.RecraftError as exc:
+        typer.secho(str(exc), fg=typer.colors.RED, err=True)
+        raise typer.Exit(code=1) from exc
+
+    pack_data["recraft"] = {
+        "style_id": style["id"],
+        "model": rc.DEFAULT_MODEL,
+        "name": f"{pack_data['name']} style",
+    }
+    with pack_lock(pack_dir):
+        write_pack_atomic(pack_dir, pack_data)
+    typer.secho(
+        f"recraft style created: {style['id']} ({len(refs)} refs, "
+        f"~${0.005:.3f}) — stored in pack.json",
+        fg=typer.colors.GREEN,
+    )
+
+
+@app.command()
+def draft(
+    pack: str,
+    icon_id: str = typer.Argument(help="Icon id to draft."),
+    variant: str = typer.Option(None, help="Variant/style id (default: the icon's only variant)."),
+    n: int = typer.Option(4, min=1, max=6, help="Candidates to generate."),
+    prompt: str = typer.Option("", help="Extra prompt text appended to the brief."),
+    new_round: bool = typer.Option(False, "--new-round", help="Start a fresh run directory."),
+) -> None:
+    """Seed candidates for one icon via the Recraft API, then gate them."""
+    import iconpilot.recraft as rc
+
+    try:
+        pack_data, styles = _load_pack_arg(pack)
+    except PackError as exc:
+        typer.secho(str(exc), fg=typer.colors.RED, err=True)
+        raise typer.Exit(code=2) from exc
+
+    token = rc.resolve_token()
+    if not token:
+        typer.secho("no Recraft token — set RECRAFT_API_TOKEN", fg=typer.colors.RED, err=True)
+        raise typer.Exit(code=2)
+
+    icon = pack_data["icons"].get(icon_id)
+    if icon is None:
+        typer.secho(f"unknown icon '{icon_id}'", fg=typer.colors.RED, err=True)
+        raise typer.Exit(code=2)
+    variants = [v for v in icon.get("variants", {}) if "style" in icon["variants"][v]]
+    if variant:
+        if variant not in variants:
+            typer.secho(f"no variant '{variant}' on {icon_id}", fg=typer.colors.RED, err=True)
+            raise typer.Exit(code=2)
+    elif len(variants) == 1:
+        variant = variants[0]
+    else:
+        typer.secho(
+            f"{icon_id} has variants {variants} — pass --variant", fg=typer.colors.RED, err=True
+        )
+        raise typer.Exit(code=2)
+
+    style = styles[icon["variants"][variant]["style"]]
+    style_id = pack_data.get("recraft", {}).get("style_id")
+    if not style_id:
+        typer.secho(
+            "warning: no recraft style_id in pack.json — using plain model "
+            f"({rc.FALLBACK_MODEL}); run `iconpilot recraft-style` for consistency",
+            fg=typer.colors.YELLOW,
+            err=True,
+        )
+
+    # prompt: brief + style words + rules
+    parts = [icon.get("brief", icon_id), style.label, " ".join(style.style_words)]
+    if style.avoid:
+        parts.append("avoid: " + ", ".join(style.avoid))
+    parts += pack_data.get("rules", [])
+    if prompt:
+        parts.append(prompt)
+    full_prompt = ", ".join(p for p in parts if p)[:1000]
+
+    try:
+        raw_svgs = rc.generate(token, full_prompt, n=n, style_id=style_id)
+    except rc.RecraftError as exc:
+        typer.secho(str(exc), fg=typer.colors.RED, err=True)
+        raise typer.Exit(code=1) from exc
+
+    # run directory: latest, or a new one
+    pack_dir = resolve_pack_dir(pack)
+    runs_dir = pack_dir / ".runs"
+    runs = sorted(p.name for p in runs_dir.glob("r*")) if runs_dir.is_dir() else []
+    if new_round or not runs:
+        run = f"r{len(runs) + 1:03d}"
+    else:
+        run = runs[-1]
+    cand_dir = runs_dir / run / variant / icon_id
+    cand_dir.mkdir(parents=True, exist_ok=True)
+    existing = len(list(cand_dir.glob("r*.svg")))
+    viewbox = pack_data["spec"]["viewBox"]
+
+    wrote: list[Path] = []
+    for i, raw in enumerate(raw_svgs, start=1):
+        svg = rc.normalize(raw, viewbox)
+        f = cand_dir / f"r{existing + i}.svg"
+        f.write_text(svg)
+        wrote.append(f)
+
+    # record cost (round.json convention from the skill)
+    round_json = runs_dir / run / "round.json"
+    try:
+        rj = json.loads(round_json.read_text()) if round_json.is_file() else {}
+    except ValueError:
+        rj = {}
+    rj.setdefault("models_used", {})["seeder"] = (
+        pack_data.get("recraft", {}).get("model") or rc.FALLBACK_MODEL
+    )
+    rj["candidates_generated"] = rj.get("candidates_generated", 0) + len(wrote)
+    rj["estimated_cost_usd"] = round(rj.get("estimated_cost_usd", 0) + 0.05 * len(wrote), 4)
+    round_json.write_text(json.dumps(rj, indent=2) + "\n")
+
+    # gate each seed (informational — seeds are redrawn by the agent, not shipped)
+    n_pass = 0
+    for f in wrote:
+        report = run_gate(f, pack_data, style)
+        if report.passed:
+            n_pass += 1
+    typer.secho(
+        f"{run}/{variant}/{icon_id}: {len(wrote)} seeds written (r{existing + 1}"
+        f"..r{existing + len(wrote)}), gate {n_pass}/{len(wrote)} pass "
+        f"~${0.05 * len(wrote):.2f}",
+        fg=typer.colors.GREEN,
+    )
+    if n_pass < len(wrote):
+        typer.secho(
+            "seeds failing the gate are expected — agent redraws on-grid; "
+            "run `iconpilot step` for details",
+            fg=typer.colors.YELLOW,
+        )
+
+
 @app.command(name="style-export")
 def style_export(
     pack: str, out: str = typer.Option(..., "--out", help="Output JSON path.")

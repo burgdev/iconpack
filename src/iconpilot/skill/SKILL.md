@@ -162,6 +162,20 @@ and style numbers always win over DESIGN.md prose).
 
 Round layout: `.runs/<round>/<variant>/<icon>/<cand>.svg` (r001, r002, …).
 
+## Recraft seeding (optional quality floor)
+
+For filled/color variants, Recraft can seed shape language before you redraw:
+
+    iconpilot recraft-style <pack>     # once: custom style from approved/pinned icons ($0.005)
+    iconpilot draft <pack> <icon> --n 4  # seeds r*.svg into the current run (~$0.05/img)
+
+Seeds arrive on a rescaled grid wrapped in a transform group — they will NOT
+pass the gate as-is (by design: seeds are references, not output). Your job:
+redraw the best seed's silhouette on-grid in your normal fix-only pass, then
+gate. Record the seeder cost in round.json (draft does this automatically).
+
+Do NOT seed mono-line variants — Recraft emits filled paths, wrong construction.
+
 ## Model routing (user-definable)
 
 The tool never calls models — the harness does. Routing lives in
