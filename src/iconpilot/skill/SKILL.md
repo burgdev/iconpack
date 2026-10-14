@@ -1,3 +1,25 @@
+# iconpilot — quick reference
+
+```
+context → draft → gate --fix → step → wait → read decisions → repeat → export
+```
+
+| Step | Command | What |
+|------|---------|------|
+| Context | `iconpilot context <pack> --icon <id> --variant <v>` | Full drafting contract |
+| Draft | Write SVGs to `.runs/<round>/<variant>/<icon>/<cand>.svg` | You or a subagent |
+| Gate | `iconpilot gate <pack>/.runs/<round> --pack <pack>` | Deterministic check; `--fix` auto-corrects |
+| Step | `iconpilot step <pack>` | Gate + contact-sheet + status in one |
+| Wait | `iconpilot wait <pack>` | Blocks until user applies |
+| Status | `iconpilot status <pack>` | States, ✎edited, stale, notes |
+| Decide | `iconpilot decide <pack> --text "..."` | Only YOU pass user text through |
+| Export | `iconpilot export <pack> --target <T> --out <D>` | svg/maplibre/iconify |
+| Packs | `iconpilot packs` | List all; ask user if ambiguous |
+
+**Hard rules**: never edit pack.json state by hand · approval is always the user's ·
+gate is the only certifier · notes (pack > icon > variant) are standing orders.
+
+---
 ---
 name: iconpilot
 description: Design, review, and export consistent SVG icon packs with iconpilot — deterministic gates, pack state, review rounds, and exports (SVG, MapLibre sprites, Iconify JSON). The agent is the model layer; iconpilot never calls LLMs. Use when creating or extending an icon pack, drafting/gating variants, applying review decisions, or exporting icons into a project.

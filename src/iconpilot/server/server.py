@@ -209,6 +209,28 @@ class ReviewHandler(BaseHTTPRequestHandler):
                 self._json(404, {"error": "svg not found"})
             return
 
+        if url.path == "/api/undo":
+            try:
+                with pack_lock(self.pack_dir):
+                    # find the latest backup
+                    backup = self.pack_dir / ".pack-backup.json"
+                    if not backup.is_file():
+                        self._json(404, {"error": "no backup to undo"})
+                        return
+                    pack = json.loads(backup.read_text())
+                    _, errors = revalidate(pack)
+                    if errors:
+                        self._json(400, {"errors": errors})
+                        return
+                    write_pack_atomic(self.pack_dir, pack)
+                    backup.unlink()
+                self._json(200, {"rev": pack.get("rev", 0), "undone": True})
+            except TimeoutError as exc:
+                self._json(423, {"error": str(exc)})
+            except Exception as exc:
+                self._json(500, {"error": str(exc)})
+            return
+
         if url.path == "/api/history":
             rounds = []
             runs_dir = self.pack_dir / ".runs"
@@ -284,6 +306,10 @@ class ReviewHandler(BaseHTTPRequestHandler):
                     if not runs:
                         raise ValueError("no rounds under .runs/")
                     round_id = runs[-1]
+                # backup before apply (for undo)
+                import shutil
+
+                shutil.copyfile(self.pack_dir / "pack.json", self.pack_dir / ".pack-backup.json")
                 log = apply_decisions(
                     self.pack_dir,
                     pack,

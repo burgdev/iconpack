@@ -375,3 +375,85 @@ def run_gate(svg_path: str | Path, pack: dict, style: Style) -> GateReport:
     _geometry(root, pack.get("spec", {}), style, viewbox, report)
     _render(path, style, report)
     return report
+
+
+def fix_svg(svg_path: Path, precision: float = 0.5) -> tuple[str, int]:
+    """Round all coordinates to the nearest grid step. Returns (fixed_svg_text, n_changes)."""
+    root = etree.parse(str(svg_path)).getroot()
+    changes = 0
+
+    def snap(v: float) -> float:
+        nonlocal changes
+        snapped = round(v / precision) * precision
+        if abs(snapped - v) > 1e-9:
+            changes += 1
+        return snapped
+
+    def fmt(v: float) -> str:
+        return str(int(v)) if v == int(v) else str(round(v, 2)).rstrip("0").rstrip(".")
+
+    for el in root.iter():
+        name = etree.QName(el).localname
+        if name == "path":
+            d = el.get("d", "")
+            if not d:
+                continue
+            try:
+                segs = parse_path(d)
+            except Exception:  # noqa: BLE001, S112 — gate reports these
+                continue
+            # rebuild d with snapped coords
+            parts = []
+            for seg in segs:
+                cls = type(seg).__name__
+                if cls == "Line":
+                    parts.append(f"L{fmt(snap(seg.end.real))} {fmt(snap(seg.end.imag))}")
+                elif cls == "CubicBezier":
+                    parts.append(
+                        f"C{fmt(snap(seg.control1.real))} {fmt(snap(seg.control1.imag))} "
+                        f"{fmt(snap(seg.control2.real))} {fmt(snap(seg.control2.imag))} "
+                        f"{fmt(snap(seg.end.real))} {fmt(snap(seg.end.imag))}"
+                    )
+                elif cls == "QuadraticBezier":
+                    parts.append(
+                        f"Q{fmt(snap(seg.control.real))} {fmt(snap(seg.control.imag))} "
+                        f"{fmt(snap(seg.end.real))} {fmt(snap(seg.end.imag))}"
+                    )
+                elif cls == "Arc":
+                    parts.append(
+                        f"A{fmt(seg.radius.real)} {fmt(seg.radius.imag)} {fmt(seg.rotation)} "
+                        f"{int(seg.large_arc)} {int(seg.sweep)} "
+                        f"{fmt(snap(seg.end.real))} {fmt(snap(seg.end.imag))}"
+                    )
+            if parts:
+                start_x = snap(segs[0].start.real) if segs else 0
+                start_y = snap(segs[0].start.imag) if segs else 0
+                el.set("d", f"M{fmt(start_x)} {fmt(start_y)} " + " ".join(parts))
+        elif name in _NUM_ATTRS:
+            for attr in _NUM_ATTRS[name]:
+                val = el.get(attr)
+                if val is not None:
+                    try:
+                        v = float(val)
+                        sv = snap(v)
+                        if sv != v:
+                            el.set(attr, fmt(sv))
+                    except ValueError:
+                        continue
+
+    # preserve root attributes
+    for attr in (
+        "viewBox",
+        "fill",
+        "stroke",
+        "stroke-width",
+        "stroke-linecap",
+        "stroke-linejoin",
+        "xmlns",
+        "width",
+        "height",
+    ):
+        pass  # already on root
+
+    xml = etree.tostring(root, encoding="unicode")
+    return xml, changes

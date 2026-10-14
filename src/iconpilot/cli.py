@@ -202,6 +202,51 @@ def wait(
         typer.echo(f"  {result['summary']}")
 
 
+@app.command()
+def step(pack: str) -> None:
+    """One round step: gate all candidates + contact sheet + status signal."""
+    import subprocess
+    import sys
+
+    pack_dir = resolve_pack_dir(pack)
+    runs = (
+        sorted(p.name for p in (pack_dir / ".runs").glob("r*"))
+        if (pack_dir / ".runs").is_dir()
+        else []
+    )
+    if not runs:
+        typer.secho("no rounds under .runs/", fg=typer.colors.RED, err=True)
+        raise typer.Exit(code=2)
+    latest = pack_dir / ".runs" / runs[-1]
+
+    # 1) gate
+    typer.echo(f"── gating {runs[-1]} …")
+    rc = subprocess.call(
+        [sys.executable, "-m", "iconpilot.cli", "gate", str(latest), "--pack", pack]
+    )
+    if rc != 0:
+        typer.secho("gate failures — fix before screening", fg=typer.colors.RED)
+        # still generate the sheet so the user can see failures
+
+    # 2) contact sheet
+    typer.echo("── contact sheet …")
+    from iconpilot.render.contact import contact_sheet as make_sheet
+
+    svgs = sorted(latest.rglob("*.svg"))
+    svgs = [s for s in svgs if not s.name.startswith(".")]
+    if svgs:
+        sheet = latest / "contact-sheet.png"
+        make_sheet(svgs, sheet, title=runs[-1])
+        typer.secho(f"  {len(svgs)} icons → {sheet}", fg=typer.colors.GREEN)
+
+    # 3) status signal
+    n_pass = sum(1 for f in latest.rglob("*.gate.json") if json.loads(f.read_text()).get("passed"))
+    n_total = sum(1 for _ in latest.rglob("*.gate.json"))
+    msg = f"round {runs[-1]}: {n_pass}/{n_total} passed gate — ready for screening"
+    (latest / ".ai-status").write_text(msg + "\n")
+    typer.secho(f"── {msg}", fg=typer.colors.GREEN)
+
+
 @app.command(name="packs")
 def packs() -> None:
     """List discovered packs across configured roots (config.toml [packs].dirs)."""
@@ -487,8 +532,13 @@ def gate(
         None, help="Variant name; single SVG only. Batch mode resolves per path."
     ),
     as_json: bool = typer.Option(False, "--json"),
+    fix: bool = typer.Option(
+        False, "--fix", help="Auto-fix coordinates to the grid, then re-gate."
+    ),
 ) -> None:
     """Run the deterministic gate on an SVG — or every SVG under a run dir.
+
+    Use --fix to snap coordinates to the precision grid before gating.
 
     Batch layout: <run-dir>/<variant>/<icon>/<candidate>.svg — the style is
     resolved per file from the pack; a <candidate>.gate.json is written beside
@@ -564,6 +614,18 @@ def gate(
         typer.secho("pack has no authored variants to gate against", fg=typer.colors.RED, err=True)
         raise typer.Exit(code=2)
 
+    if fix:
+        from iconpilot.gate.run import fix_svg
+
+        spec_precision = pack_data.get("spec", {}).get("precision", 0.5)
+        fixed_svg, n = fix_svg(target, spec_precision)
+        if n > 0:
+            target.write_text(fixed_svg)
+            typer.secho(
+                f"  fixed {n} coordinate(s) snapped to {spec_precision} grid", fg=typer.colors.CYAN
+            )
+        else:
+            typer.secho("  already on grid — no changes needed", fg=typer.colors.GREEN)
     ok = _gate_one(target, pack_data, styles[target_v["style"]], as_json, write_report=False)
     raise typer.Exit(code=0 if ok else 1)
 

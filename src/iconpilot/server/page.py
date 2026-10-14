@@ -124,6 +124,7 @@ footer { text-align:center; color:var(--muted); font-size:.75rem; padding:20px 0
 .vargrid { display:flex; flex-direction:column; gap:10px; }
 .vargroup { border-left:3px solid var(--line); padding-left:10px; }
 .varhead { display:flex; align-items:center; gap:8px; margin-bottom:6px; }
+.card.kbactive { outline: 3px solid var(--accent); outline-offset: 2px; }
 .iconbtn { padding:3px 7px; font-size:.85rem; border:none; background:none; cursor:pointer;
              color:var(--muted); border-radius:6px; }
 .iconbtn:hover { color:var(--ink); background:var(--chip); }
@@ -292,6 +293,7 @@ footer { text-align:center; color:var(--muted); font-size:.75rem; padding:20px 0
         {{ S.actionBar.text }}
       </template>
     </span>
+    <button class="subtle" @click="undo" title="undo last apply">↩</button>
     <button class="primary ab-apply" @click="apply"
             :disabled="!S.decisionEdit.trim() || S.applying">
       {{ S.applying ? '…' : 'Apply' + (S.lines.length ? ' · ' + S.lines.length : '') }}</button>
@@ -432,6 +434,7 @@ const S = reactive({
   dlg: null, sheet: null, noteDlg: null, settingsDlg: false,
   decisionEdit: '', showGen: false, editingBrief: null,
   flash: '', flashOk: true, applying: false, instructions: '', vNoteDlg: null,
+  kbFocus: 0, kbVariant: 0, kbCand: 0,
   history: [], showHistory: false,
   set: { version: '', rules: '', strokeWidth: 2, linecap: 'round', linejoin: 'round', padding: 2, precision: 0.5, palette: null, errors: '' },
   bgs: [
@@ -697,6 +700,15 @@ function flash(text, ok) {
   clearTimeout(flashTimer);
   flashTimer = setTimeout(() => { S.flash = ''; }, 5000);
 }
+async function undo() {
+  try {
+    const r = await api('/api/undo', { method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: '{}' });
+    flash('↩ undone (rev ' + r.rev + ')', true);
+    S.decisions = {}; editDirty = false; S.decisionEdit = ''; S.instructions = '';
+    clearDraft(); await load();
+  } catch (e) { flash('✗ ' + e.message, false); }
+}
 async function apply() {
   const text = S.decisionEdit.trim();
   if (!text || S.applying) return;
@@ -800,7 +812,7 @@ const App = {
       mainColor, packBrief, saveBrief, saveMainColor, hasNote, openNote, saveNote,
       openSettings, saveSettings, markDirty,
       variantGroups, packBriefIcon, mainColorIcon, saveMainColorIcon, rejectAllIcon,
-      variantNote, openVariantNote, saveVariantNote, copyPath, togglePin, isPinned,
+      variantNote, openVariantNote, saveVariantNote, copyPath, togglePin, isPinned, undo,
     };
   },
 };
