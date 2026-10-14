@@ -67,6 +67,8 @@ def build_context(
         ctx["pack_note"] = pack["note"]
     if icon.get("note"):
         ctx["icon_note"] = icon["note"]
+    if variant.get("note"):
+        ctx["variant_note"] = variant["note"]
     if style.palette:
         ctx["palette"] = list(style.palette)
     if style.guidance:
@@ -132,6 +134,8 @@ def render_markdown(ctx: dict) -> str:
         lines += [f"**Pack note (standing instructions):** {ctx['pack_note']}", ""]
     if "icon_note" in ctx:
         lines += [f"**Icon note (from the user):** {ctx['icon_note']}", ""]
+    if "variant_note" in ctx:
+        lines += [f"**Variant note:** {ctx['variant_note']}", ""]
     if "palette" in ctx:
         lines += [f"**Palette (only these colors):** {', '.join(ctx['palette'])}", ""]
     if "style_guidance" in ctx:

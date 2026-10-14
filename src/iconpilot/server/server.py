@@ -187,6 +187,28 @@ class ReviewHandler(BaseHTTPRequestHandler):
             )
             return
 
+        if url.path == "/api/svg-path":
+            icon_id = (q.get("icon") or [""])[0]
+            variant_id = (q.get("variant") or [""])[0]
+            f = self.pack_dir / "icons" / icon_id / f"{variant_id}.svg"
+            if f.is_file():
+                self._json(200, {"path": str(f.resolve())})
+            else:
+                # try the latest run candidate
+                runs = (
+                    sorted(p.name for p in (self.pack_dir / ".runs").glob("r*") if p.is_dir())
+                    if (self.pack_dir / ".runs").is_dir()
+                    else []
+                )
+                if runs:
+                    cand = (q.get("cand") or ["a1"])[0]
+                    f = self.pack_dir / ".runs" / runs[-1] / variant_id / icon_id / f"{cand}.svg"
+                    if f.is_file():
+                        self._json(200, {"path": str(f.resolve())})
+                        return
+                self._json(404, {"error": "svg not found"})
+            return
+
         if url.path == "/api/ai-status":
             f = self.pack_dir / ".runs" / ".ai-status"
             status = ""
@@ -298,7 +320,8 @@ class ReviewHandler(BaseHTTPRequestHandler):
             icon_id = data.get("icon")
             variant_id = data.get("variant")
             style_id = data.get("style")
-            if not (icon_id and variant_id and style_id):
+            note = data.get("note")
+            if not (icon_id and variant_id and (style_id or note is not None)):
                 self._json(400, {"error": "need icon, variant, style"})
                 return
             try:
@@ -308,10 +331,13 @@ class ReviewHandler(BaseHTTPRequestHandler):
                     if v is None or "link" in v:
                         self._json(404, {"error": f"no authored variant {icon_id}#{variant_id}"})
                         return
-                    if style_id not in styles:
+                    if style_id and style_id not in styles:
                         self._json(400, {"errors": [f"unknown style '{style_id}'"]})
                         return
-                    v["style"] = style_id
+                    if style_id:
+                        v["style"] = style_id
+                    if note is not None:
+                        v["note"] = note
                     _, errors = revalidate(pack)
                     if errors:
                         self._json(400, {"errors": errors})

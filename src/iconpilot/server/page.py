@@ -124,6 +124,10 @@ footer { text-align:center; color:var(--muted); font-size:.75rem; padding:20px 0
 .vargrid { display:flex; flex-direction:column; gap:10px; }
 .vargroup { border-left:3px solid var(--line); padding-left:10px; }
 .varhead { display:flex; align-items:center; gap:8px; margin-bottom:6px; }
+.iconbtn { padding:3px 7px; font-size:.85rem; border:none; background:none; cursor:pointer;
+             color:var(--muted); border-radius:6px; }
+.iconbtn:hover { color:var(--ink); background:var(--chip); }
+.iconbtn.on { color:var(--accent); font-weight:700; }
 .varstyle { font:inherit; font-size:.75rem; padding:2px 4px; border-radius:6px;
             border:1px solid var(--line); background:var(--card); color:var(--ink); }
 @media (max-width: 640px) {
@@ -175,6 +179,10 @@ footer { text-align:center; color:var(--muted); font-size:.75rem; padding:20px 0
               <select :value="vg.style" @change="switchStyle(g.icon, vg.variant, $event.target.value)" class="varstyle" title="style">
                 <option v-for="(st, sid) in S.styles" :key="sid" :value="sid">{{ sid }}</option>
               </select>
+              <button class="iconbtn" :class="{ on: variantNote(g, vg.variant) }"
+                      title="variant note" @click="openVariantNote(g, vg.variant)">💬</button>
+              <button class="iconbtn" title="copy SVG path (open in Inkscape)"
+                      @click="copyPath(g.icon, vg.variant, vg.cands[0]?.cand)">⧉</button>
             </div>
             <div class="grid">
               <div class="card" v-for="c in vg.cands" :key="c.cand">
@@ -297,6 +305,19 @@ footer { text-align:center; color:var(--muted); font-size:.75rem; padding:20px 0
     </div>
   </div>
 
+  <div v-if="S.vNoteDlg" class="overlay" @click.self="S.vNoteDlg = null">
+    <div class="dialog">
+      <h3><span>💬 {{ S.vNoteDlg.icon }} / {{ S.vNoteDlg.variant }}</span>
+          <button class="subtle" @click="S.vNoteDlg = null">✕</button></h3>
+      <p class="muted" style="margin:0 0 8px">Note for this specific variant — overrides the icon note.</p>
+      <textarea v-model="S.vNoteDlg.text"></textarea>
+      <div class="row" style="margin-top:8px">
+        <button class="primary" @click="saveVariantNote">Save</button>
+        <button class="subtle" v-if="S.vNoteDlg.text" @click="S.vNoteDlg.text = ''; saveVariantNote()">Clear</button>
+      </div>
+    </div>
+  </div>
+
   <div v-if="S.noteDlg" class="overlay" @click.self="S.noteDlg = null">
     <div class="dialog">
       <h3><span>💬 {{ S.noteDlg.g.icon }} / {{ S.noteDlg.g.variant }}</span>
@@ -388,7 +409,7 @@ const S = reactive({
   msg: '', msgClass: 'muted', editing: null,
   dlg: null, sheet: null, noteDlg: null, settingsDlg: false,
   decisionEdit: '', showGen: false, editingBrief: null,
-  flash: '', flashOk: true, applying: false, instructions: '',
+  flash: '', flashOk: true, applying: false, instructions: '', vNoteDlg: null,
   set: { version: '', rules: '', strokeWidth: 2, linecap: 'round', linejoin: 'round', padding: 2, precision: 0.5, palette: null, errors: '' },
   bgs: [
     { name: 'white', hex: '#ffffff' }, { name: 'paper', hex: '#f6f9f7' },
@@ -412,6 +433,20 @@ S.grouped = computed(() => {
   }
   return [...m.values()];
 });
+async function copyPath(icon, variant, cand) {
+  const q = new URLSearchParams({ icon, variant });
+  if (cand) q.set('cand', cand);
+  try {
+    const r = await api('/api/svg-path?' + q);
+    await navigator.clipboard.writeText(r.path).catch(async () => {
+      const ta = document.createElement('textarea');
+      ta.value = r.path; ta.style.cssText = 'position:fixed;opacity:0';
+      document.body.appendChild(ta); ta.select();
+      document.execCommand('copy'); ta.remove();
+    });
+    S.msg = 'path copied: ' + r.path; S.msgClass = 'ok';
+  } catch (e) { S.msg = 'copy failed'; S.msgClass = 'err'; }
+}
 function variantGroups(g) {
   const m = new Map();
   for (const c of g.cands) {
@@ -432,6 +467,21 @@ async function saveMainColorIcon(g, color) {
       body: JSON.stringify({ icon: g.icon, main_color: color }) });
     S.msg = `main color saved (rev ${r.rev})`; S.msgClass = 'ok'; await load();
   } catch (e) { S.msg = e.message; S.msgClass = 'err'; }
+}
+function variantNote(g, vid) {
+  return S.pack.icons?.[g.icon]?.variants?.[vid]?.note || '';
+}
+function openVariantNote(g, vid) {
+  S.vNoteDlg = { icon: g.icon, variant: vid, text: variantNote(g, vid) };
+}
+async function saveVariantNote() {
+  const d = S.vNoteDlg;
+  try {
+    const r = await api('/api/variant', { method: 'PUT', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ icon: d.icon, variant: d.variant, note: d.text.trim() }) });
+    S.msg = `variant note saved (rev ${r.rev})`; S.msgClass = 'ok';
+    S.vNoteDlg = null; await load();
+  } catch (e) { S.msg = e.d?.errors ? e.d.errors.join(' ') : e.message; S.msgClass = 'err'; }
 }
 function rejectAllIcon(g) {
   for (const vg of variantGroups(g)) {
@@ -714,6 +764,7 @@ const App = {
       mainColor, packBrief, saveBrief, saveMainColor, hasNote, openNote, saveNote,
       openSettings, saveSettings, markDirty,
       variantGroups, packBriefIcon, mainColorIcon, saveMainColorIcon, rejectAllIcon,
+      variantNote, openVariantNote, saveVariantNote, copyPath,
     };
   },
 };

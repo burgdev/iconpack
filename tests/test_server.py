@@ -291,3 +291,24 @@ def test_notes_flow(server: _Server, srvpack: Path) -> None:
     ctx = build_context(srvpack, p, styles, "hut", "mono")
     assert ctx.get("pack_note") == "calm geometry across the set"
     assert ctx.get("icon_note") == "no chimneys, ever"
+
+
+def test_variant_note_and_svg_path(server: _Server, srvpack: Path) -> None:
+    # variant-level note via PUT /api/variant
+    code, data = server.req(
+        "PUT",
+        "/api/variant",
+        {
+            "icon": "hut",
+            "variant": "mono",
+            "note": "stroke slightly heavier",
+        },
+    )
+    assert code == 200, data
+    pack = json.loads((srvpack / "pack.json").read_text())
+    assert pack["icons"]["hut"]["variants"]["mono"]["note"] == "stroke slightly heavier"
+
+    # svg path endpoint
+    code, body = server.get("/api/svg-path?icon=hut&variant=mono")
+    assert code == 200
+    assert json.loads(body)["path"].endswith("hut/mono.svg")

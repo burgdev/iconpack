@@ -20,6 +20,31 @@ pack-local).
 grid, stroke discipline, 16px legibility, silhouette-first, color ratios.
 The gate enforces the numbers; craft.md carries the judgment.
 
+## Notes hierarchy (read before every draft)
+
+Notes flow into `context` automatically — but know the layers:
+1. **Pack note** (`pack.note`): standing orders for the whole pack
+2. **Icon note** (`icons.<id>.note`): per-icon guidance
+3. **Variant note** (`icons.<id>.variants.<v>.note`): most specific — wins for that variant
+4. **Apply-time instructions** (in `decisions.json.instructions`): one-shot, for the next round only
+
+Never override a note. If two notes conflict, the more specific one wins.
+
+## Re-read after changes
+
+The review page bumps `rev` on every write (notes, briefs, styles, decisions).
+When `iconpilot wait` returns, ALWAYS:
+1. `iconpilot status <pack>` — see what changed (`✎edited` = hand-edited SVGs)
+2. `iconpilot context <pack> --icon <id> --variant <v>` — re-read for each variant you'll draft;
+   the context includes any new notes and reflects the CURRENT `icons/` file
+3. If an SVG was hand-edited (`✎edited`), open `icons/<icon>/<variant>.svg` and READ it —
+   the user's changes are the new refinement base, not the old candidate
+
+## SVG paths (for debugging)
+
+`iconpilot status` and the review page (⧉ button) give the absolute file path for any SVG.
+Use it to open the file in an editor or examine the raw markup when the gate reports issues.
+
 ## Who writes what (the write contract)
 
 - `pack.json` state (status/chosen/comments/requests/ratings/hashes) is written
@@ -89,12 +114,11 @@ and style numbers always win over DESIGN.md prose).
              → iconpilot decide <pack> --text "…" (verbatim; CLI is the
              only parser). Approval/keep materialize to icons/, dependents
              of changed anchors go stale automatically.
-6. REPEAT    When `wait` returns: read .runs/<round>/decisions.json — it carries
-             the applied items AND the user's free-text `instructions` for the
-             next round; honor both. Persistent guidance arrives automatically
-             via `context`: the pack-global note (pack.note) and per-icon notes
-             (icons.<id>.note) — never override them, they are standing orders.
-             Act on requests (`more N`, `like`, `restart`) and continue    `iconpilot status <pack>` shows what's outstanding (todo,
+6. REPEAT    When `wait` returns:
+             a) read .runs/<round>/decisions.json — applied items + instructions
+             b) `iconpilot status <pack>` — see ✎edited markers and new notes
+             c) re-run `context` for every variant you'll draft next
+             d) act on requests (`more N`, `like`, `restart`) and continue    `iconpilot status <pack>` shows what's outstanding (todo,
              in_review, `stale` — stale variants must be re-run; `✎edited`
              means the icons/ file changed after approval). Loop until every
              variant is approved; then export.

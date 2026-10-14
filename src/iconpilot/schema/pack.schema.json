@@ -300,6 +300,10 @@
           "type": "string",
           "pattern": "^[0-9a-f]{64}$",
           "description": "sha256 of the materialized SVG at last decision; mismatches flag hand-edits."
+        },
+        "note": {
+          "type": "string",
+          "description": "Persistent per-variant note for the agent."
         }
       }
     },
