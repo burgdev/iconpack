@@ -181,6 +181,43 @@ A complete brief has ALL 10 sections — omit nothing:
 **The brief is complete when a stranger with no file access could produce a
 gate-passing, family-consistent icon from it alone.**
 
+### Prompting techniques that measurably improve SVG quality
+
+Include these in every drafting brief (subagent OR yourself):
+
+1. **Coordinate anchors** — give specific key positions:
+   ```
+   The roof apex is at (24,8). The eaves are at (8,22) and (40,22).
+   The door center is at (24,35). The ground line is y=42.
+   ```
+   This eliminates spatial guessing entirely. Extract from the anchor SVG.
+
+2. **Chain-of-thought geometry** — instruct: "Before writing the SVG, list:
+   shapes needed, their coordinates, gaps between shapes. Then write the SVG
+   from your plan." This forces per-coordinate thinking, reducing near-misses.
+
+3. **Negative examples** — include 1-2 gate failure reports:
+   ```
+   GATE FAILURE EXAMPLE (avoid this):
+   ✗ geometry: near-miss gap 0.69 < min_gap 1.5 — strokes almost touch but don't
+   ✗ geometry: coordinates off the 0.5 grid by up to 0.20
+   ```
+   Models learn boundaries better from concrete failures than from rules alone.
+
+4. **Fix-only iteration** — when a gate failure comes back:
+   "Fix ONLY these errors: [paste gate output]. Change NOTHING else — same
+   shapes, same proportions, just correct the specific violations."
+   This prevents the model from redesigning when it should just adjust.
+
+5. **Low temperature** — when spawning the drafting subagent, use temperature
+   0.2-0.4 if your harness supports it. Lower = more deterministic coordinates.
+
+6. **Few-shot boundary** — show one PASS and one FAIL:
+   ```
+   THIS PASSES: <svg with clean grid, proper gaps, inside live area>
+   THIS FAILS: <svg with near-miss gap> → gate says: near-miss gap 0.7 < 1.5
+   ```
+
 ### Visual verification (MANDATORY before showing the user)
 
 After `iconpilot gate` passes and before generating the contact sheet:
