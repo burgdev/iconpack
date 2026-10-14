@@ -40,7 +40,7 @@ section h2 { font-size:.85rem; text-transform:uppercase; letter-spacing:.06em; c
         box-shadow:var(--shadow); display:flex; flex-direction:column; gap:8px; }
 .card .thumb { cursor:zoom-in; align-self:center; border-radius:8px; background:#fff; }
 .card .name { font-size:.85rem; font-weight:600; }
-.rating { display:flex; align-items:center; gap:6px; justify-content:center; }
+.rating { display:flex; align-items:center; gap:10px; justify-content:center; }
 .rating button { padding:4px 8px; font-size:.9rem; }
 .rating input[type=range] { flex:1; min-width:60px; accent-color:var(--accent); }
 button { font:inherit; padding:6px 12px; border-radius:8px; border:1px solid var(--line);
@@ -110,7 +110,7 @@ footer { text-align:center; color:var(--muted); font-size:.75rem; padding:20px 0
 .dot.green { background:var(--accent); }
 .dot.amber { background:var(--warn); animation:pulse 1.6s infinite; }
 .dot.gray { background:var(--line); }
-.ab-apply { min-width:120px; }
+.ab-apply { min-width:120px; font-weight:700; letter-spacing:.02em; }
 /* group meta row (brief + color + style) */
 .gmeta { display:flex; align-items:center; gap:8px; margin:-2px 0 10px; flex-wrap:wrap; }
 .gmeta .brief { flex:1 1 160px; cursor:text; min-width:120px; font-size:.85rem; }
@@ -122,8 +122,9 @@ footer { text-align:center; color:var(--muted); font-size:.75rem; padding:20px 0
 @media (max-width: 640px) {
   main { padding:12px; }
   .grid { grid-template-columns:repeat(auto-fill,minmax(130px,1fr)); gap:10px; }
-  .rating button, .ratebtn { min-height:44px; min-width:44px; }   /* thumb targets */
-  .ab-apply { min-height:44px; }
+  .rating button, .ratebtn { min-height:48px; min-width:48px; }   /* thumb targets */
+  .ab-apply { min-height:48px; flex:1; max-width:220px; }
+  .card .subtle { min-height:44px; }
   .ghead { gap:6px; }
 }
 </style>
@@ -155,7 +156,7 @@ footer { text-align:center; color:var(--muted); font-size:.75rem; padding:20px 0
           <span class="spacer"></span>
           <button class="subtle" :class="{ armed: hasNote(g) }" title="comment for the agent"
                   @click="openNote(g)">💬</button>
-          <button class="subtle armed-x" @click="rejectAll(g)">drop icon</button>
+          <button class="subtle armed-x" @click="rejectAll(g)" title="reject every candidate (* no)">reject all</button>
         </div>
         <div class="gmeta">
           <input v-if="S.editingBrief === g.key" class="brief-input"
@@ -330,7 +331,7 @@ footer { text-align:center; color:var(--muted); font-size:.75rem; padding:20px 0
         </div>
       </div>
       <div class="controls">
-        <label>icon on light</label>
+        <label>icon color · light bg</label>
         <input type="color" :value="S.dlg.bgs2[0].iconColor"
                @input="S.dlg.bgs2[0].iconColor = $event.target.value">
         <label style="margin-left:12px">icon on dark</label>
