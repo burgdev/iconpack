@@ -130,6 +130,18 @@ Color (mono's hut, painted — flat fills from the palette, dark outline kept):
 </svg>
 ```
 
+
+### SVG gotchas (Don't → Do)
+
+| Don't | Do instead |
+|-------|-----------|
+| Set fill="none" on a `<g>` group | Set on individual elements or the root `<svg>` |
+| Nest transforms 3 levels deep | Flatten transforms into path coordinates |
+| Use decimal precision beyond 1 place for icons | Round to 1 decimal (0.5 grid = 1 decimal is lossless) |
+| Include editor metadata (sodipodi, inkscape) | Strip all editor cruft |
+| Use `<text>` for icon labels | Convert to paths (portability + gate forbids text) |
+| Hardcode width/height without viewBox | Always use viewBox; width/height only if the app needs it |
+
 ## 11. Screening rubric (for screeners, not drafters)
 
 Score each candidate 0–10 against the brief:
