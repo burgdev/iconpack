@@ -343,33 +343,33 @@ def test_pinned_variant(server: _Server, srvpack: Path) -> None:
     assert pack["icons"]["hut"]["variants"]["mono"]["pinned"] is True
 
 
-def test_context_auto_brief_from_sibling(workpack: Path) -> None:
+def test_context_auto_brief_from_sibling(srvpack: Path) -> None:
     from iconpilot.context import build_context
     from iconpilot.pack import load_pack
 
     # approve hut/mono so it becomes an auto-reference for hut/color
-    pack, styles = load_pack(workpack / "pack.json")
+    pack, styles = load_pack(srvpack / "pack.json")
     pack["icons"]["hut"]["variants"]["mono"]["status"] = "approved"
-    (workpack / "icons" / "hut" / "mono.svg").write_text(
+    (srvpack / "icons" / "hut" / "mono.svg").write_text(
         '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"/>'
     )
-    ctx = build_context(workpack, pack, styles, "hut", "color")
+    ctx = build_context(srvpack, pack, styles, "hut", "color")
     # color has reference: hut#mono explicitly, so reference_svg should exist
     assert "reference_svg" in ctx
 
 
-def test_context_pinned_references(workpack: Path) -> None:
+def test_context_pinned_references(srvpack: Path) -> None:
     from iconpilot.context import build_context
     from iconpilot.pack import load_pack
 
-    pack, styles = load_pack(workpack / "pack.json")
+    pack, styles = load_pack(srvpack / "pack.json")
     # pin hut/mono as a style reference
     pack["icons"]["hut"]["variants"]["mono"]["pinned"] = True
     pack["icons"]["hut"]["variants"]["mono"]["status"] = "approved"
-    (workpack / "icons" / "hut" / "mono.svg").write_text(
+    (srvpack / "icons" / "hut" / "mono.svg").write_text(
         '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"/>'
     )
     # build context for a DIFFERENT icon
-    ctx = build_context(workpack, pack, styles, "selfhut", "mono")
+    ctx = build_context(srvpack, pack, styles, "selfhut", "mono")
     assert "pinned_references" in ctx
     assert any("hut#mono" in pr["id"] for pr in ctx["pinned_references"])
