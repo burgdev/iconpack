@@ -111,6 +111,8 @@ footer { text-align:center; color:var(--muted); font-size:.75rem; padding:20px 0
 .dot.amber { background:var(--warn); animation:pulse 1.6s infinite; }
 .dot.gray { background:var(--line); }
 .ab-apply { min-width:120px; font-weight:700; letter-spacing:.02em; }
+.ab-status.flash-ok { color:var(--accent); font-weight:650; }
+.ab-status.flash-err { color:var(--danger); font-weight:650; }
 /* group meta row (brief + color + style) */
 .gmeta { display:flex; align-items:center; gap:8px; margin:-2px 0 10px; flex-wrap:wrap; }
 .gmeta .brief { flex:1 1 160px; cursor:text; min-width:120px; font-size:.85rem; }
@@ -245,14 +247,18 @@ footer { text-align:center; color:var(--muted); font-size:.75rem; padding:20px 0
   </main>
 
   <div class="actionbar" :class="{ ready: S.actionBar.ready }">
-    <span class="ab-status">
-      <span v-if="S.actionBar.working" class="dot amber"></span>
-      <span v-else-if="S.actionBar.ready" class="dot green"></span>
-      <span v-else class="dot gray"></span>
-      {{ S.actionBar.text }}
+    <span class="ab-status" :class="{ 'flash-ok': S.flash && S.flashOk, 'flash-err': S.flash && !S.flashOk }">
+      <template v-if="S.flash">{{ S.flash }}</template>
+      <template v-else>
+        <span v-if="S.actionBar.working" class="dot amber"></span>
+        <span v-else-if="S.actionBar.ready" class="dot green"></span>
+        <span v-else class="dot gray"></span>
+        {{ S.actionBar.text }}
+      </template>
     </span>
     <button class="primary ab-apply" @click="apply"
-            :disabled="!S.decisionEdit.trim()">Apply {{ S.lines.length ? '· ' + S.lines.length : '' }}</button>
+            :disabled="!S.decisionEdit.trim() || S.applying">
+      {{ S.applying ? '…' : 'Apply' + (S.lines.length ? ' · ' + S.lines.length : '') }}</button>
   </div>
 
   <div v-if="S.settingsDlg" class="overlay" @click.self="S.settingsDlg = false">
@@ -374,6 +380,7 @@ const S = reactive({
   msg: '', msgClass: 'muted', editing: null,
   dlg: null, sheet: null, noteDlg: null, settingsDlg: false,
   decisionEdit: '', showGen: false, editingBrief: null,
+  flash: '', flashOk: true, applying: false,
   set: { version: '', rules: '', strokeWidth: 2, linecap: 'round', linejoin: 'round', padding: 2, precision: 0.5, palette: null, errors: '' },
   bgs: [
     { name: 'white', hex: '#ffffff' }, { name: 'paper', hex: '#f6f9f7' },
@@ -494,7 +501,9 @@ function noteText(g) {
   return it ? (it.t.match(/"([^"]*)"/) || ['', ''])[1] : '';
 }
 function saveNote() {
-  const g = S.noteDlg.g, text = S.noteDlg.text.trim();
+  const g = S.noteDlg.g;
+  const NL = String.fromCharCode(10);
+  const text = S.noteDlg.text.trim().replace(/"/g, "'").split(NL).join(' ');
   const entry = S.decisions[g.key] || (S.decisions[g.key] = { items: [] });
   entry.items = entry.items.filter(i => i.cand !== '__note');
   if (text) entry.items.push({ cand: '__note', t: `note "${text}"` });
@@ -568,17 +577,31 @@ function openIcon(id, vid, v) {
             ] };
 }
 function startManual() { S.manual = true; S.manualText = S.decisionText; }
+let flashTimer = null;
+function flash(text, ok) {
+  S.flash = text; S.flashOk = ok;
+  clearTimeout(flashTimer);
+  flashTimer = setTimeout(() => { S.flash = ''; }, 5000);
+}
 async function apply() {
   const text = S.decisionEdit.trim();
-  if (!text) return;
+  if (!text || S.applying) return;
+  S.applying = true;
+  flash('applying…', true);
   try {
     const r = await api('/api/decision', { method: 'POST', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ text, round: S.round }) });
-    S.msg = 'applied: ' + (r.log || []).join(' | '); S.msgClass = 'ok';
     S.decisions = {}; editDirty = false; S.decisionEdit = '';
     clearDraft();
     await load();
-  } catch (e) { S.msg = e.message; S.msgClass = 'err'; }
+    flash('✓ applied ' + (r.log || []).length + ' change(s)', true);
+    S.msg = 'applied: ' + (r.log || []).join(' | '); S.msgClass = 'ok';
+  } catch (e) {
+    const detail = e.d?.errors ? e.d.errors.join(' · ') : e.message;
+    flash('✗ ' + detail.slice(0, 90), false);
+    S.msg = detail; S.msgClass = 'err';
+  }
+  S.applying = false;
 }
 function decisionsJson() {
   const icons = {};

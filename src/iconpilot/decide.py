@@ -113,6 +113,11 @@ def parse_decision_text(text: str) -> dict[str, dict]:
         for part in groups[name]:
             m = _ITEM_RE.match(part)
             if not m:
+                # lenient note fallback: notes are free text; inner quotes are common
+                if part.startswith("note"):
+                    comment = part[4:].strip().strip('"').strip()
+                    items.append({"note": "note", "comment": comment})
+                    continue
                 raise ValueError(f"unparseable decision item: {part!r} (icon: {name})")
             items.append({k: v for k, v in m.groupdict().items() if v is not None})
         result[name] = {"items": items}
