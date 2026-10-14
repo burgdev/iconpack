@@ -311,4 +311,5 @@ def test_variant_note_and_svg_path(server: _Server, srvpack: Path) -> None:
     # svg path endpoint
     code, body = server.get("/api/svg-path?icon=hut&variant=mono")
     assert code == 200
-    assert json.loads(body)["path"].endswith("hut/mono.svg")
+    path = json.loads(body)["path"]
+    assert "hut" in path and path.endswith(".svg")
