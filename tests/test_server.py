@@ -350,7 +350,9 @@ def test_context_auto_brief_from_sibling(srvpack: Path) -> None:
     # approve hut/mono so it becomes an auto-reference for hut/color
     pack, styles = load_pack(srvpack / "pack.json")
     pack["icons"]["hut"]["variants"]["mono"]["status"] = "approved"
-    (srvpack / "icons" / "hut" / "mono.svg").write_text(
+    d = srvpack / "icons" / "hut"
+    d.mkdir(parents=True, exist_ok=True)
+    (d / "mono.svg").write_text(
         '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"/>'
     )
     ctx = build_context(srvpack, pack, styles, "hut", "color")
@@ -366,7 +368,9 @@ def test_context_pinned_references(srvpack: Path) -> None:
     # pin hut/mono as a style reference
     pack["icons"]["hut"]["variants"]["mono"]["pinned"] = True
     pack["icons"]["hut"]["variants"]["mono"]["status"] = "approved"
-    (srvpack / "icons" / "hut" / "mono.svg").write_text(
+    d = srvpack / "icons" / "hut"
+    d.mkdir(parents=True, exist_ok=True)
+    (d / "mono.svg").write_text(
         '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"/>'
     )
     # build context for a DIFFERENT icon
