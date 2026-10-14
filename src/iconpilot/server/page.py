@@ -135,6 +135,7 @@ footer { text-align:center; color:var(--muted); font-size:.75rem; padding:20px 0
     <span class="meta">S.rev {{ S.rev }} · S.round {{ S.round || '—' }}</span>
     <span class="spacer"></span>
     <span class="meta">{{ S.candidates.length }} S.candidates</span>
+    <button class="subtle" @click="openSettings" title="pack settings">⚙</button>
     <button class="subtle" @click="load(true)">refresh</button>
     <div v-if="S.ai.text" class="banner" :class="S.ai.active ? 'working' : 'ready'">
       <span class="dot"></span>{{ S.ai.text }}
@@ -236,6 +237,34 @@ footer { text-align:center; color:var(--muted); font-size:.75rem; padding:20px 0
             :disabled="!S.decisionEdit.trim()">Apply {{ S.lines.length ? '· ' + S.lines.length : '' }}</button>
   </div>
 
+  <div v-if="S.settingsDlg" class="overlay" @click.self="S.settingsDlg = false">
+    <div class="dialog">
+      <h3><span>⚙ {{ S.pack.name }} settings</span>
+          <button class="subtle" @click="S.settingsDlg = false">✕</button></h3>
+      <div class="controls"><label>version</label>
+        <input v-model="S.set.version" style="width:110px"></div>
+      <div class="controls" style="align-items:flex-start"><label>rules</label>
+        <textarea v-model="S.set.rules" placeholder="one rule per line — injected into every drafting context"></textarea></div>
+      <div class="controls"><label>stroke width</label>
+        <input v-model="S.set.strokeWidth" type="number" step="0.5" min="0.5" style="width:90px"></div>
+      <div class="controls"><label>caps/joins</label>
+        <select v-model="S.set.linecap"><option>round</option><option>butt</option><option>square</option></select>
+        <select v-model="S.set.linejoin"><option>round</option><option>miter</option><option>bevel</option></select></div>
+      <div class="controls"><label>live padding</label>
+        <input v-model="S.set.padding" type="number" step="0.5" min="0" style="width:90px"></div>
+      <div class="controls"><label>precision</label>
+        <input v-model="S.set.precision" type="number" step="0.25" min="0.25" style="width:90px"></div>
+      <div class="controls" v-if="S.set.palette"><label>palette</label>
+        <span class="swatch" v-for="c in S.set.palette" :key="c" :style="{background: c}" :title="c"></span></div>
+      <p class="muted">Every write bumps the pack rev — a waiting agent picks changes up via <code>iconpilot wait</code>.</p>
+      <div class="row" style="margin-top:10px">
+        <button class="primary" @click="saveSettings">Save settings</button>
+        <button class="subtle" @click="S.settingsDlg = false">cancel</button>
+      </div>
+      <div v-if="S.set.errors" class="err">{{ S.set.errors }}</div>
+    </div>
+  </div>
+
   <div v-if="S.noteDlg" class="overlay" @click.self="S.noteDlg = null">
     <div class="dialog">
       <h3><span>💬 {{ S.noteDlg.g.icon }} / {{ S.noteDlg.g.variant }}</span>
@@ -327,6 +356,7 @@ const S = reactive({
   msg: '', msgClass: 'muted', editing: null,
   dlg: null, sheet: null, noteDlg: null, settingsDlg: false,
   decisionEdit: '', showGen: false, editingBrief: null,
+  set: { version: '', rules: '', strokeWidth: 2, linecap: 'round', linejoin: 'round', padding: 2, precision: 0.5, palette: null, errors: '' },
   bgs: [
     { name: 'white', hex: '#ffffff' }, { name: 'paper', hex: '#f6f9f7' },
     { name: 'night', hex: '#112119' }, { name: 'ink', hex: '#1c1c1c' },
@@ -474,6 +504,35 @@ function styleLabel(sid) {
   return sid + (s ? ` — ${s.label}` : '');
 }
 function openSheet(g, c) { S.sheet = { g, c }; }
+function openSettings() {
+  const sp = S.pack.spec || {};
+  S.set = {
+    version: S.pack.version || '',
+    rules: (S.pack.rules || []).join('\n'),
+    strokeWidth: sp.stroke?.width ?? 2,
+    linecap: sp.stroke?.linecap || 'round',
+    linejoin: sp.stroke?.linejoin || 'round',
+    padding: sp.live_area?.padding ?? 2,
+    precision: sp.precision ?? 0.5,
+    palette: (S.pack.styles?.['lineal-color']?.palette) || null,
+    errors: '',
+  };
+  S.settingsDlg = true;
+}
+async function saveSettings() {
+  S.set.errors = '';
+  try {
+    const r = await api('/api/pack', { method: 'PUT', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        version: S.set.version,
+        rules: S.set.rules.split('\n').map(s => s.trim()).filter(Boolean),
+        spec: { stroke: { width: +S.set.strokeWidth, linecap: S.set.linecap, linejoin: S.set.linejoin },
+                live_area: { padding: +S.set.padding }, precision: +S.set.precision },
+      }) });
+    S.msg = `settings saved (rev ${r.rev})`; S.msgClass = 'ok';
+    S.settingsDlg = false; await load();
+  } catch (e) { S.set.errors = e.d?.errors ? e.d.errors.join('\n') : e.message; }
+}
 function markDirty() { editDirty = true; }
 function open(g, c) {
   const main = S.pack.icons?.[g.icon]?.main_color;
@@ -594,6 +653,7 @@ const App = {
       styleLabel, open, openIcon, openSheet, switchStyle, startManual,
       apply, copy, saveIcon, edited, load, chosenCand, variantStatus,
       mainColor, packBrief, saveBrief, saveMainColor, hasNote, openNote, saveNote,
+      openSettings, saveSettings,
       markDirty,
     };
   },
