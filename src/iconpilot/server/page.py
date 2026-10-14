@@ -226,12 +226,12 @@ footer { text-align:center; color:var(--muted); font-size:.75rem; padding:20px 0
     <footer>iconpilot review v{{ S.version }} · flock-serialized writes · approval is always yours</footer>
   </main>
 
-  <div class="actionbar" :class="{ ready: actionBar.ready }">
+  <div class="actionbar" :class="{ ready: S.actionBar.ready }">
     <span class="ab-status">
-      <span v-if="actionBar.working" class="dot amber"></span>
-      <span v-else-if="actionBar.ready" class="dot green"></span>
+      <span v-if="S.actionBar.working" class="dot amber"></span>
+      <span v-else-if="S.actionBar.ready" class="dot green"></span>
       <span v-else class="dot gray"></span>
-      {{ actionBar.text }}
+      {{ S.actionBar.text }}
     </span>
     <button class="primary ab-apply" @click="apply"
             :disabled="!S.decisionEdit.trim()">Apply {{ S.lines.length ? '· ' + S.lines.length : '' }}</button>
@@ -429,17 +429,14 @@ function clearDraft() {
   try { localStorage.removeItem(draftKey()); } catch {}
 }
 let editDirty = false;
-S._editSync = computed(() => {   // keep edit box in sync until the user types
-  if (!editDirty) S.decisionEdit = S.decisionText;
-  return null;
-});
+function syncEdit() { if (!editDirty) S.decisionEdit = S.decisionText; }
 function setItem(g, cand, t) {
   const entry = S.decisions[g.key] || (S.decisions[g.key] = { items: [] });
   entry.items = entry.items.filter(i => i.cand !== '*');           // drop stale 'reject all'
   const i = entry.items.findIndex(x => x.cand === cand);
   if (i >= 0) entry.items[i] = { cand, t };                          // update in place
   else entry.items.push({ cand, t });
-  saveDraft();
+  syncEdit(); saveDraft();
 }
 function drop(g, c)   { setItem(g, c.cand, c.cand + ' no'); }
 function approve(g, c){ setItem(g, c.cand, c.cand + ' ok'); }
@@ -447,7 +444,7 @@ function keep(g, c)   { setItem(g, c.cand, c.cand + ' keep'); }
 function rate(g, c, n){ setItem(g, c.cand, +n === 0 ? c.cand + ' no' : `${c.cand} rate ${n}`); }
 function rejectAll(g) {
   S.decisions[g.key] = { items: [{ cand: '*', t: '* no' }] };
-  saveDraft();
+  syncEdit(); saveDraft();
 }
 function mainColor(g) { return S.pack.icons?.[g.icon]?.main_color; }
 function packBrief(g) {
@@ -483,7 +480,7 @@ function saveNote() {
   const entry = S.decisions[g.key] || (S.decisions[g.key] = { items: [] });
   entry.items = entry.items.filter(i => i.cand !== '__note');
   if (text) entry.items.push({ cand: '__note', t: `note "${text}"` });
-  saveDraft(); S.noteDlg = null;
+  syncEdit(); saveDraft(); S.noteDlg = null;
 }
 async function switchStyle(icon, variant, sid) {
   try {
@@ -641,7 +638,7 @@ const App = {
       }, 2000);
     });
     return {
-      S, render, item, rating, drop, approve, keep, rate, rejectAll, actionBar,
+      S, render, item, rating, drop, approve, keep, rate, rejectAll,
       styleLabel, open, openIcon, openSheet, switchStyle, startManual,
       apply, copy, saveIcon, edited, load, chosenCand, variantStatus,
       mainColor, packBrief, saveBrief, saveMainColor, hasNote, openNote, saveNote,
