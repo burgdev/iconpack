@@ -121,6 +121,11 @@ footer { text-align:center; color:var(--muted); font-size:.75rem; padding:20px 0
 .colorchip { width:30px; height:30px; flex:none; }
 .gmeta select { font:inherit; font-size:.8rem; padding:4px 6px; border-radius:8px;
                 border:1px solid var(--line); background:var(--card); color:var(--ink); max-width:140px; }
+.vargrid { display:flex; flex-direction:column; gap:10px; }
+.vargroup { border-left:3px solid var(--line); padding-left:10px; }
+.varhead { display:flex; align-items:center; gap:8px; margin-bottom:6px; }
+.varstyle { font:inherit; font-size:.75rem; padding:2px 4px; border-radius:6px;
+            border:1px solid var(--line); background:var(--card); color:var(--ink); }
 @media (max-width: 640px) {
   main { padding:12px; }
   .grid { grid-template-columns:repeat(auto-fill,minmax(130px,1fr)); gap:10px; }
@@ -152,47 +157,46 @@ footer { text-align:center; color:var(--muted); font-size:.75rem; padding:20px 0
       <h2>Current round — rate, then decide</h2>
       <div class="group" v-for="g in S.grouped" :key="g.key">
         <div class="ghead">
-          <b>{{ g.icon }} / {{ g.variant }}</b>
-          <span v-if="variantStatus(g)" class="chip" :class="variantStatus(g)">{{ variantStatus(g) }}</span>
-          <span class="muted">{{ g.cands.length }} candidates</span>
+          <b>{{ g.icon }}</b>
+          <span class="muted">{{ g.cands.length }} candidates across variants</span>
           <span class="spacer"></span>
-          <button class="subtle" :class="{ armed: hasNote(g) }" title="comment for the agent"
-                  @click="openNote(g)">💬</button>
-          <button class="subtle armed-x" @click="rejectAll(g)" title="reject every candidate (* no)">reject all</button>
+          <button class="subtle armed-x" @click="rejectAllIcon(g)" title="reject every candidate for this icon">reject all</button>
         </div>
         <div class="gmeta">
-          <input v-if="S.editingBrief === g.key" class="brief-input"
-                 :value="packBrief(g)" placeholder="brief — what this icon IS"
-                 @keydown.enter="saveBrief(g, $event.target.value)"
-                 @blur="saveBrief(g, $event.target.value)">
-          <span v-else class="muted brief" @click="S.editingBrief = g.key">{{ packBrief(g) }}</span>
-          <input type="color" class="colorchip" :value="mainColor(g) || '#89919a'"
+          <span class="muted brief">{{ packBriefIcon(g) }}</span>
+          <input type="color" class="colorchip" :value="mainColorIcon(g) || '#89919a'"
                  title="main color"
-                 @input="saveMainColor(g, $event.target.value)">
-          <select :value="g.style" @change="switchStyle(g.icon, g.variant, $event.target.value)" title="style">
-            <option v-for="(st, sid) in S.styles" :key="sid" :value="sid">{{ sid }}</option>
-          </select>
+                 @input="saveMainColorIcon(g, $event.target.value)">
         </div>
-        <div class="grid">
-          <div class="card" v-for="c in g.cands" :key="c.cand">
-            <img class="thumb" loading="lazy" width="64" height="64"
-                 :src="render(c.path, 64, '#f6f9f7', mainColor(g))" @click="open(g, c)">
+        <div class="vargrid">
+          <div class="vargroup" v-for="vg in variantGroups(g)" :key="vg.variant">
+            <div class="varhead">
+              <span class="chip">{{ vg.variant }}</span>
+              <select :value="vg.style" @change="switchStyle(g.icon, vg.variant, $event.target.value)" class="varstyle" title="style">
+                <option v-for="(st, sid) in S.styles" :key="sid" :value="sid">{{ sid }}</option>
+              </select>
+            </div>
+            <div class="grid">
+              <div class="card" v-for="c in vg.cands" :key="c.cand">
+                <img class="thumb" loading="lazy" width="64" height="64"
+                     :src="render(c.path, 64, '#f6f9f7', mainColorIcon(g))" @click="open(c)">
             <div class="name">{{ c.cand }}
-              <span v-if="chosenCand(g) === c.cand" class="chip approved" title="the approved pick">✓ picked</span>
             </div>
             <div class="rating">
-              <button :class="{ 'armed-x': item(g, c.cand)?.t?.startsWith(c.cand + ' no') }"
-                      title="drop (rate 0)" @click="drop(g, c)">✕</button>
-              <button class="ratebtn" :class="{ armed: rating(g, c.cand) > 0 }"
-                      @click="openSheet(g, c)" :title="'rate ' + c.cand">
-                <template v-if="rating(g, c.cand) > 0">★ {{ rating(g, c.cand) }}</template>
+              <button :class="{ 'armed-x': item(c)?.t?.startsWith(c.cand + ' no') }"
+                      title="drop (rate 0)" @click="drop(c)">✕</button>
+              <button class="ratebtn" :class="{ armed: rating(c) > 0 }"
+                      @click="openSheet(c)" :title="'rate ' + c.cand">
+                <template v-if="rating(c) > 0">★ {{ rating(c) }}</template>
                 <template v-else>rate</template>
               </button>
-              <button :class="{ armed: item(g, c.cand)?.t === c.cand + ' ok' }"
-                      title="approve — final" @click="approve(g, c)">✓</button>
+              <button :class="{ armed: item(c)?.t === c.cand + ' ok' }"
+                      title="approve — final" @click="approve(c)">✓</button>
             </div>
-            <button class="subtle" :class="{ armed: item(g, c.cand)?.t === c.cand + ' keep' }"
-                    @click="keep(g, c)">keep (refine)</button>
+            <button class="subtle" :class="{ armed: item(c)?.t === c.cand + ' keep' }"
+                    @click="keep(c)">keep (refine)</button>
+          </div>
+            </div>
           </div>
         </div>
       </div>
@@ -308,7 +312,7 @@ footer { text-align:center; color:var(--muted); font-size:.75rem; padding:20px 0
 
   <div v-if="S.sheet" class="overlay sheet" @click.self="S.sheet = null">
     <div class="sheetbox">
-      <h3>{{ S.sheet.g.icon }} / {{ S.sheet.g.variant }} · {{ S.sheet.c.cand }}
+      <h3>{{ S.sheet.c.icon }} / {{ S.sheet.c.variant }} · {{ S.sheet.c.cand }}
           <button class="subtle" @click="S.sheet = null">✕</button></h3>
       <div class="sheetstage">
         <img width="96" height="96" :src="render(S.sheet.c.path, 96, '#f6f9f7')">
@@ -316,11 +320,11 @@ footer { text-align:center; color:var(--muted); font-size:.75rem; padding:20px 0
         <img width="24" height="24" :src="render(S.sheet.c.path, 24, '#f6f9f7')">
       </div>
       <div class="stars">
-        <button v-for="n in 10" :key="n" :class="{ on: n <= rating(S.sheet.g, S.sheet.c.cand) }"
-                @click="rate(S.sheet.g, S.sheet.c, n); S.sheet = null;">★</button>
+        <button v-for="n in 10" :key="n" :class="{ on: n <= rating(S.sheet.c) }"
+                @click="rate(S.sheet.c, n); S.sheet = null;">★</button>
       </div>
       <div class="sheetrow">
-        <button class="armed-x" @click="drop(S.sheet.g, S.sheet.c); S.sheet = null">drop (0)</button>
+        <button class="armed-x" @click="drop(S.sheet.c); S.sheet = null">drop (0)</button>
         <button class="subtle" @click="S.sheet = null">cancel</button>
       </div>
     </div>
@@ -403,12 +407,38 @@ const esc = s => String(s ?? '');
 S.grouped = computed(() => {
   const m = new Map();
   for (const c of S.candidates) {
-    const key = c.icon + '/' + c.variant;
-    if (!m.has(key)) m.set(key, { key, icon: c.icon, variant: c.variant, cands: [], style: c.style });
-    m.get(key).cands.push(c);
+    if (!m.has(c.icon)) m.set(c.icon, { key: c.icon, icon: c.icon, cands: [] });
+    m.get(c.icon).cands.push(c);
   }
   return [...m.values()];
 });
+function variantGroups(g) {
+  const m = new Map();
+  for (const c of g.cands) {
+    if (!m.has(c.variant)) m.set(c.variant, { variant: c.variant, cands: [], style: c.style });
+    m.get(c.variant).cands.push(c);
+  }
+  return [...m.values()];
+}
+function packBriefIcon(g) {
+  return S.pack.icons?.[g.icon]?.brief || '';
+}
+function mainColorIcon(g) {
+  return S.pack.icons?.[g.icon]?.main_color;
+}
+async function saveMainColorIcon(g, color) {
+  try {
+    const r = await api('/api/icon', { method: 'PUT', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ icon: g.icon, main_color: color }) });
+    S.msg = `main color saved (rev ${r.rev})`; S.msgClass = 'ok'; await load();
+  } catch (e) { S.msg = e.message; S.msgClass = 'err'; }
+}
+function rejectAllIcon(g) {
+  for (const vg of variantGroups(g)) {
+    S.decisions[g.icon + '/' + vg.variant] = { items: [{ cand: '*', t: '* no' }] };
+  }
+  syncEdit(); saveDraft();
+}
 S.lines = computed(() => {
   const out = [];
   for (const [key, entry] of Object.entries(S.decisions)) {
@@ -433,13 +463,13 @@ function render(p, size, bg, color) {
   if (color && color !== '#000000') q.set('color', color);
   return '/api/render?' + q;
 }
-function item(g, cand) {
-  return (S.decisions[g.key]?.items || []).find(i => i.cand === cand);
+function item(c) {
+  return (S.decisions[c.icon + '/' + c.variant]?.items || []).find(i => i.cand === c.cand);
 }
-function rating(g, cand) {
-  const it = item(g, cand);
+function rating(c) {
+  const it = item(c);
   if (!it) return 5;
-  const m = it.t.match(/rate (\\d+)/); if (m) return +m[1];
+  const m = it.t.match(/rate ([0-9]+)/); if (m) return +m[1];
   if (it.t.endsWith(' ok')) return 10;
   if (it.t.includes(' no') || it.t.endsWith(' keep')) return 0;
   return 5;
@@ -459,22 +489,19 @@ function clearDraft() {
 }
 let editDirty = false;
 function syncEdit() { if (!editDirty) S.decisionEdit = S.decisionText; }
-function setItem(g, cand, t) {
-  const entry = S.decisions[g.key] || (S.decisions[g.key] = { items: [] });
-  entry.items = entry.items.filter(i => i.cand !== '*');           // drop stale 'reject all'
-  const i = entry.items.findIndex(x => x.cand === cand);
-  if (i >= 0) entry.items[i] = { cand, t };                          // update in place
-  else entry.items.push({ cand, t });
+function setItem(c, t) {
+  const key = c.icon + '/' + c.variant;
+  const entry = S.decisions[key] || (S.decisions[key] = { items: [] });
+  entry.items = entry.items.filter(i => i.cand !== '*');
+  const i = entry.items.findIndex(x => x.cand === c.cand);
+  if (i >= 0) entry.items[i] = { cand: c.cand, t };
+  else entry.items.push({ cand: c.cand, t });
   syncEdit(); saveDraft();
 }
-function drop(g, c)   { setItem(g, c.cand, c.cand + ' no'); }
-function approve(g, c){ setItem(g, c.cand, c.cand + ' ok'); }
-function keep(g, c)   { setItem(g, c.cand, c.cand + ' keep'); }
-function rate(g, c, n){ setItem(g, c.cand, +n === 0 ? c.cand + ' no' : `${c.cand} rate ${n}`); }
-function rejectAll(g) {
-  S.decisions[g.key] = { items: [{ cand: '*', t: '* no' }] };
-  syncEdit(); saveDraft();
-}
+function drop(c)   { setItem(c, c.cand + ' no'); }
+function approve(c){ setItem(c, c.cand + ' ok'); }
+function keep(c)   { setItem(c, c.cand + ' keep'); }
+function rate(c, n){ setItem(c, +n === 0 ? c.cand + ' no' : `${c.cand} rate ${n}`); }
 function mainColor(g) { return S.pack.icons?.[g.icon]?.main_color; }
 function packBrief(g) {
   const v = S.pack.icons?.[g.icon];
@@ -527,7 +554,7 @@ function styleLabel(sid) {
   const s = S.styles[sid];
   return sid + (s ? ` — ${s.label}` : '');
 }
-function openSheet(g, c) { S.sheet = { g, c }; }
+function openSheet(c) { S.sheet = { c }; }
 function openSettings() {
   const sp = S.pack.spec || {};
   S.set = {
@@ -560,9 +587,9 @@ async function saveSettings() {
   } catch (e) { S.set.errors = e.d?.errors ? e.d.errors.join('\\n') : e.message; }
 }
 function markDirty() { editDirty = true; }
-function open(g, c) {
-  const main = S.pack.icons?.[g.icon]?.main_color;
-  S.dlg = { icon: g.icon, variant: g.variant, cand: c.cand, path: c.path, styleId: g.style,
+function open(c) {
+  const main = S.pack.icons?.[c.icon]?.main_color;
+  S.dlg = { icon: c.icon, variant: c.variant, cand: c.cand, path: c.path, styleId: c.style,
             bgs2: [
               {name: 'LIGHT BG', hex: '#f6f9f7', iconColor: main || '#1c1c1c'},
               {name: 'DARK BG',  hex: '#22292e', iconColor: '#f2f7f4'},
@@ -685,8 +712,8 @@ const App = {
       styleLabel, open, openIcon, openSheet, switchStyle, startManual,
       apply, copy, saveIcon, edited, load, chosenCand, variantStatus,
       mainColor, packBrief, saveBrief, saveMainColor, hasNote, openNote, saveNote,
-      openSettings, saveSettings,
-      markDirty,
+      openSettings, saveSettings, markDirty,
+      variantGroups, packBriefIcon, mainColorIcon, saveMainColorIcon, rejectAllIcon,
     };
   },
 };
