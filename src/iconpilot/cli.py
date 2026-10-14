@@ -243,7 +243,7 @@ def step(pack: str) -> None:
     n_pass = sum(1 for f in latest.rglob("*.gate.json") if json.loads(f.read_text()).get("passed"))
     n_total = sum(1 for _ in latest.rglob("*.gate.json"))
     msg = f"round {runs[-1]}: {n_pass}/{n_total} passed gate — ready for screening"
-    (latest / ".ai-status").write_text(msg + "\n")
+    (pack_dir / ".runs" / ".ai-status").write_text(msg + "\n")
     typer.secho(f"── {msg}", fg=typer.colors.GREEN)
 
 
@@ -620,9 +620,15 @@ def gate(
         spec_precision = pack_data.get("spec", {}).get("precision", 0.5)
         fixed_svg, n = fix_svg(target, spec_precision)
         if n > 0:
+            backup = target.with_suffix(".orig")
+            if not backup.exists():
+                import shutil
+
+                shutil.copyfile(target, backup)
             target.write_text(fixed_svg)
             typer.secho(
-                f"  fixed {n} coordinate(s) snapped to {spec_precision} grid", fg=typer.colors.CYAN
+                f"  fixed {n} coordinate(s) snapped to {spec_precision} grid (backup: {backup.name})",
+                fg=typer.colors.CYAN,
             )
         else:
             typer.secho("  already on grid — no changes needed", fg=typer.colors.GREEN)

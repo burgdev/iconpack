@@ -8,7 +8,7 @@ context → draft → gate --fix → step → wait → read decisions → repeat
 |------|---------|------|
 | Context | `iconpilot context <pack> --icon <id> --variant <v>` | Full drafting contract |
 | Draft | Write SVGs to `.runs/<round>/<variant>/<icon>/<cand>.svg` | You or a subagent |
-| Gate | `iconpilot gate <pack>/.runs/<round> --pack <pack>` | Deterministic check; `--fix` auto-corrects |
+| Gate | `iconpilot gate <pack>/.runs/<round> --pack <pack>` | Deterministic check (`--fix` for single SVG only) |
 | Step | `iconpilot step <pack>` | Gate + contact-sheet + status in one |
 | Wait | `iconpilot wait <pack>` | Blocks until user applies |
 | Status | `iconpilot status <pack>` | States, ✎edited, stale, notes |

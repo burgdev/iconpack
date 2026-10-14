@@ -306,10 +306,12 @@ class ReviewHandler(BaseHTTPRequestHandler):
                     if not runs:
                         raise ValueError("no rounds under .runs/")
                     round_id = runs[-1]
-                # backup before apply (for undo)
+                # backup before apply (for undo) — atomic via tmp+rename
                 import shutil
 
-                shutil.copyfile(self.pack_dir / "pack.json", self.pack_dir / ".pack-backup.json")
+                tmp_bk = self.pack_dir / ".pack-backup.tmp"
+                shutil.copyfile(self.pack_dir / "pack.json", tmp_bk)
+                tmp_bk.rename(self.pack_dir / ".pack-backup.json")
                 log = apply_decisions(
                     self.pack_dir,
                     pack,

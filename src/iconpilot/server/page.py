@@ -805,6 +805,50 @@ const App = {
         } catch {}
       }, 2000);
     });
+
+    // keyboard shortcuts
+    const onKey = (e) => {
+      if (S.dlg || S.sheet || S.noteDlg || S.vNoteDlg || S.settingsDlg) {
+        if (e.key === 'Escape') { S.dlg = null; S.sheet = null; S.noteDlg = null; S.vNoteDlg = null; S.settingsDlg = false; }
+        return;
+      }
+      if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA' || e.target.tagName === 'SELECT') return;
+      const groups = S.grouped;
+      if (!groups.length) return;
+      const gi = S.kbFocus ?? 0;
+      const g = groups[gi];
+      if (!g) return;
+      const vgs = variantGroups(g);
+      if (!vgs.length) return;
+      const vi = S.kbVariant ?? 0;
+      const vg = vgs[vi];
+      if (!vg || !vg.cands.length) return;
+      const ci = S.kbCand ?? 0;
+      const c = vg.cands[Math.min(ci, vg.cands.length - 1)];
+      if (e.key === '1') { approve(c); e.preventDefault(); }
+      else if (e.key === '2') { keep(c); e.preventDefault(); }
+      else if (e.key === '3') { drop(c); e.preventDefault(); }
+      else if (e.key === '[') { S.kbFocus = Math.max(0, gi - 1); S.kbVariant = 0; S.kbCand = 0; e.preventDefault(); }
+      else if (e.key === ']') { S.kbFocus = Math.min(groups.length - 1, gi + 1); S.kbVariant = 0; S.kbCand = 0; e.preventDefault(); }
+      else if (e.key === 'ArrowRight' || e.key === 'ArrowDown') {
+        const next = ci + 1;
+        if (next < vg.cands.length) S.kbCand = next;
+        else if (vi + 1 < vgs.length) { S.kbVariant = vi + 1; S.kbCand = 0; }
+        else if (gi + 1 < groups.length) { S.kbFocus = gi + 1; S.kbVariant = 0; S.kbCand = 0; }
+        e.preventDefault();
+      } else if (e.key === 'ArrowLeft' || e.key === 'ArrowUp') {
+        const prev = ci - 1;
+        if (prev >= 0) S.kbCand = prev;
+        else if (vi - 1 >= 0) { S.kbVariant = vi - 1; S.kbCand = (vgs[vi-1]?.cands.length || 1) - 1; }
+        else if (gi - 1 >= 0) { S.kbFocus = gi - 1; S.kbVariant = vgs.length - 1; S.kbCand = 0; }
+        e.preventDefault();
+      } else if (e.key === 'Enter') {
+        if (S.decisionEdit.trim()) apply();
+        e.preventDefault();
+      }
+    };
+    window.addEventListener('keydown', onKey);
+
     return {
       S, render, item, rating, drop, approve, keep, rate,
       styleLabel, open, openIcon, openSheet, switchStyle, startManual,

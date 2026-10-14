@@ -378,7 +378,13 @@ def run_gate(svg_path: str | Path, pack: dict, style: Style) -> GateReport:
 
 
 def fix_svg(svg_path: Path, precision: float = 0.5) -> tuple[str, int]:
-    """Round all coordinates to the nearest grid step. Returns (fixed_svg_text, n_changes)."""
+    """Round all coordinates to the nearest grid step, preserving subpaths.
+
+    Uses Path.continuous_subpaths() to correctly handle compound paths
+    (multiple M commands, Z closures). Returns (fixed_svg_text, n_changes).
+    """
+    import svgpathtools as spt
+
     root = etree.parse(str(svg_path)).getroot()
     changes = 0
 
@@ -389,8 +395,11 @@ def fix_svg(svg_path: Path, precision: float = 0.5) -> tuple[str, int]:
             changes += 1
         return snapped
 
+    decimals = max(0, -int(f"{precision:e}".split("e")[-1]) if precision < 1 else 0)
+
     def fmt(v: float) -> str:
-        return str(int(v)) if v == int(v) else str(round(v, 2)).rstrip("0").rstrip(".")
+        s = f"{v:.{max(decimals, 1)}f}".rstrip("0").rstrip(".")
+        return s if s else "0"
 
     for el in root.iter():
         name = etree.QName(el).localname
@@ -399,36 +408,42 @@ def fix_svg(svg_path: Path, precision: float = 0.5) -> tuple[str, int]:
             if not d:
                 continue
             try:
-                segs = parse_path(d)
-            except Exception:  # noqa: BLE001, S112 — gate reports these
+                full_path = spt.Path(d)
+            except Exception:  # noqa: BLE001, S112 — gate reports these separately
                 continue
-            # rebuild d with snapped coords
-            parts = []
-            for seg in segs:
-                cls = type(seg).__name__
-                if cls == "Line":
-                    parts.append(f"L{fmt(snap(seg.end.real))} {fmt(snap(seg.end.imag))}")
-                elif cls == "CubicBezier":
-                    parts.append(
-                        f"C{fmt(snap(seg.control1.real))} {fmt(snap(seg.control1.imag))} "
-                        f"{fmt(snap(seg.control2.real))} {fmt(snap(seg.control2.imag))} "
-                        f"{fmt(snap(seg.end.real))} {fmt(snap(seg.end.imag))}"
-                    )
-                elif cls == "QuadraticBezier":
-                    parts.append(
-                        f"Q{fmt(snap(seg.control.real))} {fmt(snap(seg.control.imag))} "
-                        f"{fmt(snap(seg.end.real))} {fmt(snap(seg.end.imag))}"
-                    )
-                elif cls == "Arc":
-                    parts.append(
-                        f"A{fmt(seg.radius.real)} {fmt(seg.radius.imag)} {fmt(seg.rotation)} "
-                        f"{int(seg.large_arc)} {int(seg.sweep)} "
-                        f"{fmt(snap(seg.end.real))} {fmt(snap(seg.end.imag))}"
-                    )
+
+            parts: list[str] = []
+            for subpath in full_path.continuous_subpaths():
+                if not subpath:
+                    continue
+                # M at the subpath start
+                sx, sy = snap(subpath[0].start.real), snap(subpath[0].start.imag)
+                parts.append(f"M{fmt(sx)} {fmt(sy)}")
+                for seg in subpath:
+                    cls = type(seg).__name__
+                    ex, ey = snap(seg.end.real), snap(seg.end.imag)
+                    if cls == "Line":
+                        parts.append(f"L{fmt(ex)} {fmt(ey)}")
+                    elif cls == "CubicBezier":
+                        c1x, c1y = snap(seg.control1.real), snap(seg.control1.imag)
+                        c2x, c2y = snap(seg.control2.real), snap(seg.control2.imag)
+                        parts.append(
+                            f"C{fmt(c1x)} {fmt(c1y)} {fmt(c2x)} {fmt(c2y)} {fmt(ex)} {fmt(ey)}"
+                        )
+                    elif cls == "QuadraticBezier":
+                        qx, qy = snap(seg.control.real), snap(seg.control.imag)
+                        parts.append(f"Q{fmt(qx)} {fmt(qy)} {fmt(ex)} {fmt(ey)}")
+                    elif cls == "Arc":
+                        parts.append(
+                            f"A{fmt(seg.radius.real)} {fmt(seg.radius.imag)} {fmt(seg.rotation)} "
+                            f"{int(seg.large_arc)} {int(seg.sweep)} {fmt(ex)} {fmt(ey)}"
+                        )
+                # preserve Z if the subpath was closed
+                if subpath.isclosed():
+                    parts.append("Z")
+
             if parts:
-                start_x = snap(segs[0].start.real) if segs else 0
-                start_y = snap(segs[0].start.imag) if segs else 0
-                el.set("d", f"M{fmt(start_x)} {fmt(start_y)} " + " ".join(parts))
+                el.set("d", " ".join(parts))
         elif name in _NUM_ATTRS:
             for attr in _NUM_ATTRS[name]:
                 val = el.get(attr)
@@ -440,20 +455,6 @@ def fix_svg(svg_path: Path, precision: float = 0.5) -> tuple[str, int]:
                             el.set(attr, fmt(sv))
                     except ValueError:
                         continue
-
-    # preserve root attributes
-    for attr in (
-        "viewBox",
-        "fill",
-        "stroke",
-        "stroke-width",
-        "stroke-linecap",
-        "stroke-linejoin",
-        "xmlns",
-        "width",
-        "height",
-    ):
-        pass  # already on root
 
     xml = etree.tostring(root, encoding="unicode")
     return xml, changes
