@@ -8,3 +8,4 @@ dist/
 site/
 .zensical/
 site/
+examples/*/.runs/

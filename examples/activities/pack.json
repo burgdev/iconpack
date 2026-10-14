@@ -1,0 +1,182 @@
+{
+  "schema": 2,
+  "name": "activities",
+  "version": "0.1.0",
+  "provenance": {
+    "created_by": "user"
+  },
+  "spec": {
+    "viewBox": "0 0 24 24",
+    "live_area": {
+      "padding": 3
+    },
+    "stroke": {
+      "width": 2,
+      "linecap": "round",
+      "linejoin": "round"
+    },
+    "fill": "none",
+    "allowed_elements": [
+      "path",
+      "circle",
+      "rect",
+      "line",
+      "polyline",
+      "polygon",
+      "ellipse"
+    ],
+    "precision": 0.5
+  },
+  "styles": {
+    "flat-color": {
+      "palette": [
+        "#2b6cb0",
+        "#2f855a",
+        "#c05621",
+        "#4a5568"
+      ]
+    },
+    "lineal-color": {
+      "palette": [
+        "#2b6cb0",
+        "#2f855a",
+        "#c05621",
+        "#4a5568"
+      ]
+    }
+  },
+  "icons": {
+    "running": {
+      "brief": "Runner mid-stride: leaning torso, opposing arms, one leg driving forward",
+      "main_color": "#2f855a",
+      "variants": {
+        "mono": {
+          "style": "mono-line",
+          "status": "approved",
+          "chosen": {
+            "run": "import",
+            "variant": "source"
+          },
+          "content_hash": "a077ca5c66608c07992bd173360a39d16d17cb7907f19bb6140bc2341291d774"
+        },
+        "flat": {
+          "style": "flat-color",
+          "status": "approved",
+          "chosen": {
+            "run": "import",
+            "variant": "source"
+          },
+          "content_hash": "0dcd897999f8f8c425798a118623eae809fa08daa784cbcfd44d991395c75bd2"
+        },
+        "detail": {
+          "style": "lineal-color",
+          "status": "approved",
+          "chosen": {
+            "run": "import",
+            "variant": "source"
+          },
+          "content_hash": "2bb347522cdef0ee45577e1a6d0758e2be0cac52360cf81b68fab97abc43765c"
+        }
+      }
+    },
+    "swimming": {
+      "brief": "Freestyle swimmer: head at waterline, one arm recovering, two waves",
+      "main_color": "#2b6cb0",
+      "variants": {
+        "mono": {
+          "style": "mono-line",
+          "status": "approved",
+          "chosen": {
+            "run": "import",
+            "variant": "source"
+          },
+          "content_hash": "5221ef1aeaa9f36d6433f668aad26fe8834e439a6bf2d3871980cd1bd5f2c1eb"
+        },
+        "flat": {
+          "style": "flat-color",
+          "status": "approved",
+          "chosen": {
+            "run": "import",
+            "variant": "source"
+          },
+          "content_hash": "b35a8a6931d69eb9979dda6045fd638acd80534d05e990e92f0f85cc03f3c0bd"
+        },
+        "detail": {
+          "style": "lineal-color",
+          "status": "approved",
+          "chosen": {
+            "run": "import",
+            "variant": "source"
+          },
+          "content_hash": "77ac242396c6d2e1c72fd73ed145b1e4e6bec658d93c4c40a9b54d14b5c012db"
+        }
+      }
+    },
+    "cycling": {
+      "brief": "Bicycle side view: two spoked wheels, diamond frame, seat and handlebar",
+      "main_color": "#c05621",
+      "variants": {
+        "mono": {
+          "style": "mono-line",
+          "status": "approved",
+          "chosen": {
+            "run": "import",
+            "variant": "source"
+          },
+          "content_hash": "01a688289e5198caefbbf99f6f8b147349cfec04ec41d2672a46dacd3d5b795a"
+        },
+        "flat": {
+          "style": "flat-color",
+          "status": "approved",
+          "chosen": {
+            "run": "import",
+            "variant": "source"
+          },
+          "content_hash": "5320f03172e11c1dcc941c849d996c74621075e15ff72cb305de808cf0ad1d61"
+        },
+        "detail": {
+          "style": "lineal-color",
+          "status": "approved",
+          "chosen": {
+            "run": "import",
+            "variant": "source"
+          },
+          "content_hash": "ddbc180c0d81e70c497f1527a8b000b33771fb50a8073240e01d73e8f9d2493a"
+        }
+      }
+    },
+    "skitouring": {
+      "brief": "Ski tourer diagonal ascent: poles planted, skis climbing left to right",
+      "main_color": "#4a5568",
+      "variants": {
+        "mono": {
+          "style": "mono-line",
+          "status": "approved",
+          "chosen": {
+            "run": "import",
+            "variant": "source"
+          },
+          "content_hash": "6ff54ba581b929773f0031771287ac1d2e86a67d745311faaae40c7851b31e4b"
+        },
+        "flat": {
+          "style": "flat-color",
+          "status": "approved",
+          "chosen": {
+            "run": "import",
+            "variant": "source"
+          },
+          "content_hash": "2806841d4c2ccda61fe90e89594e697071d8dbe18a3b993fc832e2d18c37363d"
+        },
+        "detail": {
+          "style": "lineal-color",
+          "status": "approved",
+          "chosen": {
+            "run": "import",
+            "variant": "source"
+          },
+          "content_hash": "672f8e8ae5e7b48befb5484f1d39d04a7fc1717e1261c06561fe84be4e784bce"
+        }
+      }
+    }
+  }
+}
