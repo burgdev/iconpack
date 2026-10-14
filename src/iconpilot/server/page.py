@@ -135,7 +135,7 @@ footer { text-align:center; color:var(--muted); font-size:.75rem; padding:20px 0
     <span class="meta">S.rev {{ S.rev }} · S.round {{ S.round || '—' }}</span>
     <span class="spacer"></span>
     <span class="meta">{{ S.candidates.length }} S.candidates</span>
-    <button class="subtle" @click="openSettings" title="pack settings">⚙</button>
+    <button class="subtle" @click="openSettings" title="settings">⚙</button>
     <button class="subtle" @click="load(true)">refresh</button>
     <div v-if="S.ai.text" class="banner" :class="S.ai.active ? 'working' : 'ready'">
       <span class="dot"></span>{{ S.ai.text }}
