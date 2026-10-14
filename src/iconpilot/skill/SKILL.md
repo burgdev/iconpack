@@ -89,6 +89,9 @@ and style numbers always win over DESIGN.md prose).
              fail, go back to DRAFT with the failure reasons as constraints —
              never re-gate the same geometry forever, and never screen an
              empty round. Never claim a pass the gate didn't make.
+3b. VERIFY   Visual check (see Subagent drafting protocol): render survivors,
+             inspect at 16px/24px/48px, score 0-10, discard < 4.
+             Only verified candidates proceed to screening.
 4. SCREEN    iconpilot contact-sheet <pack>/.runs/<round> --pack <pack>
              → one PNG. Attach it to a vision-capable subagent (or inspect
              yourself): score each candidate 0–10, one-line critique, rank.
@@ -126,22 +129,103 @@ and style numbers always win over DESIGN.md prose).
 
 Round layout: `.runs/<round>/<variant>/<icon>/<cand>.svg` (r001, r002, …).
 
-## Role mapping (harness-side)
+## Model routing (user-definable)
 
-The tool never calls models — the harness picks them. For consistent routing
-across sessions, an optional **advisory** mapping lives at
-`~/.config/iconpilot/models.toml`; if present, honor it when spawning:
+The tool never calls models — the harness does. Routing lives in
+`~/.config/iconpilot/models.toml` (create it if missing). If absent,
+use cheapest-capable for drafting/screening, strongest for review/escalation.
 
 ```toml
 [roles]
-drafter  = "cheapest capable model"   # drafts candidates; gets `context` verbatim
-screener = "any vision model"         # must see the contact-sheet PNG
-reviewer = "your strongest model"     # set-level consistency on the sheet
-advisor  = "your strongest model"     # escalation only (twice-rejected icons)
+drafter  = "glm-5.3"           # high volume, cheap — writes SVG code
+screener = "glm-5.3-flash"     # vision: scores the contact sheet
+reviewer = "claude-opus"       # set-level consistency judgment
+advisor  = "claude-opus"       # escalation: twice-rejected icons, style disputes
 ```
 
-Without a config: drafter/screener = cheapest capable, reviewer/advisor =
-your strongest. **designer** is you — validate briefs with `iconpilot check`.
+Show current routing: `cat ~/.config/iconpilot/models.toml` (or report "default").
+When spawning subagents, pass the role's model — the subagent brief below
+includes everything else it needs.
+
+## Subagent drafting protocol
+
+### When to use a subagent vs draft yourself
+
+- **Subagent (drafter role)**: when generating 3+ candidates — it gets a clean,
+  focused context without your conversation baggage. Cheaper and often better
+  because it's not distracted by unrelated state.
+- **Yourself**: when refining 1-2 variants with specific user comments, or when
+  you need to reason about family coherence across multiple icons.
+
+### The drafting brief (what to pass to a subagent)
+
+Build from `iconpilot context <pack> --icon <id> --variant <v> --json`.
+A complete brief has ALL 10 sections — omit nothing:
+
+```
+1. TASK       What to do: "Add 2 new variants (a3, a4)" / "Refine a2: [comment]"
+2. BRIEF      The icon's brief from context (metaphor, key shapes, avoid)
+3. STYLE      Gate constraints from context (viewBox, grid, gaps, budget, palette)
+4. ANCHOR     The anchor SVG's actual markup, inline in a ```svg block
+5. REFERENCES Sibling/reference SVGs inline (from context: reference_svg, pinned)
+6. EXISTING   Current candidates' SVG source inline (if iterating a round)
+7. FEEDBACK   Comments + rejected_ideas + variant/icon/pack notes (from context)
+8. PALETTE    Allowed colors with hex codes (from context)
+9. CRAFT      Tier-relevant rules from craft.md (grid, stroke parity, gaps,
+              silhouette-first, 16px test — copy the sections, not a link)
+10. FORMAT    "Output: SVG source in fenced ```svg blocks, one per candidate,
+              labeled with the candidate id. One line per candidate on what
+              differs from existing. No file edits."
+```
+
+**The brief is complete when a stranger with no file access could produce a
+gate-passing, family-consistent icon from it alone.**
+
+### Visual verification (MANDATORY before showing the user)
+
+After `iconpilot gate` passes and before generating the contact sheet:
+
+1. Render each candidate at 16px, 24px, 48px (the gate already does this)
+2. **Inspect visually yourself or with a vision subagent**:
+   - Is the silhouette readable at 16px? (squint test)
+   - Does it match the anchor's visual weight and style?
+   - Any near-miss gaps the sampled gate might have missed?
+   - Is the color balanced (not too dark, not washed out)?
+3. Score 0-10. **Discard any candidate scoring < 4.** Only survivors get
+   a spot on the contact sheet.
+4. If ALL candidates score < 4, go back to drafting with the failure reasons.
+
+**Never present ungated or unverified candidates to the user.** The user
+should only ever see icons that pass both the deterministic gate AND your
+visual check. This is the trust contract.
+
+### Subagent screener brief
+
+For the vision model that scores candidates:
+
+```
+Score each candidate 0-10 against its brief:
+- 0-3: wrong metaphor, unreadable silhouette, or gate-visible flaws
+- 4-6: correct but generic — legible, on-style, no presence
+- 7-8: clean, balanced, family-coherent — ship candidate
+- 9-10: instant readability at 16px — anchor material
+
+Test family coherence on confusable pairs (e.g. hut vs selfhut vs hotel).
+Rank candidates. Flag any that break set consistency.
+[Attach the contact-sheet PNG]
+```
+
+### Subagent reviewer brief (set-level, once per round)
+
+```
+Review the full contact sheet for SET consistency:
+- Same visual weight across icons? (no one icon much heavier/lighter)
+- Consistent roof line / perspective / detail level?
+- Color palette coherent? (no rogue hues)
+- Any icon that looks like it's from a different family?
+Flag specific icons with what's off. This is advisory — the user decides.
+[Attach the contact-sheet PNG]
+```
 
 ## Improving an existing pack (imported baseline)
 

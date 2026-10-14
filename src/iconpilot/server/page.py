@@ -235,6 +235,25 @@ footer { text-align:center; color:var(--muted); font-size:.75rem; padding:20px 0
     </div>
 
     <section>
+      <details>
+        <summary>Round history · {{ S.history.length }} rounds</summary>
+        <div v-for="h in S.history" :key="h.round" class="group" style="margin:6px 0">
+          <div class="ghead">
+            <b>{{ h.round }}</b>
+            <span class="muted">{{ h.decided ? 'decided' : h.candidates + ' drafted' }}</span>
+            <span v-if="h.instructions" class="chip" title="apply-time instructions">💬 {{ h.instructions.slice(0, 40) }}{{ h.instructions.length > 40 ? '…' : '' }}</span>
+          </div>
+          <div v-if="h.decided" class="muted" style="font-size:.8rem">
+            <template v-for="(dec, key) in h.icons" :key="key">
+              {{ key }}: {{ dec.items.map(i => i.t).join(' · ') }}
+            </template>
+          </div>
+        </div>
+        <p v-if="!S.history.length" class="muted">no rounds yet</p>
+      </details>
+    </section>
+
+    <section>
       <h2>Icons</h2>
       <div class="group" v-for="(icon, id) in S.pack.icons" :key="id">
         <div class="ghead">
@@ -252,6 +271,9 @@ footer { text-align:center; color:var(--muted); font-size:.75rem; padding:20px 0
                  @click="openIcon(id, vid, v)">
             <div class="name">{{ vid }}</div>
             <span class="chip" :class="v.status">{{ v.link ? '→ ' + v.link : v.status }}</span>
+            <button v-if="v.status === 'approved' && !v.link" class="iconbtn"
+                    :class="{ on: isPinned(id, vid) }" :title="isPinned(id, vid) ? 'unpin' : 'pin as style reference'"
+                    @click="togglePin(id, vid)">{{ isPinned(id, vid) ? '📌' : '📍' }}</button>
             <span v-if="v.status === 'stale' || edited(id, vid)" class="muted">needs re-review</span>
           </div>
         </div>
@@ -410,6 +432,7 @@ const S = reactive({
   dlg: null, sheet: null, noteDlg: null, settingsDlg: false,
   decisionEdit: '', showGen: false, editingBrief: null,
   flash: '', flashOk: true, applying: false, instructions: '', vNoteDlg: null,
+  history: [], showHistory: false,
   set: { version: '', rules: '', strokeWidth: 2, linecap: 'round', linejoin: 'round', padding: 2, precision: 0.5, palette: null, errors: '' },
   bgs: [
     { name: 'white', hex: '#ffffff' }, { name: 'paper', hex: '#f6f9f7' },
@@ -467,6 +490,18 @@ async function saveMainColorIcon(g, color) {
       body: JSON.stringify({ icon: g.icon, main_color: color }) });
     S.msg = `main color saved (rev ${r.rev})`; S.msgClass = 'ok'; await load();
   } catch (e) { S.msg = e.message; S.msgClass = 'err'; }
+}
+async function togglePin(icon, variant) {
+  const current = S.pack.icons?.[icon]?.variants?.[variant]?.pinned;
+  try {
+    const r = await api('/api/variant', { method: 'PUT', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ icon, variant, pinned: !current }) });
+    S.msg = `${!current ? '📌 pinned' : 'unpinned'} ${icon}/${variant} (rev ${r.rev})`;
+    S.msgClass = 'ok'; await load();
+  } catch (e) { S.msg = e.message; S.msgClass = 'err'; }
+}
+function isPinned(icon, variant) {
+  return !!S.pack.icons?.[icon]?.variants?.[variant]?.pinned;
 }
 function variantNote(g, vid) {
   return S.pack.icons?.[g.icon]?.variants?.[vid]?.note || '';
@@ -731,8 +766,8 @@ async function saveIcon(id, brief) {
 function edited(id, vid) { return false; } // server marks ✎edited via status; page keeps simple
 
 async function load(manual) {
-  const [p, run, styles, ai] = await Promise.all([
-    api('/api/pack'), api('/api/run'), api('/api/styles'), api('/api/ai-status'),
+  const [p, run, styles, ai, hist] = await Promise.all([
+    api('/api/pack'), api('/api/run'), api('/api/styles'), api('/api/ai-status'), api('/api/history'),
   ]);
   S.pack = p.pack; S.rev = p.rev; S.round = run.round;
   S.candidates = run.candidates.map(c => ({
@@ -743,6 +778,7 @@ async function load(manual) {
   S.styles = styles;
   S.ai = { text: ai.status || '', active: !!ai.active };
   S.version = p.version || '';
+  S.history = hist.rounds || [];
   restoreDraft();  // bring back in-progress ratings after a reload
 }
 
@@ -764,7 +800,7 @@ const App = {
       mainColor, packBrief, saveBrief, saveMainColor, hasNote, openNote, saveNote,
       openSettings, saveSettings, markDirty,
       variantGroups, packBriefIcon, mainColorIcon, saveMainColorIcon, rejectAllIcon,
-      variantNote, openVariantNote, saveVariantNote, copyPath,
+      variantNote, openVariantNote, saveVariantNote, copyPath, togglePin, isPinned,
     };
   },
 };

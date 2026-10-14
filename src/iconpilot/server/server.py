@@ -209,6 +209,29 @@ class ReviewHandler(BaseHTTPRequestHandler):
                 self._json(404, {"error": "svg not found"})
             return
 
+        if url.path == "/api/history":
+            rounds = []
+            runs_dir = self.pack_dir / ".runs"
+            if runs_dir.is_dir():
+                for run in sorted(p.name for p in runs_dir.glob("r*") if p.is_dir()):
+                    info = {"round": run, "decided": False, "icons": {}, "instructions": None}
+                    dec = runs_dir / run / "decisions.json"
+                    if dec.is_file():
+                        try:
+                            d = json.loads(dec.read_text())
+                            info["decided"] = True
+                            info["instructions"] = d.get("instructions")
+                            info["icons"] = d.get("icons", {})
+                        except (ValueError, OSError):
+                            pass
+                    if not info["decided"]:
+                        cands = [c.stem for c in (runs_dir / run).rglob("*.svg")]
+                        info["candidates"] = len(cands)
+                    # what was approved this round (from pack state)
+                    rounds.append(info)
+            self._json(200, {"rounds": rounds})
+            return
+
         if url.path == "/api/ai-status":
             f = self.pack_dir / ".runs" / ".ai-status"
             status = ""
@@ -321,7 +344,10 @@ class ReviewHandler(BaseHTTPRequestHandler):
             variant_id = data.get("variant")
             style_id = data.get("style")
             note = data.get("note")
-            if not (icon_id and variant_id and (style_id or note is not None)):
+            pinned = data.get("pinned")
+            if not (
+                icon_id and variant_id and (style_id or note is not None or pinned is not None)
+            ):
                 self._json(400, {"error": "need icon, variant, style"})
                 return
             try:
@@ -338,6 +364,8 @@ class ReviewHandler(BaseHTTPRequestHandler):
                         v["style"] = style_id
                     if note is not None:
                         v["note"] = note
+                    if pinned is not None:
+                        v["pinned"] = pinned
                     _, errors = revalidate(pack)
                     if errors:
                         self._json(400, {"errors": errors})

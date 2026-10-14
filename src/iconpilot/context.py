@@ -84,6 +84,27 @@ def build_context(
         ref = variant["reference"]
         ri, _, rv = ref.partition("#")
         ctx["reference_svg"] = svg_of(ri, rv)
+    # auto-brief: highest-rated approved sibling (same icon, other variant)
+    if "reference_svg" not in ctx:
+        for sib_id, sib in sorted(icon["variants"].items()):
+            if sib_id != variant_id and "style" in sib and sib.get("status") == "approved":
+                svg = svg_of(icon_id, sib_id)
+                if svg:
+                    ctx["reference_svg"] = svg
+                    ctx["reference_source"] = f"auto: {icon_id}#{sib_id} (approved sibling)"
+                    break
+    # pinned references: any approved + pinned variant in the pack
+    pinned_refs = []
+    for pid, picon in pack["icons"].items():
+        for pvid, pv in picon.get("variants", {}).items():
+            if pv.get("pinned") and pv.get("status") == "approved":
+                svg = svg_of(pid, pvid)
+                if svg and f"{pid}#{pvid}" != f"{icon_id}#{variant_id}":
+                    pinned_refs.append(
+                        {"id": f"{pid}#{pvid}", "svg": svg, "brief": picon.get("brief", "")}
+                    )
+    if pinned_refs:
+        ctx["pinned_references"] = pinned_refs
     if variant.get("comments"):
         ctx["comments"] = variant["comments"]
     if variant.get("rejected_ideas"):

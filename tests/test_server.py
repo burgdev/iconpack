@@ -313,3 +313,63 @@ def test_variant_note_and_svg_path(server: _Server, srvpack: Path) -> None:
     assert code == 200
     path = json.loads(body)["path"]
     assert "hut" in path and path.endswith(".svg")
+
+
+def test_history_endpoint(server: _Server, srvpack: Path) -> None:
+    # apply a decision first so r001 has decisions.json
+    server.req("POST", "/api/decision", {"text": "hut/mono: a1 ok"})
+    code, body = server.get("/api/history")
+    assert code == 200
+    rounds = json.loads(body)["rounds"]
+    assert len(rounds) >= 1
+    r = rounds[-1]
+    assert r["round"] == "r001"
+    assert r["decided"] is True
+    assert "hut" in str(r["icons"])
+
+
+def test_pinned_variant(server: _Server, srvpack: Path) -> None:
+    code, data = server.req(
+        "PUT",
+        "/api/variant",
+        {
+            "icon": "hut",
+            "variant": "mono",
+            "pinned": True,
+        },
+    )
+    assert code == 200, data
+    pack = json.loads((srvpack / "pack.json").read_text())
+    assert pack["icons"]["hut"]["variants"]["mono"]["pinned"] is True
+
+
+def test_context_auto_brief_from_sibling(workpack: Path) -> None:
+    from iconpilot.context import build_context
+    from iconpilot.pack import load_pack
+
+    # approve hut/mono so it becomes an auto-reference for hut/color
+    pack, styles = load_pack(workpack / "pack.json")
+    pack["icons"]["hut"]["variants"]["mono"]["status"] = "approved"
+    (workpack / "icons" / "hut" / "mono.svg").write_text(
+        '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"/>'
+    )
+    ctx = build_context(workpack, pack, styles, "hut", "color")
+    # color has reference: hut#mono explicitly, so reference_svg should exist
+    assert "reference_svg" in ctx
+
+
+def test_context_pinned_references(workpack: Path) -> None:
+    from iconpilot.context import build_context
+    from iconpilot.pack import load_pack
+
+    pack, styles = load_pack(workpack / "pack.json")
+    # pin hut/mono as a style reference
+    pack["icons"]["hut"]["variants"]["mono"]["pinned"] = True
+    pack["icons"]["hut"]["variants"]["mono"]["status"] = "approved"
+    (workpack / "icons" / "hut" / "mono.svg").write_text(
+        '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"/>'
+    )
+    # build context for a DIFFERENT icon
+    ctx = build_context(workpack, pack, styles, "selfhut", "mono")
+    assert "pinned_references" in ctx
+    assert any("hut#mono" in pr["id"] for pr in ctx["pinned_references"])

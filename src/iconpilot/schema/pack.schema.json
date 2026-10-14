@@ -304,6 +304,10 @@
         "note": {
           "type": "string",
           "description": "Persistent per-variant note for the agent."
+        },
+        "pinned": {
+          "type": "boolean",
+          "description": "Pinned: always included as a style reference in every drafting context."
         }
       }
     },
