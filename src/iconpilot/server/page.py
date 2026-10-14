@@ -708,7 +708,7 @@ const App = {
       }, 2000);
     });
     return {
-      S, render, item, rating, drop, approve, keep, rate, rejectAll,
+      S, render, item, rating, drop, approve, keep, rate,
       styleLabel, open, openIcon, openSheet, switchStyle, startManual,
       apply, copy, saveIcon, edited, load, chosenCand, variantStatus,
       mainColor, packBrief, saveBrief, saveMainColor, hasNote, openNote, saveNote,
