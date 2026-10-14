@@ -373,3 +373,11 @@ def test_context_pinned_references(srvpack: Path) -> None:
     ctx = build_context(srvpack, pack, styles, "selfhut", "mono")
     assert "pinned_references" in ctx
     assert any("hut#mono" in pr["id"] for pr in ctx["pinned_references"])
+
+
+def test_anchor_suggestions_endpoint(server: _Server) -> None:
+    code, body = server.get("/api/anchor-suggestions")
+    assert code == 200
+    data = json.loads(body)
+    assert "suggestions" in data
+    assert isinstance(data["suggestions"], list)

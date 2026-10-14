@@ -113,3 +113,62 @@ def test_cheat_sheet_fix_note() -> None:
     skill = Path(__file__).parent.parent / "src" / "iconpilot" / "skill" / "SKILL.md"
     t = skill.read_text()
     assert "single SVG only" in t
+
+
+# --- Sprint 3 tests ---------------------------------------------------------
+
+
+def test_strictness_field_valid(tmp_path: Path) -> None:
+    """strictness=0.5 is valid in the schema."""
+    d = tmp_path / "sp"
+    d.mkdir()
+    pack = {
+        "schema": 2,
+        "name": "t",
+        "version": "0.1.0",
+        "spec": {"viewBox": "0 0 24 24", "allowed_elements": ["path"]},
+        "icons": {
+            "x": {"brief": "x", "variants": {"mono": {"style": "mono-line", "status": "todo"}}}
+        },
+    }
+    (d / "pack.json").write_text(json.dumps(pack))
+    pack = json.loads((d / "pack.json").read_text())
+    pack["strictness"] = 0.5
+    from iconpilot.pack import revalidate
+
+    _, errors = revalidate(pack)
+    assert not errors
+
+
+def test_style_export(tmp_path: Path) -> None:
+    d = tmp_path / "sp"
+    d.mkdir()
+    pack = {
+        "schema": 2,
+        "name": "src",
+        "version": "0.1.0",
+        "spec": {"viewBox": "0 0 24 24", "allowed_elements": ["path"]},
+        "rules": ["thin strokes"],
+        "icons": {
+            "a": {
+                "brief": "a",
+                "variants": {
+                    "mono": {
+                        "style": "mono-line",
+                        "status": "approved",
+                        "anchor": True,
+                        "chosen": {"run": "r0", "variant": "x"},
+                    }
+                },
+            }
+        },
+    }
+    (d / "pack.json").write_text(json.dumps(pack))
+    (d / "icons" / "a").mkdir(parents=True)
+    (d / "icons" / "a" / "mono.svg").write_text("<svg/>")
+    out = tmp_path / "profile.json"
+    r = runner.invoke(app, ["style-export", str(d), "--out", str(out)])
+    assert r.exit_code == 0, r.output
+    profile = json.loads(out.read_text())
+    assert profile["format"] == "iconpilot-style-profile"
+    assert "a#mono" in profile["anchors"]

@@ -273,6 +273,31 @@ class ReviewHandler(BaseHTTPRequestHandler):
             self._json(200, {"rounds": rounds})
             return
 
+        if url.path == "/api/anchor-suggestions":
+            pack, _ = load_pack(self.pack_dir / "pack.json")
+            suggestions = []
+            for iid, icon in pack["icons"].items():
+                for vid, v in icon.get("variants", {}).items():
+                    if "style" not in v or v.get("status") != "approved":
+                        continue
+                    # count positive comments mentioning quality
+                    comments = v.get("comments", [])
+                    high_scores = sum(
+                        1
+                        for c in comments
+                        if "rated 9" in c.get("text", "") or "rated 10" in c.get("text", "")
+                    )
+                    if high_scores >= 1 and not v.get("anchor"):
+                        suggestions.append(
+                            {
+                                "icon": iid,
+                                "variant": vid,
+                                "reason": f"scored 9+ {high_scores} time(s)",
+                            }
+                        )
+            self._json(200, {"suggestions": suggestions})
+            return
+
         if url.path == "/api/ai-status":
             f = self.pack_dir / ".runs" / ".ai-status"
             status = ""

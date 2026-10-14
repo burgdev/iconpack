@@ -145,6 +145,11 @@ and style numbers always win over DESIGN.md prose).
              pack's style_words via the review page. If a pattern fails
              consistently, suggest adding it to avoid. The user confirms —
              style evolution is a human decision, but you propose.
+6a. TRACK    Record round costs in .runs/<round>/round.json:
+             {"round": "r001", "models_used": {"drafter": "glm-5.3", ...},
+              "candidates_generated": 4, "gate_fixes": 2,
+              "estimated_cost_usd": 0.05}
+             Update after each phase (draft/gate/fix/screen).
 6b. REPEAT   When `wait` return:
              a) read .runs/<round>/decisions.json — applied items + instructions
              b) `iconpilot status <pack>` — see ✎edited markers and new notes

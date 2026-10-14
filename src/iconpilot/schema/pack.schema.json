@@ -80,6 +80,12 @@
     "note": {
       "type": "string",
       "description": "Pack-global note: standing instructions for every drafting round."
+    },
+    "strictness": {
+      "type": "number",
+      "minimum": 0,
+      "maximum": 1,
+      "description": "0=loose (early exploration), 1=strict (final polish). Scales gate tolerance."
     }
   },
   "$defs": {

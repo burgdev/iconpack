@@ -324,8 +324,8 @@ def _element_points(root, per_segment: int = 12):
             yield el, pts
 
 
-def _min_gap(root, style, report) -> None:
-    gap = style.min_gap
+def _min_gap(root, style, report, threshold_scale: float = 1.0) -> None:
+    gap = style.min_gap * threshold_scale if threshold_scale > 1.0 else style.min_gap
     if not gap or gap <= 0:
         return
     contact_eps = 0.5  # closer than this counts as touching, not a gap
@@ -356,8 +356,19 @@ def _min_distance(a: list[tuple[float, float]], b: list[tuple[float, float]]) ->
 
 
 def run_gate(svg_path: str | Path, pack: dict, style: Style) -> GateReport:
-    """Run the deterministic gate on one SVG against a pack spec + style."""
+    """Run the deterministic gate on one SVG against a pack spec + style.
+
+    Pack `strictness` (0-1) scales tolerances: low = forgiving (early rounds),
+    high = strict (final polish). Defaults to 1 (full strictness).
+    """
     report = GateReport()
+    strictness = pack.get("strictness", 1.0)
+    if strictness < 1.0:
+        # Loose mode: scale min_gap tolerance (2x at strictness=0, 1x at 1.0)
+        import dataclasses
+
+        style = dataclasses.replace(style, min_gap=style.min_gap * (2.0 - strictness))
+
     path = Path(svg_path)
     if not path.is_file():
         report.fail(f"file: {path} not found")

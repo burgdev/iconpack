@@ -202,6 +202,94 @@ def wait(
         typer.echo(f"  {result['summary']}")
 
 
+@app.command(name="style-export")
+def style_export(
+    pack: str, out: str = typer.Option(..., "--out", help="Output JSON path.")
+) -> None:
+    """Export the pack's style profile (spec + styles + rules + notes + anchors) as JSON."""
+    try:
+        pack_data, _styles = _load_pack_arg(pack)
+    except PackError as exc:
+        typer.secho(str(exc), fg=typer.colors.RED, err=True)
+        raise typer.Exit(code=2) from exc
+
+    # collect anchor SVGs
+    anchors = {}
+    pack_dir = resolve_pack_dir(pack)
+    for iid, icon in pack_data["icons"].items():
+        for vid, v in icon.get("variants", {}).items():
+            if v.get("anchor") or v.get("pinned"):
+                f = pack_dir / "icons" / iid / f"{vid}.svg"
+                if f.is_file():
+                    anchors[f"{iid}#{vid}"] = {
+                        "brief": icon.get("brief", ""),
+                        "svg": f.read_text(),
+                        "pinned": bool(v.get("pinned")),
+                    }
+
+    profile = {
+        "format": "iconpilot-style-profile",
+        "version": 1,
+        "pack_name": pack_data["name"],
+        "spec": pack_data.get("spec", {}),
+        "styles": pack_data.get("styles", {}),
+        "rules": pack_data.get("rules", []),
+        "note": pack_data.get("note"),
+        "anchors": anchors,
+    }
+    Path(out).write_text(json.dumps(profile, indent=2))
+    typer.secho(f"exported style profile → {out} ({len(anchors)} anchors)", fg=typer.colors.GREEN)
+
+
+@app.command(name="style-import")
+def style_import(
+    pack: str,
+    profile_path: str = typer.Option(..., "--from", help="Style profile JSON path."),
+) -> None:
+    """Import a style profile into a pack (merges spec/styles/rules/notes)."""
+    try:
+        pack_data, _styles = _load_pack_arg(pack)
+    except PackError as exc:
+        typer.secho(str(exc), fg=typer.colors.RED, err=True)
+        raise typer.Exit(code=2) from exc
+
+    profile = json.loads(Path(profile_path).read_text())
+    if profile.get("format") != "iconpilot-style-profile":
+        typer.secho("not a valid iconpilot style profile", fg=typer.colors.RED, err=True)
+        raise typer.Exit(code=2)
+
+    pack_dir = resolve_pack_dir(pack)
+    from iconpilot.pack import revalidate, write_pack_atomic
+
+    if profile.get("spec"):
+        pack_data.setdefault("spec", {}).update(profile["spec"])
+    if profile.get("styles"):
+        pack_data.setdefault("styles", {}).update(profile["styles"])
+    if profile.get("rules"):
+        existing = set(pack_data.get("rules", []))
+        pack_data["rules"] = list(existing | set(profile["rules"]))
+    if profile.get("note") and not pack_data.get("note"):
+        pack_data["note"] = profile["note"]
+
+    # import anchor SVGs as reference files
+    for ref_id, data in profile.get("anchors", {}).items():
+        iid, _, vid = ref_id.partition("#")
+        ref_dir = pack_dir / ".style-refs" / iid
+        ref_dir.mkdir(parents=True, exist_ok=True)
+        (ref_dir / f"{vid}.svg").write_text(data["svg"])
+
+    _, errors = revalidate(pack_data)
+    if errors:
+        typer.secho("rejected:\n  - " + "\n  - ".join(errors), fg=typer.colors.RED, err=True)
+        raise typer.Exit(code=2)
+    write_pack_atomic(pack_dir, pack_data)
+    typer.secho(
+        f"imported style profile from {profile_path} "
+        f"({len(profile.get('anchors', {}))} anchor refs)",
+        fg=typer.colors.GREEN,
+    )
+
+
 @app.command()
 def diff(pack: str) -> None:
     """Show what changed since the last round: statuses, briefs, notes, SVG edits."""
