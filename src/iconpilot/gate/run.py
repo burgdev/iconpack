@@ -81,6 +81,11 @@ def _viewbox(
 
 def _lint(root, spec: dict, style: Style, report: GateReport) -> None:
     allowed = set(spec.get("allowed_elements", ["path"]))
+    # gradient styles need <defs>/<linearGradient>/<stop>; their id is an
+    # internal fill reference, not a CSS/JS hook — allowed on gradients only
+    gradient_els = {"defs", "linearGradient", "radialGradient", "stop"}
+    if style.fill == "gradient":
+        allowed |= gradient_els
     for el in root.iter():
         if el is root:
             continue
@@ -89,7 +94,8 @@ def _lint(root, spec: dict, style: Style, report: GateReport) -> None:
             report.fail(f"lint: <{name}> not in allowed_elements {sorted(allowed)}")
         if el.get("style"):
             report.fail(f"lint: <{name}> carries inline style attribute")
-        if el.get("id") or el.get("class"):
+        is_gradient = name in {"linearGradient", "radialGradient"}
+        if (el.get("id") or el.get("class")) and not is_gradient:
             report.fail(f"lint: <{name}> carries id/class")
         if el.get("transform"):
             report.fail(f"lint: <{name}> carries transform — flatten to absolute paths")
