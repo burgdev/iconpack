@@ -82,6 +82,8 @@ header .meta { color:var(--muted); font-size:.8rem; }
 .ic-lg svg { width:18px; height:18px; vertical-align:-4px; }
 .dotnew { width:7px; height:7px; border-radius:50%; background:var(--warn); display:inline-block; margin-left:2px; }
 .chip.new { background:var(--warn); color:var(--bg); font-size:.65rem; padding:1px 6px; font-weight:600; }
+.suggestbox { position:absolute; top:100%; left:0; right:0; z-index:30; background:var(--card);
+             border:1px solid var(--line); border-radius:8px; box-shadow:var(--shadow-lg); max-height:200px; overflow-y:auto; }
 .focusgrid { border-collapse:collapse; width:100%; }
 .focusgrid th, .focusgrid td { padding:4px 6px; text-align:center; border-bottom:1px solid var(--line); }
 .focusgrid td:first-child, .focusgrid th:first-child { text-align:left; font-weight:600; }
@@ -728,8 +730,28 @@ footer { text-align:center; color:var(--muted); font-size:.75rem; padding:20px 0
           </tbody>
         </table>
       </div>
+      <div class="row" style="margin-top:10px; align-items:flex-start">
+        <div style="flex:1; position:relative">
+          <input v-model="S.nextDlg.newIcon" placeholder="add a new icon — name — brief, e.g. 'sunset — orange sun over horizon'"
+                 @input="iconSuggest()" @keydown.enter.prevent="addNewIcon()"
+                 style="width:100%" aria-label="add new icon">
+          <div v-if="S.nextDlg.suggestions && S.nextDlg.suggestions.length" class="suggestbox">
+            <button v-for="s in S.nextDlg.suggestions" :key="s.key" class="subtle"
+                    @click="pickSuggestion(s)" style="display:block; width:100%; text-align:left">
+              {{ s.label }}
+            </button>
+          </div>
+        </div>
+        <button class="subtle" @click="addNewIcon()"><span class="ic" v-html="IC.plus"></span> add</button>
+      </div>
+      <div class="row" v-if="S.nextDlg.pending && S.nextDlg.pending.length" style="margin-top:6px">
+        <span class="muted">to add:</span>
+        <span v-for="(pn, i) in S.nextDlg.pending" :key="pn" class="chip">{{ pn }}
+          <button class="subtle" @click="S.nextDlg.pending.splice(i, 1)" aria-label="remove">✕</button>
+        </span>
+      </div>
       <div class="row" style="margin-top:10px">
-        <button class="primary" @click="startRound(Object.entries(S.nextDlg.sel).filter(([,on]) => on).map(([k]) => k))">start pass</button>
+        <button class="primary" @click="startRoundWithNew()">start pass</button>
         <button class="subtle" @click="toggleAll(true)">select all</button>
         <button class="subtle" @click="toggleAll(false)">none</button>
         <button class="subtle" @click="S.nextDlg = null" aria-label="Close">✕</button>
