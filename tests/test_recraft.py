@@ -735,3 +735,27 @@ def test_split_sheet_falls_back_when_groups_missing() -> None:
 def test_sheet_prompt_asks_for_named_groups() -> None:
     p = rc.sheet_prompt("a sailboat", 3)
     assert "g id='icon1'" in p and "icon9" in p
+
+
+def test_curated_style_map_covers_registry() -> None:
+    from iconpilot.styles import resolve_styles
+    from iconpilot.recraft import CURATED_STYLE_MAP
+
+    missing = set(resolve_styles({})) - set(CURATED_STYLE_MAP)
+    assert not missing, f"styles without curated mapping: {missing}"
+
+
+def test_generate_refs_curated_uses_style_param(monkeypatch: pytest.MonkeyPatch) -> None:
+    captured = {}
+
+    def fake_request(token, method, path, payload=None):
+        captured["payload"] = payload
+        import base64
+
+        return {"data": [{"b64_json": base64.b64encode(_sheet_svg(3).encode()).decode()}]}
+
+    monkeypatch.setattr(rc, "_request", fake_request)
+    cells = rc.generate_refs_curated("t", "broken-line", ["home", "leaf", "zap"], 3)
+    assert captured["payload"]["style"] == "Broken line"
+    assert captured["payload"]["model"] == "recraftv2_vector"
+    assert len(cells) == 9

@@ -43,6 +43,26 @@ MODEL_PRICES: dict[str, float] = {
     "recraftv4_styles_pro_vector": 0.12,
 }
 STYLE_CREATE_PRICE = 0.005
+
+# our style ids → Recraft V2-vector CURATED icon styles (by name). Used to
+# generate reference icons in exactly that look via the `style` parameter.
+CURATED_STYLE_MAP = {
+    "mono-line": "Outline",
+    "mono-line-thin": "Thin",
+    "mono-bold": "Bold stroke",
+    "filled": "Icon",
+    "broken-line": "Broken line",
+    "doodle": "Doodle",
+    "colored-outline": "Colored outline",
+    "offset-fill": "Offset fill",
+    "gradient-color": "Gradient shape",
+    "flat-color": "Colored shape",
+    "pixel": "Pictogram",
+    "primitive": "Pictogram",
+    "lineal-color": "Colored outline",
+    "duotone": "Colored shape",
+    "isometric": "Colored shape",
+}
 STYLE_REF_PRICE = 0.005  # per request attaching style_reference_urls instead of style_id
 
 # every API model that returns editable SVG (model param must be one of these)
@@ -171,6 +191,93 @@ def sheet_prompt(prompt: str, grid: int) -> str:
     return (
         prompt[: 900 - len(SHEET_PROMPT_SUFFIX) // 2] + SHEET_PROMPT_SUFFIX.format(g=g, n=g * g)
     )[:1000]
+
+
+def generate_refs_curated(
+    token: str, style_id: str, subjects: list[str], grid: int = 3
+) -> list[str]:
+    """Generate style reference icons using Recraft's curated look.
+
+    One sheet call with the curated `style` parameter (V2-vector icon
+    styles), then split — cheap brand-consistent refs for round 0.
+    """
+    n = grid * grid
+    prompt = batch_prompt(
+        subjects[:n],
+        1,
+        f"Recraft curated '{CURATED_STYLE_MAP.get(style_id, 'Icon')}' icon style",
+        grid,
+    )
+    payload: dict = {
+        "prompt": prompt,
+        "model": "recraftv2_vector",
+        "n": 1,
+        "size": "1:1",
+        "response_format": "b64_json",
+        "style": CURATED_STYLE_MAP.get(style_id, "Icon"),
+    }
+    out = _request(token, "POST", "/images/generations", payload)
+    import base64 as _b64
+
+    svg = _b64.b64decode(out["data"][0]["b64_json"]).decode()
+    return split_sheet(svg, grid, target=24.0)
+
+
+def batch_prompt(icon_prompts: list[str], vpi: int, style_phrase: str, grid: int) -> str:
+    """One sheet prompt for several icons x variants per icon.
+
+    Cell assignment is row-major: icon k occupies cells k*vpi+1 .. (k+1)*vpi.
+    The named-group request (<g id='iconN'>) matches the splitter.
+    """
+    n = grid * grid
+    assigns = []
+    for k, desc in enumerate(icon_prompts):
+        first, last = k * vpi + 1, (k + 1) * vpi
+        assigns.append(f"cells {first}-{last}: {desc}")
+    body = (
+        f"{n} icons in a {grid} by {grid} grid, {vpi} distinct variants per subject. "
+        + "; ".join(assigns)
+        + f". Style: {style_phrase}."
+    )
+    tail = SHEET_PROMPT_SUFFIX.format(g=grid, n=n)
+    return (body[: 1000 - len(tail)] + tail)[:1000]
+
+
+def plan_batch(calls_by_style: dict[str, list[str]], vpi: int) -> list[dict]:
+    """Pack (style -> icon prompts) into as few sheet calls as possible.
+
+    Rules: one call per style (refs/style_id differ); never split an icon's
+    variants across calls unless vpi alone exceeds the grid; grid is the
+    smallest that fits (2x2/3x3/4x4; vpi<=4 avoids splits up to 16 cells).
+    """
+    vpi = max(1, min(int(vpi), 6))
+    plans = []
+    for style_id, prompts in calls_by_style.items():
+        if not prompts:
+            continue
+        per_sheet = (
+            max(1, (grid * grid) // max(vpi, 1)) if (grid := _fit_grid(len(prompts) * vpi)) else 1
+        )
+        chunks = [prompts[i : i + per_sheet] for i in range(0, len(prompts), per_sheet)]
+        for chunk in chunks:
+            grid = _fit_grid(len(chunk) * vpi)
+            plans.append(
+                {
+                    "style": style_id,
+                    "icons": chunk,
+                    "vpi": vpi,
+                    "grid": grid,
+                    "cells": len(chunk) * vpi,
+                }
+            )
+    return plans
+
+
+def _fit_grid(cells: int) -> int:
+    for g in (1, 2, 3, 4):
+        if g * g >= cells:
+            return g
+    return 4
 
 
 def split_sheet(svg: str, grid: int, target: float = 24.0) -> list[str]:

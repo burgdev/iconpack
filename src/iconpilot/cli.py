@@ -472,6 +472,48 @@ def style_ref_cmd(
         typer.echo(f"  {origin}: {f.name}")
 
 
+@app.command(name="style-refs-generate")
+def style_refs_generate(
+    pack: str,
+    style: str = typer.Option(..., "--style", help="Our style id to generate refs for."),
+    subjects: str = typer.Option(
+        "home,leaf,zap", "--subjects", help="Comma list of icon subjects for the sheet."
+    ),
+    grid: int = typer.Option(3, "--grid", min=2, max=4, help="NxN icons in one paid call."),
+) -> None:
+    """Generate own style references via Recraft's curated look (one cheap call).
+
+    Uses the curated style that matches our style id (e.g. broken-line →
+    'Broken line'), generates an NxN sheet of the given subjects in one paid
+    image, splits it, and stores the cells as own references.
+    """
+    import iconpilot.recraft as rc
+
+    token = rc.resolve_token()
+    if not token:
+        typer.secho("no Recraft token — set RECRAFT_API_TOKEN", fg=typer.colors.RED, err=True)
+        raise typer.Exit(code=2)
+    pack_dir = resolve_pack_dir(pack)
+    subs = [s.strip() for s in subjects.split(",") if s.strip()][: grid * grid]
+    typer.echo(f"generating {grid}x{grid} refs for '{style}' ({len(subs)} subjects, 1 call)…")
+    try:
+        cells = rc.generate_refs_curated(token, style, subs, grid)
+    except rc.RecraftError as exc:
+        typer.secho(str(exc), fg=typer.colors.RED, err=True)
+        raise typer.Exit(code=1) from exc
+    d = pack_dir / ".style-refs" / style
+    d.mkdir(parents=True, exist_ok=True)
+    wrote = 0
+    for i, svg in enumerate(cells, 1):
+        (d / f"ref{i}.svg").write_text(svg)
+        wrote += 1
+    typer.secho(
+        f"generated {wrote} own references → .style-refs/{style}/ "
+        f"(~${rc.price_per_image('recraftv2_vector') + rc.STYLE_REF_PRICE:.3f})",
+        fg=typer.colors.GREEN,
+    )
+
+
 @app.command(name="recraft-style")
 def recraft_style(
     pack: str,

@@ -85,6 +85,11 @@ header .meta { color:var(--muted); font-size:.8rem; }
 .focusgrid th, .focusgrid td { padding:4px 6px; text-align:center; border-bottom:1px solid var(--line); }
 .focusgrid td:first-child, .focusgrid th:first-child { text-align:left; font-weight:600; }
 .focusgrid input[type=checkbox] { min-height:0; }
+.stylestrip { margin: 0 0 12px; }
+.stylestrip summary { cursor:pointer; color:var(--muted); padding:6px 10px; border:1px solid var(--line);
+                      border-radius:10px; background:var(--card); display:inline-flex; gap:8px; align-items:center;
+                      user-select:none; }
+.stylestrip summary:hover { color:var(--ink); border-color:var(--accent); }
 .chat { max-height:300px; overflow-y:auto; border:1px solid var(--line); border-radius:10px; padding:10px; margin-bottom:10px;
        background:color-mix(in oklab, var(--bg) 60%, var(--card)); display:flex; flex-direction:column; gap:6px; }
 .chat-head { font-size:.68rem; text-transform:uppercase; letter-spacing:.08em; color:var(--muted); text-align:center; margin:6px 0 2px; }
@@ -436,24 +441,22 @@ footer { text-align:center; color:var(--muted); font-size:.75rem; padding:20px 0
       </details>
     </section>
 
-    <section>
-      <h2>Style icons — reference look, not part of the icon set</h2>
-      <div v-for="(st, sid) in S.styleRefs" :key="sid" class="group">
+    <details class="stylestrip">
+      <summary><span class="ic" v-html="IC.comment"></span> style references · {{ usedStyles().length }} in use</summary>
+      <div v-for="sid in usedStyles()" :key="sid" class="group" v-show="S.styleRefs[sid]">
         <div class="ghead">
           <b>{{ sid }}</b>
-          <span class="chip">{{ st.source }}</span>
-          <span class="muted">references for this style — add own SVGs via <code>iconpilot style-ref . --style {{ sid }} --add file.svg</code></span>
+          <span class="chip">{{ S.styleRefs[sid]?.source }}</span>
+          <span class="muted">not part of the icon set — replace with own: <code>iconpilot style-ref . --style {{ sid }} --add file.svg</code></span>
         </div>
-        <div class="grid">
-          <figure v-for="ic in st.icons" :key="sid + ic.name" class="card" style="border-style:dashed">
-            <img class="thumb" width="64" height="64" loading="lazy"
-                 :src="'/api/style-ref-file?style=' + encodeURIComponent(sid) + '&name=' + encodeURIComponent(ic.name)">
-            <figcaption class="muted">{{ ic.name }}</figcaption>
-          </figure>
+        <div class="row">
+          <img v-for="ic in (S.styleRefs[sid]?.icons || [])" :key="sid + ic.name"
+               width="48" height="48" loading="lazy" style="border-radius:8px"
+               :src="'/api/style-ref-file?style=' + encodeURIComponent(sid) + '&name=' + encodeURIComponent(ic.name)"
+               :alt="sid + ' ' + ic.name">
         </div>
       </div>
-      <p v-if="!Object.keys(S.styleRefs).length" class="muted">no style references available</p>
-    </section>
+    </details>
 
     <section>
       <h2>Icons</h2>
@@ -518,9 +521,18 @@ footer { text-align:center; color:var(--muted); font-size:.75rem; padding:20px 0
       <div class="controls" style="align-items:flex-start"><label>rules</label>
         <textarea v-model="S.set.rules" placeholder="one rule per line — injected into every drafting context"></textarea></div>
       <div class="controls" style="align-items:flex-start"><label>add variant</label>
-        <div class="row">
-          <select v-model="S.set.addStyle"><option v-for="(st, sid) in S.styles" :key="sid" :value="sid">{{ sid }}</option></select>
-          <button class="subtle" @click="addVariantBulk">add to every glyph</button>
+        <div class="row" style="flex-direction:column; align-items:stretch; gap:6px">
+          <div class="row">
+            <select v-model="S.set.addStyle"><option v-for="(st, sid) in S.styles" :key="sid" :value="sid">{{ sid }}</option></select>
+            <button class="subtle" @click="addVariantBulk">add to every glyph</button>
+          </div>
+          <div class="row" v-if="S.styleRefs[S.set.addStyle]">
+            <img v-for="ic in (S.styleRefs[S.set.addStyle].icons || []).slice(0, 5)"
+                 :key="ic.name" width="40" height="40" loading="lazy" style="border-radius:6px"
+                 :src="'/api/style-ref-file?style=' + encodeURIComponent(S.set.addStyle) + '&name=' + encodeURIComponent(ic.name)"
+                 :alt="ic.name">
+            <span class="muted">{{ S.set.addStyle }} look ({{ S.styleRefs[S.set.addStyle].source }})</span>
+          </div>
         </div></div>
       <div class="controls" style="align-items:flex-start"><label>custom style</label>
         <div class="row" style="flex-direction:column; align-items:stretch; gap:4px">
@@ -1010,6 +1022,13 @@ function batchReject(maxScore) {
   flash('batch: rejected ' + (maxScore === 0 ? 'unrated' : 'all rated ≤ ' + maxScore), true);
 }
 function isViewing() { return !!(S.viewRound && S.viewRound !== S.latest); }
+function usedStyles() {
+  const used = new Set();
+  for (const icon of Object.values(S.pack.icons || {}))
+    for (const v of Object.values(icon.variants || {}))
+      if (v.style && !v.link) used.add(v.style);
+  return [...used].sort();
+}
 function isPostponed(icon, variant) { return !!S.pack.icons?.[icon]?.variants?.[variant]?.postponed; }
 async function togglePostpone(icon, variant) {
   try {
@@ -1562,7 +1581,7 @@ const App = {
       fbFor, fbNew, fbTitle, fbItems, fbChat, openFb, addFeedback, resolveFeedback, switchRound, isViewing,
       IC, relTime, isNew, copyPrompt, reopen, toggleTheme, cmpLabel, initTheme, loadIconHist, hasRating,
       showDebug, openNextDlg, addVariantBulk, addCustomStyle, saveRecraftDefaults,
-      isPostponed, togglePostpone, applyAndNext, colState, toggleCol, toggleAll,
+      isPostponed, togglePostpone, applyAndNext, colState, toggleCol, toggleAll, usedStyles,
 
     };
   },

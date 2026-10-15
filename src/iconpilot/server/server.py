@@ -823,6 +823,156 @@ class ReviewHandler(BaseHTTPRequestHandler):
             "model": style_id and rc.DEFAULT_MODEL or rc.FALLBACK_MODEL,
         }
 
+    def _recraft_batch(self, data: dict) -> dict:
+        """Smart Recraft seeding: fewest calls, one per style, icons packed.
+
+        Body: {targets: ["icon#variant", ...], vpi: 2, model?: "..."}
+        Cells map row-major: icon k of a call gets cells k*vpi+1..(k+1)*vpi.
+        """
+        import iconpilot.recraft as rc
+        from iconpilot.gate.run import run_gate
+
+        token = rc.resolve_token()
+        if not token:
+            raise ValueError("no Recraft token on the server — set RECRAFT_API_TOKEN")
+
+        vpi = max(1, min(int(data.get("vpi") or 2), 6))
+        with pack_lock(self.pack_dir):
+            pack, styles = load_pack(self.pack_dir / "pack.json")
+
+        # group targets by style, preserving order; per-icon prompts
+        by_style: dict[str, list[tuple[str, str]]] = {}
+        for target in data.get("targets", []):
+            iid, _, vid = str(target).partition("#")
+            var = pack["icons"].get(iid, {}).get("variants", {}).get(vid)
+            if var is None or "style" not in var:
+                raise ValueError(f"no authored variant {iid}#{vid}")
+            if var.get("status") == "approved":
+                raise ValueError(f"{iid}#{vid} is approved/locked — unlock to redraft")
+            by_style.setdefault(var["style"], []).append((iid, vid))
+
+        cfg = pack.get("recraft", {})
+        model_override = data.get("model")
+        calls = []
+        for style_id, targets in by_style.items():
+            style = styles[style_id]
+            style_id_rc = cfg.get("style_ids", {}).get(style_id) or cfg.get("style_id")
+            refs: list[str] = []
+            if not style_id_rc:
+                from iconpilot.styles import style_refs as _sr
+
+                refs = [f.read_text() for f in _sr(self.pack_dir, style_id)[:3]]
+            model = (
+                model_override
+                or cfg.get("model")
+                or (rc.DEFAULT_MODEL if (style_id_rc or refs) else rc.FALLBACK_MODEL)
+            )
+            if model not in rc.VECTOR_MODELS:
+                raise ValueError(f"model must be a vector model, got '{model}'")
+            icon_prompts = []
+            for iid, vid in targets:
+                icon = pack["icons"][iid]
+                icon_prompts.append(
+                    rc.draft_prompt(icon, styles[icon["variants"][vid]["style"]], pack)
+                )
+            for plan in rc.plan_batch({style_id: icon_prompts}, vpi):
+                plan.update(
+                    model=model,
+                    style_id=style_id_rc,
+                    refs=refs,
+                    targets=targets,
+                    prompt=rc.batch_prompt(plan["icons"], plan["vpi"], style.label, plan["grid"]),
+                    cost=round(
+                        rc.price_per_image(model)
+                        + (rc.STYLE_REF_PRICE if refs and not style_id_rc else 0),
+                        4,
+                    ),
+                )
+                calls.append(plan)
+
+        # debug mode: return the planned requests without calling
+        if data.get("debug"):
+            return {
+                "calls": [
+                    {
+                        "style": c["style"],
+                        "grid": c["grid"],
+                        "vpi": c["vpi"],
+                        "model": c["model"],
+                        "cost": c["cost"],
+                        "prompt": c["prompt"][:300] + "…",
+                        "style_refs": len(c["refs"]),
+                    }
+                    for c in calls
+                ],
+                "est_total_usd": round(sum(c["cost"] for c in calls), 4),
+            }
+
+        runs_dir = self.pack_dir / ".runs"
+        runs = sorted(p.name for p in runs_dir.glob("r*")) if runs_dir.is_dir() else []
+        run = runs[-1] if runs else None
+        if not run:
+            raise ValueError("no round yet — start a pass first")
+
+        results = []
+        total_cost = 0.0
+        with pack_lock(self.pack_dir):
+            for c in calls:
+                sheet = rc.generate(
+                    token,
+                    c["prompt"],
+                    n=1,
+                    style_id=c["style_id"],
+                    model=c["model"],
+                    reference_urls=[rc._svg_data_url(s) for s in c["refs"]] or None,
+                )
+                cells = rc.split_sheet(sheet[0], c["grid"], target=24.0)
+                # row-major assignment: icon k -> cells k*vpi .. k*vpi+vpi-1
+                viewbox = pack["spec"]["viewBox"]
+                for k, (iid, vid) in enumerate(c["targets"]):
+                    got, passed = [], 0
+                    cell_svgs = cells[k * c["vpi"] : (k + 1) * c["vpi"]]
+                    # len may fall short if the model dropped cells
+                    cand_dir = runs_dir / run / vid / iid
+                    cand_dir.mkdir(parents=True, exist_ok=True)
+                    existing = len(list(cand_dir.glob("r*.svg")))
+                    for j, cell in enumerate(cell_svgs):
+                        f = cand_dir / f"r{existing + j + 1}.svg"
+                        f.write_text(rc.normalize(cell, viewbox))
+                        got.append(f.name)
+                        if run_gate(
+                            f, pack, styles[pack["icons"][iid]["variants"][vid]["style"]]
+                        ).passed:
+                            passed += 1
+                    results.append(
+                        {"icon": iid, "variant": vid, "seeds": got, "gate_passed": passed}
+                    )
+                total_cost += c["cost"]
+            # cost bookkeeping
+            import json as _json
+
+            round_json = runs_dir / run / "round.json"
+            try:
+                rj = _json.loads(round_json.read_text()) if round_json.is_file() else {}
+            except ValueError:
+                rj = {}
+            rj.setdefault("models_used", {})["seeder"] = calls[0]["model"] if calls else "-"
+            rj["estimated_cost_usd"] = round(rj.get("estimated_cost_usd", 0) + total_cost, 4)
+            seeds_total = 0
+            for x in results:
+                sv = x.get("seeds")
+                if isinstance(sv, list):
+                    seeds_total += len(sv)
+            rj["candidates_generated"] = rj.get("candidates_generated", 0) + seeds_total
+            round_json.write_text(_json.dumps(rj, indent=2) + "\n")
+
+        return {
+            "round": run,
+            "calls": len(calls),
+            "results": results,
+            "cost_usd": round(total_cost, 4),
+        }
+
     def _feedback_write(self, op: str, data: dict) -> dict:
         """add / resolve / promote feedback items (lock + atomic)."""
         import uuid
@@ -897,6 +1047,17 @@ class ReviewHandler(BaseHTTPRequestHandler):
 
     def do_POST(self) -> None:
         url = urlparse(self.path)
+        if url.path == "/api/recraft-batch":
+            data = self._body()
+            try:
+                self._json(200, self._recraft_batch(data))
+            except ValueError as exc:
+                self._json(400, {"error": str(exc)})
+            except Exception as exc:
+                import iconpilot.recraft as _rc0
+
+                self._json(502 if isinstance(exc, _rc0.RecraftError) else 500, {"error": str(exc)})
+            return
         if url.path == "/api/feedback":
             data = self._body()
             try:
