@@ -154,6 +154,10 @@ footer { text-align:center; color:var(--muted); font-size:.75rem; padding:20px 0
   <header>
     <h1>{{ S.pack.name || 'iconpilot' }}</h1>
     <span class="meta">rev {{ S.rev }} · S.round {{ S.round || '—' }}</span>
+    <select v-if="S.rounds.length" :value="S.viewRound || S.latest" @change="switchRound($event.target.value)"
+            class="subtle" style="padding:4px 6px" title="browse any pass — latest is the live one">
+      <option v-for="r in S.rounds" :key="r" :value="r">{{ r }}{{ r === S.latest ? ' (live)' : '' }}</option>
+    </select>
     <button class="subtle" :class="{ on: fbFor('pack').length }"
             title="feedback for the whole draft" @click="openFb('pack')">💬 {{ fbFor('pack').length || '' }}</button>
     <button class="subtle" @click="startRound()"
@@ -171,8 +175,13 @@ footer { text-align:center; color:var(--muted); font-size:.75rem; padding:20px 0
   <main>
     <div v-if="S.msg" :class="S.msgClass">{{ S.msg }}</div>
 
+    <section v-if="S.viewRound && S.viewRound !== S.latest">
+      <div class="banner working" style="margin:8px 0">
+        viewing {{ S.viewRound }} (history — read only). <button class="subtle" @click="switchRound(S.latest)">back to {{ S.latest }}</button>
+      </div>
+    </section>
     <section v-if="S.grouped.length">
-      <h2>Current round — rate, then decide</h2>
+      <h2>{{ S.viewRound && S.viewRound !== S.latest ? 'Archived pass ' + S.viewRound : 'Current pass — rate, then decide' }}</h2>
       <div class="group" v-for="g in S.grouped" :key="g.key">
         <div class="ghead">
           <b>{{ g.icon }}</b>
@@ -490,7 +499,8 @@ footer { text-align:center; color:var(--muted); font-size:.75rem; padding:20px 0
 import { createApp, reactive, computed, onMounted } from '/static/vue.esm-browser.prod.js';
 
 const S = reactive({
-  pack: { icons: {} }, rev: 0, round: null, candidates: [], locked: {}, drafting: '',
+  pack: { icons: {} }, rev: 0, round: null, latest: null, candidates: [], locked: {}, drafting: '',
+  viewRound: null, rounds: [],
   styles: {}, ai: { text: '', active: false }, version: '',
   decisions: {}, manual: false, manualText: '',
   msg: '', msgClass: 'muted', editing: null,
@@ -624,7 +634,13 @@ function batchReject(maxScore) {
   }
   flash('batch: rejected ' + (maxScore === 0 ? 'unrated' : 'all rated ≤ ' + maxScore), true);
 }
+function isViewing() { return !!(S.viewRound && S.viewRound !== S.latest); }
 function isLocked(icon, variant) { return !!S.locked[icon + '/' + variant]; }
+async function switchRound(r) {
+  S.viewRound = r === S.latest ? null : r;
+  S.decisions = {}; editDirty = false; S.decisionEdit = ''; S.instructions = '';
+  await load();
+}
 function totalCost() { return S.history.reduce((a, h) => a + (h.cost_usd || 0), 0); }
 
 async function recraftDraft(icon, variant, n = 4) {
@@ -716,6 +732,7 @@ function clearDraft() {
 let editDirty = false;
 function syncEdit() { if (!editDirty) S.decisionEdit = S.decisionText; }
 function setItem(c, t) {
+  if (isViewing()) { flash('viewing history — switch back to the live pass to decide', false); return; }
   const key = c.icon + '/' + c.variant;
   const entry = S.decisions[key] || (S.decisions[key] = { items: [] });
   entry.items = entry.items.filter(i => i.cand !== '*');
@@ -928,10 +945,13 @@ async function saveIcon(id, brief) {
 function edited(id, vid) { return false; } // server marks ✎edited via status; page keeps simple
 
 async function load(manual) {
+  const runUrl = S.viewRound ? '/api/run?round=' + encodeURIComponent(S.viewRound) : '/api/run';
   const [p, run, styles, ai, hist] = await Promise.all([
-    api('/api/pack'), api('/api/run'), api('/api/styles'), api('/api/ai-status'), api('/api/history'),
+    api('/api/pack'), api(runUrl), api('/api/styles'), api('/api/ai-status'), api('/api/history'),
   ]);
-  S.pack = p.pack; S.rev = p.rev; S.round = run.round; S.locked = run.locked || {};
+  S.pack = p.pack; S.rev = p.rev; S.round = run.round; S.latest = run.latest;
+  S.locked = run.locked || {};
+  S.rounds = (S.history || []).map(h => h.round).reverse();  // newest first
   S.candidates = run.candidates.map(c => ({
     ...c,
     path: `.runs/${run.round}/${c.variant}/${c.icon}/${c.cand}.svg`,
@@ -1009,7 +1029,8 @@ const App = {
       variantNote, openVariantNote, saveVariantNote, copyPath, togglePin, isPinned, undo,
       batchApprove, batchReject, toggleCompare,
       isLocked, recraftDraft, recraftIcon, startRound, saveIconDesc, totalCost,
-      fbFor, fbTitle, fbItems, openFb, addFeedback, resolveFeedback,
+      fbFor, fbTitle, fbItems, openFb, addFeedback, resolveFeedback, switchRound, isViewing,
+
     };
   },
 };

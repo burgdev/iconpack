@@ -531,3 +531,24 @@ def test_history_includes_feedback(server: _Server, srvpack: Path) -> None:
     rounds = json.loads(body)["rounds"]
     r_new = next(r for r in rounds if r["round"] == data["round"])
     assert r_new["feedback"][0]["text"] == "x"
+
+
+def test_run_endpoint_round_param(server: _Server, srvpack: Path) -> None:
+    # r001 exists (fixture); create r002 via round/new, then query both
+    code, data = server.req("POST", "/api/round/new", {})
+    assert code == 200
+    new_round = data["round"]
+    code, body = server.get(f"/api/run?round={new_round}")
+    payload = json.loads(body)
+    assert payload["round"] == new_round
+    assert payload["latest"] == new_round
+    assert payload["candidates"] == []  # fresh round is empty
+    # old round still queryable with its candidates
+    code, body = server.get("/api/run?round=r001")
+    payload = json.loads(body)
+    assert payload["round"] == "r001"
+    assert payload["latest"] == new_round
+    assert any(c["icon"] == "hut" for c in payload["candidates"])
+    # bogus round falls back to latest
+    code, body = server.get("/api/run?round=r999")
+    assert json.loads(body)["round"] == new_round

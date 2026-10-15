@@ -120,10 +120,12 @@ class ReviewHandler(BaseHTTPRequestHandler):
 
         if url.path == "/api/run":
             runs = sorted(p.name for p in (self.pack_dir / ".runs").glob("r*") if p.is_dir())
+            wanted = (q.get("round") or [None])[0]
+            active = wanted if wanted in runs else (runs[-1] if runs else None)
             entries = []
-            if runs:
-                for svg in sorted((self.pack_dir / ".runs" / runs[-1]).rglob("*.svg")):
-                    rel = svg.relative_to(self.pack_dir / ".runs" / runs[-1]).parts
+            if active:
+                for svg in sorted((self.pack_dir / ".runs" / active).rglob("*.svg")):
+                    rel = svg.relative_to(self.pack_dir / ".runs" / active).parts
                     if len(rel) == 3:
                         entries.append({"variant": rel[0], "icon": rel[1], "cand": rel[2][:-4]})
             # open/locked per icon+variant so the page can badge locked work
@@ -137,7 +139,12 @@ class ReviewHandler(BaseHTTPRequestHandler):
                 locked = {}
             self._json(
                 200,
-                {"round": runs[-1] if runs else None, "candidates": entries, "locked": locked},
+                {
+                    "round": active,
+                    "latest": runs[-1] if runs else None,
+                    "candidates": entries,
+                    "locked": locked,
+                },
             )
             return
 
