@@ -724,7 +724,7 @@ footer { text-align:center; color:var(--muted); font-size:.75rem; padding:20px 0
         <button class="primary" @click="addFeedback">Add</button>
         <span class="muted">guidance lives until resolved · the agent promotes durable points itself</span>
       </div>
-      <div class="chat" ref="fbChat" aria-live="polite">
+      <div class="chat" ref="fbChatEl" aria-live="polite">
         <template v-for="r in fbChat()" :key="r.round + (r.archived ? '-a' : '-l')">
           <div class="chat-head" :class="{ 'r-archived': r.archived }">{{ r.round }}{{ r.archived ? ' · archived' : ' · live' }}</div>
           <div v-for="i in r.items" :key="r.round + i.id" class="bubble" :class="i.author"
