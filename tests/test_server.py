@@ -666,3 +666,27 @@ def test_recraft_request_preview_no_token(server: _Server, srvpack: Path) -> Non
     req = data["request"]
     assert req["n"] == 2 and req["size"] == "1:1" and "prompt" in req
     assert "model" in req
+
+
+def test_postpone_flow(server: _Server, srvpack: Path) -> None:
+    pj = srvpack / "pack.json"
+    pack = json.loads(pj.read_text())
+    pack["icons"]["hut"]["variants"]["mono"]["status"] = "todo"  # make it open
+    pj.write_text(json.dumps(pack))
+    code, _ = server.req(
+        "PUT", "/api/variant", {"icon": "hut", "variant": "mono", "postponed": True}
+    )
+    assert code == 200
+    code, data = server.req("POST", "/api/round/new", {})
+    assert code == 200
+    assert "hut#mono" not in data["open"]  # postponed excluded
+    # explicit focus still includes it
+    code, data = server.req("POST", "/api/round/new", {"only": ["hut#mono"]})
+    assert code == 200 and data["open"] == ["hut#mono"]
+    # resume
+    code, _ = server.req(
+        "PUT", "/api/variant", {"icon": "hut", "variant": "mono", "postponed": False}
+    )
+    assert code == 200
+    pack = json.loads((srvpack / "pack.json").read_text())
+    assert "postponed" not in pack["icons"]["hut"]["variants"]["mono"]

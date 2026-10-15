@@ -263,6 +263,12 @@ footer { text-align:center; color:var(--muted); font-size:.75rem; padding:20px 0
   <main>
     <div v-if="S.msg" :class="S.msgClass">{{ S.msg }}</div>
 
+    <section v-if="S.appliedRound === S.round && !isViewing()">
+      <div class="banner ready" style="margin:8px 0">
+        <span class="dot green"></span> pass {{ S.round }} applied — decisions are in. Start the next pass (optionally focused) when ready.
+        <button class="subtle" @click="openNextDlg()">next pass…</button>
+      </div>
+    </section>
     <section v-if="S.viewRound && S.viewRound !== S.latest">
       <div class="banner working" style="margin:8px 0">
         viewing {{ S.viewRound }} (history — read only). <button class="subtle" @click="switchRound(S.latest)">back to {{ S.latest }}</button>
@@ -310,6 +316,10 @@ footer { text-align:center; color:var(--muted); font-size:.75rem; padding:20px 0
               <span class="chip" :class="{ done: isLocked(g.icon, vg.variant) }">{{ vg.variant }}<span v-if="isLocked(g.icon, vg.variant)" class="ic" v-html="IC.lock"></span></span>
               <button v-if="isLocked(g.icon, vg.variant)" class="iconbtn" title="reopen for the next pass (approved file stays in history)" aria-label="reopen"
                       @click="reopen(g.icon, vg.variant)"><span class="ic" v-html="IC.unlock"></span></button>
+              <button v-if="!isLocked(g.icon, vg.variant)" class="iconbtn" :class="{ on: isPostponed(g.icon, vg.variant) }"
+                      :title="isPostponed(g.icon, vg.variant) ? 'resume — include in future passes' : 'postpone — keep open but skip future passes'"
+                      aria-label="postpone" @click="togglePostpone(g.icon, vg.variant)"><span class="ic" v-html="IC.pause"></span></button>
+              <span v-if="isPostponed(g.icon, vg.variant)" class="chip">postponed</span>
               <select :value="vg.style" @change="switchStyle(g.icon, vg.variant, $event.target.value)" class="varstyle" title="style">
                 <option v-for="(st, sid) in S.styles" :key="sid" :value="sid">{{ sid }}</option>
               </select>
@@ -710,6 +720,7 @@ const S = reactive({
   flash: '', flashOk: true, applying: false, instructions: '',
   kbFocus: 0, kbVariant: 0, kbCand: 0, kbUsed: false, compare: null, histView: null,
   recraftReady: false, debug: new URLSearchParams(location.search).has('debug'), debugDlg: null, nextDlg: null,
+  appliedRound: null,
   recraftModels: {}, theme: 'light', iconHist: {}, svgFiles: {}, rejectArm: null,
   history: [], showHistory: false,
   set: { version: '', rules: '', strokeWidth: 2, linecap: 'round', linejoin: 'round', padding: 2, precision: 0.5, palette: null, errors: '' },
@@ -745,7 +756,7 @@ const IC = {
 };
 function relTime(iso) {
   if (!iso) return '';
-  const d = new Date(/Z$|[+-]\d\d:\d\d$/.test(iso) ? iso : iso + 'Z');
+  const d = new Date(/Z$|[+-][0-9][0-9]:[0-9][0-9]$/.test(iso) ? iso : iso + 'Z');
   if (isNaN(d)) return '';
   const s = Math.max(0, (Date.now() - d.getTime()) / 1000);
   if (s < 60) return 'now';
@@ -929,6 +940,15 @@ function batchReject(maxScore) {
   flash('batch: rejected ' + (maxScore === 0 ? 'unrated' : 'all rated ≤ ' + maxScore), true);
 }
 function isViewing() { return !!(S.viewRound && S.viewRound !== S.latest); }
+function isPostponed(icon, variant) { return !!S.pack.icons?.[icon]?.variants?.[variant]?.postponed; }
+async function togglePostpone(icon, variant) {
+  try {
+    await api('/api/variant', { method: 'PUT', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ icon, variant, postponed: !isPostponed(icon, variant) }) });
+    flash(icon + '#' + variant + (isPostponed(icon, variant) ? ' resumed' : ' postponed'), true);
+    await load();
+  } catch (e) { flash('postpone: ' + e.message, false); }
+}
 function isLocked(icon, variant) { return !!S.locked[icon + '/' + variant]; }
 async function loadIconHist(g) {
   if (S.iconHist[g.icon]) return;
@@ -948,7 +968,7 @@ async function reopen(icon, variant) {
 }
 async function switchRound(r) {
   S.viewRound = r === S.latest ? null : r;
-  S.decisions = {}; editDirty = false; S.decisionEdit = ''; S.instructions = ''; S.compare = null;
+  S.decisions = {}; editDirty = false; S.decisionEdit = ''; S.instructions = ''; S.compare = null; S.appliedRound = null;
   await load();
 }
 function totalCost() { return S.history.reduce((a, h) => a + (h.cost_usd || 0), 0); }
@@ -987,7 +1007,7 @@ function openVariantsLive() {
   const out = [];
   for (const [iid, icon] of Object.entries(S.pack.icons || {}))
     for (const [vid, v] of Object.entries(icon.variants || {}))
-      if (!v.link && !S.locked[iid + '/' + vid]) out.push({ key: iid + '#' + vid, label: iid + '#' + vid + ' (' + v.style + ')' });
+      if (!v.link && !S.locked[iid + '/' + vid] && !v.postponed) out.push({ key: iid + '#' + vid, label: iid + '#' + vid + ' (' + v.style + ')' + (v.postponed ? ' [postponed]' : '') });
   return out;
 }
 function openNextDlg() {
@@ -1071,6 +1091,7 @@ let editDirty = false;
 function syncEdit() { if (!editDirty) S.decisionEdit = S.decisionText; }
 function setItem(c, t) {
   if (isViewing()) { flash('viewing history — switch back to the live pass to decide', false); return; }
+  if (S.appliedRound === S.round) { flash('this pass is applied — start the next one to keep deciding', false); return; }
   const key = c.icon + '/' + c.variant;
   const entry = S.decisions[key] || (S.decisions[key] = { items: [] });
   entry.items = entry.items.filter(i => i.cand !== '*');
@@ -1278,8 +1299,9 @@ async function apply() {
     S.decisions = {}; editDirty = false; S.decisionEdit = ''; S.instructions = '';
     clearDraft();
     await load();
-    flash('✓ applied ' + (r.log || []).length + ' change(s)', true);
-    S.msg = 'applied: ' + (r.log || []).join(' | '); S.msgClass = 'ok';
+    S.appliedRound = S.round;
+    const approves = (r.log || []).filter(l => l.includes('→ approved')).length;
+    flash('✓ applied — ' + (r.log || []).length + ' change(s), ' + approves + ' approved · start the next pass when ready', true);
   } catch (e) {
     const detail = e.d?.errors ? e.d.errors.join(' · ') : e.message;
     flash('✗ ' + detail.slice(0, 90), false);
@@ -1428,6 +1450,7 @@ const App = {
       fbFor, fbNew, fbTitle, fbItems, fbChat, openFb, addFeedback, resolveFeedback, switchRound, isViewing,
       IC, relTime, isNew, copyPrompt, reopen, toggleTheme, cmpLabel, initTheme, loadIconHist, hasRating,
       showDebug, openNextDlg, addVariantBulk, addCustomStyle, saveRecraftDefaults,
+      isPostponed, togglePostpone,
 
     };
   },

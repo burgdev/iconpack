@@ -542,14 +542,23 @@ class ReviewHandler(BaseHTTPRequestHandler):
                 f"{iid}#{vid}"
                 for iid, icon in pack["icons"].items()
                 for vid, var in icon.get("variants", {}).items()
-                if "style" in var and "link" not in var and var.get("status") != "approved"
+                if "style" in var
+                and "link" not in var
+                and var.get("status") != "approved"
+                and not var.get("postponed")
             ]
             if only is not None:
                 wanted = set(only)
-                unknown = wanted - set(open_)
+                candidates = {
+                    f"{iid}#{vid}"
+                    for iid, icon in pack["icons"].items()
+                    for vid, var in icon.get("variants", {}).items()
+                    if "style" in var and "link" not in var and var.get("status") != "approved"
+                }  # postponed included: explicit focus wins over postpone
+                unknown = wanted - candidates
                 if unknown:
                     raise ValueError(f"not open (or locked): {sorted(unknown)}")
-                open_ = [k for k in open_ if k in wanted]
+                open_ = sorted(wanted)
         except ValueError:
             raise
         except Exception:
@@ -987,11 +996,18 @@ class ReviewHandler(BaseHTTPRequestHandler):
             style_id = data.get("style")
             note = data.get("note")
             pinned = data.get("pinned")
+            postponed = data.get("postponed")
             reopen = bool(data.get("reopen"))
             if not (
                 icon_id
                 and variant_id
-                and (style_id or note is not None or pinned is not None or reopen)
+                and (
+                    style_id
+                    or note is not None
+                    or pinned is not None
+                    or postponed is not None
+                    or reopen
+                )
             ):
                 self._json(400, {"error": "need icon, variant, style"})
                 return
@@ -1013,6 +1029,11 @@ class ReviewHandler(BaseHTTPRequestHandler):
                         v["note"] = note
                     if pinned is not None:
                         v["pinned"] = pinned
+                    if postponed is not None:
+                        if postponed:
+                            v["postponed"] = True
+                        else:
+                            v.pop("postponed", None)
                     _, errors = revalidate(pack)
                     if errors:
                         self._json(400, {"errors": errors})

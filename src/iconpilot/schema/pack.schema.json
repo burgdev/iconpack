@@ -251,7 +251,12 @@
           "$ref": "#/$defs/linked_variant"
         }
       ],
-      "properties": {}
+      "properties": {
+        "postponed": {
+          "type": "boolean",
+          "description": "Excluded from rounds until explicitly focused or un-postponed."
+        }
+      }
     },
     "authored_variant": {
       "type": "object",
@@ -362,6 +367,10 @@
         "pinned": {
           "type": "boolean",
           "description": "Pinned: always included as a style reference in every drafting context."
+        },
+        "postponed": {
+          "type": "boolean",
+          "description": "Excluded from rounds until explicitly focused or un-postponed."
         }
       }
     },

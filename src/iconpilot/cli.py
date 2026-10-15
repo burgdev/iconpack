@@ -216,6 +216,8 @@ def open_variants(pack_data: dict) -> list[tuple[str, str, str]]:
         for vid, v in icon.get("variants", {}).items():
             if "link" in v or "style" not in v:
                 continue
+            if v.get("postponed"):
+                continue  # excluded until explicitly focused or un-postponed
             if v.get("status") != "approved":
                 out.append((iid, vid, v["style"]))
     return out
@@ -262,11 +264,25 @@ def next_round(
     open_keys = [f"{i}#{v}" for i, v, _ in open_]
     if only is not None:
         wanted = {k.strip() for k in only.split(",") if k.strip()}
-        unknown = wanted - set(open_keys)
+        all_variants = {
+            f"{iid}#{vid}"
+            for iid, icon in pack_data["icons"].items()
+            for vid, var in icon.get("variants", {}).items()
+            if "style" in var and "link" not in var and var.get("status") != "approved"
+        }
+        unknown = wanted - all_variants
         if unknown:
             typer.secho(f"not open (or locked): {sorted(unknown)}", fg=typer.colors.RED, err=True)
             raise typer.Exit(code=2)
-        open_ = [(i, v, s) for i, v, s in open_ if f"{i}#{v}" in wanted]
+        open_ = [
+            (iid, vid, var["style"])
+            for iid, icon in pack_data["icons"].items()
+            for vid, var in icon.get("variants", {}).items()
+            if f"{iid}#{vid}" in wanted
+            and "style" in var
+            and "link" not in var
+            and var.get("status") != "approved"
+        ]
         open_keys = [f"{i}#{v}" for i, v, _ in open_]
     (runs_dir / run / "round.json").write_text(
         json.dumps(
