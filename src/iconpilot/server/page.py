@@ -525,6 +525,11 @@ footer { text-align:center; color:var(--muted); font-size:.75rem; padding:20px 0
       <h3><span><span class="ic-lg" v-html="IC.comment"></span> {{ fbTitle() }}</span>
           <button class="subtle" @click="S.fbDlg = null">✕</button></h3>
       <p class="muted" style="margin:0 0 8px">Per-round feedback — guides the next draft, then dies with its round (history keeps it). Generally valid? The agent promotes it into the standing note via CLI.</p>
+      <textarea v-model="S.fbDlg.text" placeholder="what to change in the next draft — e.g. 'thinner roof, door on the right'"></textarea>
+      <div class="row" style="margin:8px 0">
+        <button class="primary" @click="addFeedback">Add</button>
+        <span class="muted">newest guidance sits in the transcript below</span>
+      </div>
       <div class="chat">
         <template v-for="r in fbChat()" :key="r.round + (r.archived ? '-a' : '-l')">
           <div class="chat-head">{{ r.round }}{{ r.archived ? ' · archived' : ' · live' }}</div>
@@ -538,10 +543,8 @@ footer { text-align:center; color:var(--muted); font-size:.75rem; padding:20px 0
         </template>
         <p v-if="!fbChat().length" class="muted">no comments yet for this scope</p>
       </div>
-      <textarea v-model="S.fbDlg.text" placeholder="what to change in the next draft — e.g. 'thinner roof, door on the right'"></textarea>
       <div class="row" style="margin-top:8px">
-        <button class="primary" @click="addFeedback">Add</button>
-        <button class="subtle" @click="S.fbDlg = null" aria-label="Close">✕</button>
+        <button class="subtle" @click="S.fbDlg = null" aria-label="Close">close</button>
       </div>
     </div>
   </div>
@@ -742,7 +745,9 @@ const IC = {
 };
 function relTime(iso) {
   if (!iso) return '';
-  const s = Math.max(0, (Date.now() - new Date(iso + 'Z').getTime()) / 1000);
+  const d = new Date(/Z$|[+-]\d\d:\d\d$/.test(iso) ? iso : iso + 'Z');
+  if (isNaN(d)) return '';
+  const s = Math.max(0, (Date.now() - d.getTime()) / 1000);
   if (s < 60) return 'now';
   if (s < 3600) return Math.floor(s / 60) + 'm';
   if (s < 86400) return Math.floor(s / 3600) + 'h';
