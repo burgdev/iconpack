@@ -323,6 +323,11 @@ footer { text-align:center; color:var(--muted); font-size:.75rem; padding:20px 0
                       :title="S.debug && !S.recraftReady ? 'preview the Recraft request (no call)' : 'Recraft: seed 4 drafts for this variant (~$0.18-0.20)'" aria-label="Recraft draft"
                       @click="S.debug && !S.recraftReady ? showDebug(g.icon, vg.variant) : recraftDraft(g.icon, vg.variant)"><span class="ic" v-html="IC.bolt"></span></button>
             </div>
+            <div v-if="!vg.cands.length" class="card empty" style="border-style:dashed">
+              <span class="muted">open — no drafts yet</span>
+              <button v-if="S.recraftReady || S.debug" class="subtle" @click="S.debug && !S.recraftReady ? showDebug(g.icon, vg.variant) : recraftDraft(g.icon, vg.variant)"><span class="ic" v-html="IC.bolt"></span> seed</button>
+              <button class="subtle" @click="copyPrompt(g.icon, vg.variant)"><span class="ic" v-html="IC.spark"></span> LLM hint</button>
+            </div>
             <div class="grid">
               <div class="card" v-for="(c, ci) in vg.cands" :key="c.cand"
                    :class="{ kbactive: S.kbUsed && gi === S.kbFocus && vi === S.kbVariant && ci === S.kbCand && !isViewing() }">
@@ -758,6 +763,15 @@ S.grouped = computed(() => {
     if (!m.has(c.icon)) m.set(c.icon, { key: c.icon, icon: c.icon, cands: [] });
     m.get(c.icon).cands.push(c);
   }
+  // open work comes from pack state, not just candidates: unlocked icons
+  // reappear immediately, even before new drafts exist
+  if (!S.viewRound || S.viewRound === S.latest) {
+    for (const [iid, icon] of Object.entries(S.pack.icons || {})) {
+      const hasOpen = Object.entries(icon.variants || {})
+        .some(([vid, v]) => !v.link && !S.locked[iid + '/' + vid]);
+      if (hasOpen && !m.has(iid)) m.set(iid, { key: iid, icon: iid, cands: [] });
+    }
+  }
   return [...m.values()];
 });
 async function copyText(text, okMsg) {
@@ -790,9 +804,12 @@ async function copyPrompt(icon, variant) {
 }
 function variantGroups(g) {
   const m = new Map();
-  for (const c of g.cands) {
-    if (!m.has(c.variant)) m.set(c.variant, { variant: c.variant, cands: [], style: c.style });
-    m.get(c.variant).cands.push(c);
+  const put = (vid, style) => { if (!m.has(vid)) m.set(vid, { variant: vid, cands: [], style }); };
+  for (const c of g.cands) { put(c.variant, c.style); m.get(c.variant).cands.push(c); }
+  if (!isViewing()) {
+    for (const [vid, v] of Object.entries(S.pack.icons?.[g.icon]?.variants || {})) {
+      if (!v.link && !S.locked[g.icon + '/' + vid]) put(vid, v.style);
+    }
   }
   return [...m.values()];
 }
