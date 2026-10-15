@@ -326,12 +326,15 @@ def feedback(
 
         if add:
             scope = "variant" if variant else "icon" if icon else "pack"
+            import time as _time
+
             item = {
                 "id": uuid.uuid4().hex[:8],
                 "scope": scope,
                 "text": add.strip()[:500],
                 "author": author if author in ("user", "agent") else "agent",
                 "round": "cli",
+                "created": _time.strftime("%Y-%m-%dT%H:%M:%SZ", _time.gmtime()),
             }
             if icon:
                 if icon not in pack_data["icons"]:
@@ -738,9 +741,15 @@ def diff(pack: str) -> None:
             dec = json.loads(dec_path.read_text())
             typer.secho(f"  decisions in {decided_runs[0]}:", fg=typer.colors.GREEN)
             for key, payload in dec.get("icons", {}).items():
-                items = payload.get("items", [])
-                summary = " · ".join(i.get("t", "?") for i in items)
-                typer.echo(f"    {key}: {summary}")
+                parts = []
+                for i in payload.get("items", []):
+                    if "action" in i:  # {cand, action} from decide
+                        parts.append(f"{i.get('cand', '?')} {i['action']}")
+                    elif "rate_cand" in i:  # {rate_cand, rate_n}
+                        parts.append(f"{i.get('rate_cand', '?')} rated {i.get('rate_n', '?')}/10")
+                    else:
+                        parts.append(str(i.get("t", "?")))
+                typer.echo(f"    {key}: {' · '.join(parts)}")
             if dec.get("instructions"):
                 typer.secho(f"  instructions: {dec['instructions']}", fg=typer.colors.CYAN)
         except (ValueError, OSError):

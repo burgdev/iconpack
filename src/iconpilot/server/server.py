@@ -281,7 +281,8 @@ class ReviewHandler(BaseHTTPRequestHandler):
                                     "scope": i.get("scope"),
                                     "icon": i.get("icon"),
                                     "variant": i.get("variant"),
-                                    "text": str(i.get("text", ""))[:80],
+                                    "text": str(i.get("text", "")),
+                                    "created": i.get("created"),
                                 }
                                 for i in json.loads(fb_file.read_text())
                             ]
@@ -541,6 +542,7 @@ class ReviewHandler(BaseHTTPRequestHandler):
                     "text": text[:500],
                     "author": author,
                     "round": cur_round,
+                    "created": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
                 }
                 if scope in ("icon", "variant"):
                     icon_id = data.get("icon")

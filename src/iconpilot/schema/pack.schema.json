@@ -417,6 +417,10 @@
         "round": {
           "type": "string",
           "description": "Round active when written."
+        },
+        "created": {
+          "type": "string",
+          "description": "ISO timestamp when the item was written."
         }
       },
       "required": [

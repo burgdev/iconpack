@@ -181,6 +181,34 @@ Rules:
   survives rounds. Promote liberally: standing note beats repeating yourself.
 - Never re-state promoted feedback as a new item.
 
+## Style-level signals — when feedback means the STYLE must change
+
+Some instructions are NOT drawing tweaks — they name a construction change:
+"use solid mono style", "make everything outline", "thinner strokes overall",
+"no filled shapes". These change the style definition, which changes the gate
+contract (fill vs stroke, allowed attributes, grids) for EVERY variant on that
+style. Hand-baking the change into one icon's paths is WRONG.
+
+When you see one:
+1. Propose switching the affected variants' style ref to the right registry
+   style (e.g. mono-line → filled for solid silhouettes; mono-bold for heavier
+   strokes). The user confirms on the review page (style <select> per variant)
+   or you apply it via PUT /api/variant {style}.
+2. Redraft ALL variants on that style under the new construction — the old
+   candidates fail the new gate by design.
+3. Flag locked inconsistencies: variants approved under the deprecated
+   construction (e.g. an outline icon approved before "solid mono") — ask the
+   user whether to unlock and redraft them. Never silently keep or silently
+   unlock.
+4. If the wording is pack-wide ("no outlines anywhere"), also PROMOTE it to
+   rules so future variants start right: `iconpilot feedback <pack>
+   --promote <id> --to rules`.
+
+Detection rule of thumb: feedback mentioning a *construction* word (solid,
+outline, filled, stroke weight, line style) or naming a *style* applies to the
+style, not the glyph. Feedback about a *shape* (roof too heavy, door missing)
+applies to the glyph.
+
 ## Round flow — what is open
 
 `iconpilot next <pack>` is the ONLY source of truth for open work. It creates

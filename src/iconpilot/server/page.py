@@ -25,6 +25,19 @@ header h1 { font-size:1rem; margin:0; font-weight:650; }
 header .meta { color:var(--muted); font-size:.8rem; }
 .spacer { flex:1; }
 .banner { width:100%; padding:6px 12px; border-radius:8px; font-size:.85rem; display:flex; gap:8px; align-items:center; }
+.ic { display:inline-flex; vertical-align:-2px; }
+.ic svg { width:14px; height:14px; }
+.ic-lg svg { width:18px; height:18px; vertical-align:-4px; }
+.dotnew { width:7px; height:7px; border-radius:50%; background:var(--warn); display:inline-block; margin-left:2px; }
+.chip.new { background:var(--warn); color:#fff; font-size:.65rem; padding:1px 6px; }
+.chat { max-height:280px; overflow-y:auto; border:1px solid var(--line); border-radius:8px; padding:8px; margin-bottom:10px; background:color-mix(in srgb, var(--bg) 60%, transparent); }
+.chat-head { font-size:.7rem; text-transform:uppercase; letter-spacing:.06em; color:var(--muted); margin:8px 0 4px; }
+.chat-head:first-child { margin-top:0; }
+.bubble { display:flex; align-items:baseline; gap:6px; padding:3px 0; }
+.msg.agent .bubble-text { color:var(--warn); }
+.bubble-text { flex:1; }
+.bubble-time { font-size:.7rem; }
+.scope { font-size:.75rem; }
 .chip.agent { background:color-mix(in srgb, var(--warn) 18%, transparent); }
 .chip.user { background:color-mix(in srgb, var(--line) 40%, transparent); }
 .chip.done { background:color-mix(in srgb, var(--accent) 18%, transparent); }
@@ -159,10 +172,13 @@ footer { text-align:center; color:var(--muted); font-size:.75rem; padding:20px 0
       <option v-for="r in S.rounds" :key="r" :value="r">{{ r }}{{ r === S.latest ? ' (live)' : '' }}</option>
     </select>
     <button class="subtle" :class="{ on: fbFor('pack').length }"
-            title="feedback for the whole draft" @click="openFb('pack')">💬 {{ fbFor('pack').length || '' }}</button>
+            title="feedback for the whole draft" @click="openFb('pack')">
+      <span class="ic" v-html="IC.comment"></span> {{ fbFor('pack').length || '' }}
+      <span v-if="fbNew('pack')" class="chip new">{{ fbNew('pack') }} new</span>
+    </button>
     <button class="subtle" @click="startRound()"
             title="apply first, then start the next pass — history is kept">
-      ＋ next round</button>
+      <span class="ic" v-html="IC.plus"></span> next round</button>
     <span class="spacer"></span>
     <span class="meta">{{ S.candidates.length }} candidates</span>
     <button class="subtle" @click="openSettings" title="settings">⚙</button>
@@ -189,13 +205,15 @@ footer { text-align:center; color:var(--muted); font-size:.75rem; padding:20px 0
           <span class="spacer"></span>
           <button class="subtle" :class="{ busy: S.drafting.startsWith(g.icon + '/') }"
                   title="Recraft: seed 4 drafts for every open variant of this icon"
-                  @click="recraftIcon(g)">⚡ draft</button>
+                  @click="recraftIcon(g)"><span class="ic" v-html="IC.bolt"></span> draft</button>
           <button class="subtle armed-x" @click="rejectAllIcon(g)" title="reject every candidate for this icon">reject all</button>
         </div>
         <div class="gmeta">
           <span class="muted brief">{{ packBriefIcon(g) }}</span>
           <button class="iconbtn" :class="{ on: hasNote(g) }"
-                  title="feedback for this glyph" @click="openFb('icon', g.icon)">💬</button>
+                  title="feedback for this glyph" @click="openFb('icon', g.icon)">
+            <span class="ic" v-html="IC.comment"></span><span v-if="fbNew('icon', g.icon)" class="dotnew"></span>
+          </button>
           <input type="color" class="colorchip" :value="mainColorIcon(g) || '#89919a'"
                  title="main color"
                  @input="saveMainColorIcon(g, $event.target.value)">
@@ -203,17 +221,19 @@ footer { text-align:center; color:var(--muted); font-size:.75rem; padding:20px 0
         <div class="vargrid">
           <div class="vargroup" v-for="vg in variantGroups(g)" :key="vg.variant">
             <div class="varhead">
-              <span class="chip" :class="{ done: isLocked(g.icon, vg.variant) }">{{ vg.variant }}{{ isLocked(g.icon, vg.variant) ? ' 🔒' : '' }}</span>
+              <span class="chip" :class="{ done: isLocked(g.icon, vg.variant) }">{{ vg.variant }}<span v-if="isLocked(g.icon, vg.variant)" class="ic" v-html="IC.lock"></span></span>
               <select :value="vg.style" @change="switchStyle(g.icon, vg.variant, $event.target.value)" class="varstyle" title="style">
                 <option v-for="(st, sid) in S.styles" :key="sid" :value="sid">{{ sid }}</option>
               </select>
               <button class="iconbtn" :class="{ on: fbFor('variant', g.icon, vg.variant).length }"
-                      title="variant note" @click="openFb('variant', g.icon, vg.variant)">💬</button>
+                      title="feedback for this variant" @click="openFb('variant', g.icon, vg.variant)">
+                <span class="ic" v-html="IC.comment"></span><span v-if="fbNew('variant', g.icon, vg.variant)" class="dotnew"></span>
+              </button>
               <button class="iconbtn" title="copy SVG path (open in Inkscape)"
                       @click="copyPath(g.icon, vg.variant, vg.cands[0]?.cand)">⧉</button>
               <button class="iconbtn" :class="{ on: S.drafting === g.icon + '/' + vg.variant }"
                       title="Recraft: seed 4 drafts for this variant (~$0.18-0.20)"
-                      @click="recraftDraft(g.icon, vg.variant)">⚡</button>
+                      @click="recraftDraft(g.icon, vg.variant)"><span class="ic" v-html="IC.bolt"></span></button>
             </div>
             <div class="grid">
               <div class="card" v-for="c in vg.cands" :key="c.cand">
@@ -282,9 +302,15 @@ footer { text-align:center; color:var(--muted); font-size:.75rem; padding:20px 0
             <span class="muted">{{ h.decided ? 'decided' : h.candidates + ' drafted' }}</span>
             <span v-if="h.cost_usd" class="chip" title="recraft seeds in this pass">💲 {{ h.cost_usd }}</span>
             <span v-if="h.instructions" class="chip" title="apply-time instructions">💬 {{ h.instructions.slice(0, 40) }}{{ h.instructions.length > 40 ? '…' : '' }}</span>
-            <span v-if="h.feedback && h.feedback.length" class="chip"
-                  :title="h.feedback.map(f => '[' + f.author + '] ' + (f.icon || '') + (f.variant ? '#' + f.variant : '') + ': ' + f.text).join(String.fromCharCode(10))">
-              💬 {{ h.feedback.length }} feedback</span>
+            <span v-if="h.feedback && h.feedback.length" class="chip"><span class="ic" v-html="IC.comment"></span> {{ h.feedback.length }}</span>
+          </div>
+          <div v-if="h.feedback && h.feedback.length" class="chat" style="margin:4px 0">
+            <div v-for="f in h.feedback" :key="h.round + f.text" class="bubble" :class="f.author">
+              <span class="chip" :class="f.author">{{ f.author }}</span>
+              <span class="muted scope">{{ f.scope === 'pack' ? '' : (f.icon || '') + (f.variant ? '#' + f.variant : '') }}</span>
+              <span class="bubble-text">{{ f.text }}</span>
+              <span class="muted bubble-time">{{ relTime(f.created) }}</span>
+            </div>
           </div>
           <div v-if="h.decided" class="muted" style="font-size:.8rem">
             <template v-for="(dec, key) in h.icons" :key="key">
@@ -381,15 +407,21 @@ footer { text-align:center; color:var(--muted); font-size:.75rem; padding:20px 0
 
   <div v-if="S.fbDlg" class="overlay" @click.self="S.fbDlg = null">
     <div class="dialog">
-      <h3><span>💬 {{ fbTitle() }}</span>
+      <h3><span class="ic-lg" v-html="IC.comment"></span> {{ fbTitle() }}</span>
           <button class="subtle" @click="S.fbDlg = null">✕</button></h3>
       <p class="muted" style="margin:0 0 8px">Per-round feedback — guides the next draft, then dies with its round (history keeps it). Generally valid? The agent promotes it into the standing note via CLI.</p>
-      <div v-if="fbItems().length" style="margin-bottom:10px">
-        <div v-for="i in fbItems()" :key="i.id" class="row" style="align-items:flex-start; gap:6px; margin:4px 0">
-          <span class="chip" :class="i.author">{{ i.author }}</span>
-          <span style="flex:1">{{ i.text }}</span>
-          <button class="subtle armed-x" title="resolve (done / addressed)" @click="resolveFeedback(i)">✕</button>
-        </div>
+      <div class="chat">
+        <template v-for="r in fbChat()" :key="r.round + (r.archived ? '-a' : '-l')">
+          <div class="chat-head">{{ r.round }}{{ r.archived ? ' · archived' : ' · live' }}</div>
+          <div v-for="i in r.items" :key="r.round + i.id" class="bubble" :class="i.author">
+            <span class="chip" :class="i.author">{{ i.author }}</span>
+            <span class="bubble-text">{{ i.text }}</span>
+            <span class="muted bubble-time">{{ relTime(i.created) }}</span>
+            <span v-if="isNew(i)" class="chip new">new</span>
+            <button v-if="!r.archived" class="subtle armed-x" title="resolve (done / addressed)" @click="resolveFeedback(i)">✕</button>
+          </div>
+        </template>
+        <p v-if="!fbChat().length" class="muted">no comments yet for this scope</p>
       </div>
       <textarea v-model="S.fbDlg.text" placeholder="what to change in the next draft — e.g. 'thinner roof, door on the right'"></textarea>
       <div class="row" style="margin-top:8px">
@@ -524,6 +556,27 @@ const api = async (url, opts) => {
 };
 const esc = s => String(s ?? '');
 
+// inline icon set (16px, stroke currentColor — no emoji)
+const IC = {
+  comment: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>',
+  lock: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>',
+  bolt: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M13 2 3 14h9l-1 8 10-12h-9l1-8z"/></svg>',
+  plus: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14M5 12h14"/></svg>',
+  undo: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7v6h6"/><path d="M21 17a9 9 0 0 0-15-6.7L3 13"/></svg>',
+};
+function relTime(iso) {
+  if (!iso) return '';
+  const s = Math.max(0, (Date.now() - new Date(iso + 'Z').getTime()) / 1000);
+  if (s < 60) return 'now';
+  if (s < 3600) return Math.floor(s / 60) + 'm';
+  if (s < 86400) return Math.floor(s / 3600) + 'h';
+  return Math.floor(s / 86400) + 'd';
+}
+function seenKey() { return 'iconpilot.seen.' + (S.pack.name || ''); }
+function markSeen() { try { localStorage.setItem(seenKey(), new Date().toISOString()); } catch {} }
+function seenTs() { try { return localStorage.getItem(seenKey()) || ''; } catch { return ''; } }
+function isNew(i) { return !!i.created && i.created + 'Z' > seenTs(); }
+
 S.grouped = computed(() => {
   const m = new Map();
   for (const c of S.candidates) {
@@ -579,6 +632,9 @@ async function togglePin(icon, variant) {
 function isPinned(icon, variant) {
   return !!S.pack.icons?.[icon]?.variants?.[variant]?.pinned;
 }
+function fbNew(scope, icon, vid) {
+  return fbFor(scope, icon, vid).filter(isNew).length;
+}
 function fbFor(scope, icon, vid) {
   return (S.pack.feedback || []).filter(i =>
     i.scope === scope && (scope === 'pack' || i.icon === icon) &&
@@ -589,7 +645,26 @@ function fbTitle() {
   return 'feedback: ' + (d.scope === 'pack' ? 'whole draft' : d.icon + (d.variant ? ' / ' + d.variant : ''));
 }
 function fbItems() { const d = S.fbDlg || {}; return d.scope ? fbFor(d.scope, d.icon, d.variant) : []; }
-function openFb(scope, icon, vid) { S.fbDlg = { scope, icon, variant: vid, text: '' }; }
+function openFb(scope, icon, vid) {
+  S.fbDlg = { scope, icon, variant: vid, text: '' };
+  markSeen();
+}
+function fbChat() {
+  const d = S.fbDlg;
+  if (!d || !d.scope) return [];
+  const match = i =>
+    i.scope === d.scope &&
+    (d.scope === 'pack' || i.icon === d.icon) &&
+    (d.scope !== 'variant' || i.variant === d.variant);
+  const out = [];
+  for (const h of S.history || []) {
+    const items = (h.feedback || []).filter(match);
+    if (items.length) out.push({ round: h.round, archived: true, items });
+  }
+  const live = fbFor(d.scope, d.icon, d.variant);
+  if (live.length) out.push({ round: S.round || 'live', archived: false, items: live });
+  return out;
+}
 async function addFeedback() {
   const d = S.fbDlg; if (!d || !d.text || !d.text.trim()) return;
   try {
@@ -1031,7 +1106,8 @@ const App = {
        copyPath, togglePin, isPinned, undo,
       batchApprove, batchReject, toggleCompare,
       isLocked, recraftDraft, recraftIcon, startRound, saveIconDesc, totalCost,
-      fbFor, fbTitle, fbItems, openFb, addFeedback, resolveFeedback, switchRound, isViewing,
+      fbFor, fbNew, fbTitle, fbItems, fbChat, openFb, addFeedback, resolveFeedback, switchRound, isViewing,
+      IC, relTime, isNew,
 
     };
   },
