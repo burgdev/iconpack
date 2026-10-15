@@ -744,6 +744,7 @@ def test_style_rules_edit_and_remove(server: _Server, srvpack: Path) -> None:
     pj = srvpack / "pack.json"
     pk = json.loads(pj.read_text())
     pk["icons"]["hut"]["variants"]["mono"]["status"] = "todo"
+    pk["icons"]["hut"]["variants"]["color"].pop("reference", None)  # refs the removed variant
     pj.write_text(json.dumps(pk))
     code, data = server.req("POST", "/api/pack-style-remove", {"id": "mono-line"})
     assert code == 200, data
