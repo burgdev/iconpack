@@ -45,6 +45,11 @@ MODEL_PRICES: dict[str, float] = {
 STYLE_CREATE_PRICE = 0.005
 
 
+def max_versions(grid: int) -> int:
+    """How many icon versions fit in a grid: 1×1 = 6 (n-mode), NxN = grid²."""
+    return 6 if grid == 1 else grid * grid
+
+
 def prompt_limit(model: str) -> int:
     """Max prompt chars per model: V4/V4.1 = 10,000; V2/V3 = 1,000."""
     return 10000 if "v4" in model else 1000

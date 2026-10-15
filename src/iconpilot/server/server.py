@@ -306,10 +306,16 @@ class ReviewHandler(BaseHTTPRequestHandler):
         if url.path == "/api/recraft-request":
             icon_id = (q.get("icon") or [""])[0]
             variant = (q.get("variant") or [""])[0]
+            import iconpilot.recraft as _rc_mv
+
             try:
-                n = max(1, min(int((q.get("n") or ["4"])[0]), 6))
+                n = max(1, min(int((q.get("n") or ["4"])[0]), 16))
             except ValueError:
                 n = 4
+            grid = max(1, min(int((q.get("grid") or ["0"])[0] or 0), 4))
+            if grid == 0:
+                grid = next((g for g in (1, 2, 3, 4) if _rc_mv.max_versions(g) >= n), 4)
+            n = min(n, _rc_mv.max_versions(grid))
             try:
                 pack, styles = load_pack(self.pack_dir / "pack.json")
             except Exception as exc:
@@ -324,6 +330,7 @@ class ReviewHandler(BaseHTTPRequestHandler):
 
             plan = self._recraft_plan(icon_id, variant, n_in=n)
             model_override = (q.get("model") or [None])[0]
+            # grid-aware: sheet mode for grid>=2, n-mode for grid==1
             if model_override:
                 import iconpilot.recraft as _rc2
 
@@ -341,10 +348,15 @@ class ReviewHandler(BaseHTTPRequestHandler):
             req = {
                 "model": plan["model"],
                 "prompt": plan["prompt"],
-                "n": plan["n"],
                 "size": "1:1",
                 "response_format": "b64_json",
             }
+            if grid == 1:
+                req["n"] = plan["n"]  # separate images via n-parameter (max 6)
+            else:
+                req["n"] = 1  # one sheet image
+                req["_grid"] = grid
+                req["_versions"] = plan["n"]
             if plan["style_id"]:
                 req["style_id"] = plan["style_id"]
                 req["style_match"] = "precise"
@@ -360,6 +372,8 @@ class ReviewHandler(BaseHTTPRequestHandler):
                         self.pack_dir, plan["pack"], plan["styles"], icon_id, variant, n=plan["n"]
                     ),
                     "est_cost_usd": plan["cost"],
+                    "grid": grid,
+                    "versions": plan["n"],
                     "models": list(rc.VECTOR_MODELS),
                 },
             )
@@ -796,9 +810,11 @@ class ReviewHandler(BaseHTTPRequestHandler):
         style_id = plan["style_id"]
 
         ref_urls = [rc._svg_data_url(s) for s in plan["refs"]] or None
-        sheet = int(data.get("sheet") or 0)
-        if sheet:
-            grid = max(2, min(sheet, 4))
+        grid = int(data.get("grid") or 0)
+        if grid == 0:
+            grid = int(data.get("sheet") or 0)  # backwards compat
+            grid = max(2, min(grid, 4)) if grid else 0
+        if grid >= 2:
             sheet_svgs = rc.generate(
                 token,
                 rc.sheet_prompt(plan["prompt"], grid),
@@ -807,7 +823,8 @@ class ReviewHandler(BaseHTTPRequestHandler):
                 model=plan["model"],
                 reference_urls=ref_urls,
             )
-            svgs = rc.split_sheet(sheet_svgs[0], grid, target=24.0)
+            cells = rc.split_sheet(sheet_svgs[0], grid, target=24.0)
+            svgs = cells[: plan["n"]]  # only the requested versions
         else:
             svgs = rc.generate(
                 token,

@@ -816,10 +816,14 @@ footer { text-align:center; color:var(--muted); font-size:.75rem; padding:20px 0
         <select v-model="S.debugDlg.model" @change="showDebug(S.debugDlg.icon, S.debugDlg.variant, S.debugDlg.model)">
           <option v-for="m in S.debugDlg.models" :key="m" :value="m">{{ m }}</option>
         </select>
-        <label class="muted" style="flex:0 0 50px; margin-left:10px">grid</label>
-        <select v-model="S.debugDlg.n" @change="showDebug(S.debugDlg.icon, S.debugDlg.variant, null, +S.debugDlg.n)">
-          <option v-for="k in [1,2,3,4,5,6,9,12,16]" :key="k" :value="k">{{ k }}</option>
+        <label class="muted" style="margin-left:10px" title="image layout: 1×1 = separate images, 2×2+ = one sheet">grid</label>
+        <select v-model="S.debugDlg.grid" @change="showDebug(S.debugDlg.icon, S.debugDlg.variant, null, +S.debugDlg.n, +S.debugDlg.grid)">
+          <option v-for="g in [1,2,3,4]" :key="g" :value="g">{{ g }}×{{ g }}</option>
         </select>
+        <label class="muted" style="margin-left:10px" title="how many icon versions to generate (max = grid capacity)">versions</label>
+        <input v-model.number="S.debugDlg.n" type="number" min="1" :max="S.debugDlg.grid * S.debugDlg.grid === 1 ? 6 : S.debugDlg.grid * S.debugDlg.grid"
+               style="width:56px"
+               @change="showDebug(S.debugDlg.icon, S.debugDlg.variant, null, +S.debugDlg.n, +S.debugDlg.grid)">
         <select v-if="S.debugDlg.variants && S.debugDlg.variants.length > 1" v-model="S.debugDlg.variant" @change="showDebug(S.debugDlg.icon, S.debugDlg.variant)">
           <option v-for="vd in S.debugDlg.variants" :key="vd" :value="vd">{{ vd }}</option>
         </select>
@@ -1422,11 +1426,12 @@ async function switchRound(r) {
 }
 function totalCost() { return S.history.reduce((a, h) => a + (h.cost_usd || 0), 0); }
 
-async function showDebug(icon, variant, model, n) {
+async function showDebug(icon, variant, model, n, grid) {
   try {
     const q = new URLSearchParams({ icon, variant });
     if (model) q.set('model', model);
     if (n) q.set('n', n);
+    if (grid) q.set('grid', grid);
     const r = await api('/api/recraft-request?' + q);
     S.debugDlg = null;  // reset before rebuild
     const fullPrompt = r.request.prompt || '';
@@ -1441,7 +1446,8 @@ async function showDebug(icon, variant, model, n) {
       fullPrompt,
       promptChars: fullPrompt.length,
       promptLimit: fullPrompt.length > 1000 ? 10000 : 1000,
-      cost: r.est_cost_usd, models: r.models || [], model: r.request.model, n: r.request.n,
+      cost: r.est_cost_usd, models: r.models || [], model: r.request.model,
+      n: r.versions || r.request.n || 4, grid: r.grid || 1,
       copied: '',
     };
     focusDialog();
