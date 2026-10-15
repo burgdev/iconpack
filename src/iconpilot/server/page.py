@@ -97,6 +97,7 @@ header .meta { color:var(--muted); font-size:.8rem; }
 .tabs button.on { color:var(--accent); border-bottom-color:var(--accent); }
 .refcell { margin:0; width:56px; display:inline-flex; flex-direction:column; align-items:center; gap:2px; position:relative; }
 .refcell img { border-radius:8px; background:#fff; display:block; }
+.stylepick { width:92px; flex-direction:column; display:inline-flex; align-items:center; gap:4px; padding:8px 6px; }
 .refcell .armed-x { position:absolute; top:-6px; right:-6px; padding:0 5px; }
 .palchip { width:44px; height:32px; border-radius:8px; border:1px solid var(--line); position:relative;
            display:inline-flex; align-items:center; justify-content:center; overflow:hidden; }
