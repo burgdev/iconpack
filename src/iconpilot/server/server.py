@@ -532,11 +532,14 @@ class ReviewHandler(BaseHTTPRequestHandler):
                 scope = data.get("scope") or "pack"
                 if scope not in ("pack", "icon", "variant"):
                     raise ValueError("scope must be pack|icon|variant")
+                author = data.get("author") or "user"
+                if author not in ("user", "agent"):
+                    raise ValueError("author must be user|agent")
                 item = {
                     "id": uuid.uuid4().hex[:8],
                     "scope": scope,
                     "text": text[:500],
-                    "author": data.get("author") or "user",
+                    "author": author,
                     "round": cur_round,
                 }
                 if scope in ("icon", "variant"):
@@ -565,11 +568,12 @@ class ReviewHandler(BaseHTTPRequestHandler):
 
             # promote: fold into standing pack surfaces, drop from live list
             target = data.get("to") or "note"
-            label = (
-                f"{item.get('icon', '')}#{item.get('variant', '')}: "
-                if item["scope"] != "pack"
-                else ""
-            )
+            if item.get("scope") == "pack":
+                label = ""
+            elif item.get("scope") == "variant":
+                label = f"{item.get('icon', '')}#{item.get('variant')}: "
+            else:
+                label = f"{item.get('icon', '')}: "
             if target == "rules":
                 pack.setdefault("rules", []).append(f"{label}{item['text']}".strip())
             else:
@@ -641,13 +645,15 @@ class ReviewHandler(BaseHTTPRequestHandler):
             decisions = parse_decision_text(text)
             with pack_lock(self.pack_dir):
                 pack, styles = load_pack(self.pack_dir / "pack.json")
+                runs = sorted(p.name for p in (self.pack_dir / ".runs").glob("r*") if p.is_dir())
                 if round_id is None:
-                    runs = sorted(
-                        p.name for p in (self.pack_dir / ".runs").glob("r*") if p.is_dir()
-                    )
                     if not runs:
                         raise ValueError("no rounds under .runs/")
                     round_id = runs[-1]
+                elif round_id != runs[-1]:
+                    raise ValueError(
+                        f"round {round_id} is history — only the latest ({runs[-1]}) is live"
+                    )
                 # backup before apply (for undo) — atomic via tmp+rename
                 import shutil
 

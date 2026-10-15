@@ -452,3 +452,40 @@ def test_next_archives_and_migrates_legacy_notes(tmp_path: Path) -> None:
     assert "live item" in texts and "legacy icon note" in texts
     pack = json.loads((d / "pack.json").read_text())
     assert pack["feedback"] == [] and "note" not in pack["icons"]["sun"]
+
+
+def test_context_archived_feedback_scope_filtered(tmp_path: Path) -> None:
+    """Archived feedback for icon A must NOT leak into icon B's context."""
+    d = _pack(tmp_path)
+    pack = json.loads((d / "pack.json").read_text())
+    pack["icons"]["moon"] = {
+        "brief": "crescent",
+        "variants": {"flat": {"style": "flat-color", "status": "todo"}},
+    }
+    (d / "pack.json").write_text(json.dumps(pack))
+    (d / ".runs" / "r001").mkdir(parents=True)
+    (d / ".runs" / "r001" / "feedback.json").write_text(
+        json.dumps(
+            [
+                {
+                    "id": "1",
+                    "scope": "icon",
+                    "icon": "sun",
+                    "text": "sun fb",
+                    "author": "user",
+                    "round": "r001",
+                },
+                {"id": "2", "scope": "pack", "text": "pack fb", "author": "user", "round": "r001"},
+            ]
+        )
+    )
+    from iconpilot.context import build_context, render_markdown
+    from iconpilot.pack import load_pack
+
+    pack_data, styles = load_pack(d / "pack.json")
+    ctx = build_context(d, pack_data, styles, "moon", "flat")
+    texts = [i["text"] for i in ctx.get("feedback", [])]
+    assert "pack fb" in texts
+    assert "sun fb" not in texts  # no cross-icon bleed
+    md = render_markdown(ctx)
+    assert "[user] pack fb" in md

@@ -638,7 +638,7 @@ function isViewing() { return !!(S.viewRound && S.viewRound !== S.latest); }
 function isLocked(icon, variant) { return !!S.locked[icon + '/' + variant]; }
 async function switchRound(r) {
   S.viewRound = r === S.latest ? null : r;
-  S.decisions = {}; editDirty = false; S.decisionEdit = ''; S.instructions = '';
+  S.decisions = {}; editDirty = false; S.decisionEdit = ''; S.instructions = ''; S.compare = null;
   await load();
 }
 function totalCost() { return S.history.reduce((a, h) => a + (h.cost_usd || 0), 0); }
@@ -676,6 +676,7 @@ async function startRound() {
 }
 
 function rejectAllIcon(g) {
+  if (isViewing()) { flash('viewing history — switch back to the live pass to decide', false); return; }
   for (const vg of variantGroups(g)) {
     S.decisions[g.icon + '/' + vg.variant] = { items: [{ cand: '*', t: '* no' }] };
   }
@@ -877,6 +878,7 @@ async function undo() {
   } catch (e) { flash('✗ ' + e.message, false); }
 }
 async function apply() {
+  if (isViewing()) { flash('viewing history — switch back to the live pass', false); return; }
   const text = S.decisionEdit.trim();
   if (!text || S.applying) return;
   S.applying = true;
@@ -1026,7 +1028,7 @@ const App = {
       mainColor, packBrief, saveBrief, saveMainColor, hasNote,
       openSettings, saveSettings, markDirty,
       variantGroups, packBriefIcon, mainColorIcon, saveMainColorIcon, rejectAllIcon,
-      variantNote, openVariantNote, saveVariantNote, copyPath, togglePin, isPinned, undo,
+       copyPath, togglePin, isPinned, undo,
       batchApprove, batchReject, toggleCompare,
       isLocked, recraftDraft, recraftIcon, startRound, saveIconDesc, totalCost,
       fbFor, fbTitle, fbItems, openFb, addFeedback, resolveFeedback, switchRound, isViewing,

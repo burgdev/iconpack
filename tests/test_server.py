@@ -194,6 +194,26 @@ def test_render_with_custom_colors(server: _Server, srvpack: Path) -> None:
     assert code == 200 and body[:4] == b"\x89PNG"
 
 
+def test_page_setup_return_symbols_defined() -> None:
+    # regression: deleted functions left in the setup() return crashed the page
+    # at mount (ReferenceError) — node --check cannot catch this.
+    import re as _re
+
+    from iconpilot.server.page import PAGE
+
+    js = PAGE.split('<script type="module">')[1].split("</script>")[0]
+    # the setup() return is the LAST `return {` in the module
+    start = js.rindex("return {")
+    body = js[start : js.index("\n    };", start)]
+    names = [
+        ln.strip().rstrip(",") for ln in body.splitlines() if _re.fullmatch(r"\w+,?", ln.strip())
+    ]
+    for name in names:
+        assert _re.search(rf"(function {name}\b|const {name}\b|let {name}\b)", js), (
+            f"setup() returns undefined symbol '{name}'"
+        )
+
+
 def test_page_has_no_bare_state_refs() -> None:
     # regression: attribute bindings kept bare refs (ai.text crashed at mount).
     # Scan ONLY binding contexts: {{ ... }} mustaches and attr="..." values.
@@ -552,3 +572,20 @@ def test_run_endpoint_round_param(server: _Server, srvpack: Path) -> None:
     # bogus round falls back to latest
     code, body = server.get("/api/run?round=r999")
     assert json.loads(body)["round"] == new_round
+
+
+def test_feedback_invalid_author_rejected(server: _Server) -> None:
+    code, data = server.req(
+        "POST", "/api/feedback", {"scope": "pack", "text": "x", "author": "hacker"}
+    )
+    assert code == 400
+    assert "author" in data["error"]
+
+
+def test_decision_on_history_round_rejected(server: _Server, srvpack: Path) -> None:
+    code, data = server.req("POST", "/api/round/new", {})
+    assert code == 200
+    # applying decisions against the OLD round must fail
+    code, data = server.req("POST", "/api/decision", {"text": "hut: a1 ok", "round": "r001"})
+    assert code == 400
+    assert "history" in data["error"]

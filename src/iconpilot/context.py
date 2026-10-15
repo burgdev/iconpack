@@ -95,7 +95,7 @@ def build_context(
             if fb_file.is_file():
                 try:
                     for item in json.loads(fb_file.read_text()):
-                        if item.get("round") != "legacy" or item not in fb:
+                        if _matches(item) and item not in fb:
                             fb.append(item)
                 except (ValueError, OSError):
                     pass
@@ -189,6 +189,10 @@ def render_markdown(ctx: dict) -> str:
     ]
     if "main_color" in ctx:
         lines += [f"**Main color:** `{ctx['main_color']}`", ""]
+    if "pack_description" in ctx:
+        lines += [f"**Pack (docs):** {ctx['pack_description']}", ""]
+    if "icon_description" in ctx:
+        lines += [f"**Icon (docs):** {ctx['icon_description']}", ""]
     if "pack_note" in ctx:
         lines += [f"**Pack note (standing instructions):** {ctx['pack_note']}", ""]
     if "icon_note" in ctx:

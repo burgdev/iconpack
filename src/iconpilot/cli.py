@@ -250,6 +250,7 @@ def next_round(pack: str) -> None:
     run = next_run_id(runs_dir)
     (runs_dir / run).mkdir(parents=True, exist_ok=True)
     with pack_lock(pack_dir):
+        pack_data, _styles = _load_pack_arg(pack)  # re-load under the lock (no TOCTOU)
         carried = advance_feedback(pack_data, runs_dir / run)
         write_pack_atomic(pack_dir, pack_data)
     open_ = open_variants(pack_data)
@@ -355,11 +356,12 @@ def feedback(
                 items.remove(item)
                 typer.secho(f"resolved {fid}", fg=typer.colors.GREEN)
             else:
-                label = (
-                    f"{item.get('icon', '')}#{item.get('variant', '')}: "
-                    if item.get("scope") != "pack"
-                    else ""
-                )
+                if item.get("scope") == "pack":
+                    label = ""
+                elif item.get("scope") == "variant":
+                    label = f"{item.get('icon', '')}#{item.get('variant')}: "
+                else:
+                    label = f"{item.get('icon', '')}: "
                 if to == "rules":
                     pack_data.setdefault("rules", []).append(f"{label}{item['text']}".strip())
                 else:
