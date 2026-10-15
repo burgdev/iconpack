@@ -202,6 +202,78 @@ def wait(
         typer.echo(f"  {result['summary']}")
 
 
+def open_variants(pack_data: dict) -> list[tuple[str, str, str]]:
+    """Open work: (icon, variant, style) for variants not yet approved (links skipped)."""
+    out = []
+    for iid, icon in pack_data["icons"].items():
+        for vid, v in icon.get("variants", {}).items():
+            if "link" in v or "style" not in v:
+                continue
+            if v.get("status") != "approved":
+                out.append((iid, vid, v["style"]))
+    return out
+
+
+@app.command(name="next")
+def next_round(pack: str) -> None:
+    """Start the next round: fresh run dir, printed open work, history untouched.
+
+    Tooling defines what is open: approved/locked variants are excluded, and
+    previous comments/decisions stay in their .runs/<round>/ dirs (history).
+    The LLM drafts only what this command lists.
+    """
+    try:
+        pack_data, _styles = _load_pack_arg(pack)
+    except PackError as exc:
+        typer.secho(str(exc), fg=typer.colors.RED, err=True)
+        raise typer.Exit(code=2) from exc
+
+    pack_dir = resolve_pack_dir(pack)
+    runs_dir = pack_dir / ".runs"
+    runs = sorted(p.name for p in runs_dir.glob("r*")) if runs_dir.is_dir() else []
+
+    # warn on unapplied decisions in the previous round
+    if runs and not (runs_dir / runs[-1] / "decisions.json").is_file():
+        typer.secho(
+            f"warning: {runs[-1]} has no decisions.json — previous round was never applied",
+            fg=typer.colors.YELLOW,
+            err=True,
+        )
+
+    run = f"r{len(runs) + 1:03d}"
+    (runs_dir / run).mkdir(parents=True, exist_ok=True)
+    open_ = open_variants(pack_data)
+    (runs_dir / run / "round.json").write_text(
+        json.dumps(
+            {
+                "round": run,
+                "open": [f"{i}#{v}" for i, v, _ in open_],
+                "locked_count": sum(
+                    1
+                    for icon in pack_data["icons"].values()
+                    for v in icon.get("variants", {}).values()
+                    if "style" in v and v.get("status") == "approved"
+                ),
+            },
+            indent=2,
+        )
+        + "\n"
+    )
+
+    typer.secho(
+        f"── round {run} started (history: {len(runs)} round(s) kept)", fg=typer.colors.GREEN
+    )
+    typer.secho(f"OPEN WORK ({len(open_)}):", fg=typer.colors.GREEN)
+    for iid, vid, style in open_:
+        typer.echo(f"  {iid}#{vid} ({style})")
+    if not open_:
+        typer.secho("  nothing open — all variants approved 🎉", fg=typer.colors.GREEN)
+    typer.secho(
+        "locked variants are excluded; draft exactly what is listed above",
+        fg=typer.colors.CYAN,
+    )
+
+
 @app.command(name="recraft-style")
 def recraft_style(
     pack: str,
@@ -228,26 +300,28 @@ def recraft_style(
 
     pack_dir = resolve_pack_dir(pack)
 
-    # collect references: pinned first, then approved+chosen; max 10 (Recraft limit)
-    refs: list[str] = []
-    seen: set[tuple[str, str]] = set()
+    # collect references grouped by PACK STYLE — each gets its own Recraft
+    # style, so mono and color variants stay independently consistent.
+    refs_by_style: dict[str, list[str]] = {}
 
-    def add_ref(iid: str, vid: str) -> None:
-        if (iid, vid) in seen or len(refs) >= 10:
+    def add_ref(iid: str, vid: str, pack_style: str) -> None:
+        bucket = refs_by_style.setdefault(pack_style, [])
+        if len(bucket) >= 10:  # Recraft limit per style
             return
         f = pack_dir / "icons" / iid / f"{vid}.svg"
         if f.is_file():
-            refs.append(f.read_text())
-            seen.add((iid, vid))
+            bucket.append(f.read_text())
 
     for pri in (True, False):  # pinned pass, then approved pass
         for iid, icon in pack_data["icons"].items():
             for vid, v in icon.get("variants", {}).items():
-                if (pri and v.get("pinned")) or (
-                    not pri and v.get("status") == "approved" and v.get("chosen")
+                if not (
+                    (pri and v.get("pinned"))
+                    or (not pri and v.get("status") == "approved" and v.get("chosen"))
                 ):
-                    add_ref(iid, vid)
-    if not refs:
+                    continue
+                add_ref(iid, vid, v["style"])
+    if not refs_by_style:
         typer.secho(
             "no reference SVGs — approve (or pin) at least one variant first",
             fg=typer.colors.RED,
@@ -255,22 +329,26 @@ def recraft_style(
         )
         raise typer.Exit(code=2)
 
+    style_ids: dict[str, str] = {}
     try:
-        style = rc.create_style(token, refs, match=match)
+        for pack_style, refs in refs_by_style.items():
+            style = rc.create_style(token, refs, match=match)
+            style_ids[pack_style] = style["id"]
+            typer.echo(f"  {pack_style}: {style['id']} ({len(refs)} refs)")
     except rc.RecraftError as exc:
         typer.secho(str(exc), fg=typer.colors.RED, err=True)
         raise typer.Exit(code=1) from exc
 
-    pack_data["recraft"] = {
-        "style_id": style["id"],
-        "model": rc.DEFAULT_MODEL,
-        "name": f"{pack_data['name']} style",
-    }
+    recraft = pack_data.setdefault("recraft", {})
+    recraft.setdefault("style_id", next(iter(style_ids.values())))
+    recraft["style_ids"] = {**recraft.get("style_ids", {}), **style_ids}
+    recraft["model"] = rc.DEFAULT_MODEL
+    recraft.setdefault("name", f"{pack_data['name']} style")
     with pack_lock(pack_dir):
         write_pack_atomic(pack_dir, pack_data)
     typer.secho(
-        f"recraft style created: {style['id']} ({len(refs)} refs, "
-        f"~${0.005:.3f}) — stored in pack.json",
+        f"recraft styles created for {list(style_ids)} (~${0.005 * len(style_ids):.3f}) "
+        "— stored in pack.json",
         fg=typer.colors.GREEN,
     )
 
@@ -316,7 +394,10 @@ def draft(
         raise typer.Exit(code=2)
 
     style = styles[icon["variants"][variant]["style"]]
-    style_id = pack_data.get("recraft", {}).get("style_id")
+    recraft_cfg = pack_data.get("recraft", {})
+    style_id = recraft_cfg.get("style_ids", {}).get(
+        icon["variants"][variant]["style"]
+    ) or recraft_cfg.get("style_id")
     if not style_id:
         typer.secho(
             "warning: no recraft style_id in pack.json — using plain model "

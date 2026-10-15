@@ -188,3 +188,82 @@ def test_schema_allows_recraft_block(tmp_path: Path) -> None:
 
     _, errors = revalidate(json.loads((d / "pack.json").read_text()))
     assert not errors
+
+
+# --- next round + per-style recraft ------------------------------------------
+
+
+def test_next_creates_round_and_lists_open(tmp_path: Path) -> None:
+    d = _pack(tmp_path)
+    r = runner.invoke(app, ["next", str(d)])
+    assert r.exit_code == 0, r.output
+    assert "r001" in r.output
+    assert "sun#flat" in r.output  # todo variant is open work
+    rj = json.loads((d / ".runs" / "r001" / "round.json").read_text())
+    assert rj["open"] == ["sun#flat"]
+
+
+def test_next_excludes_approved(tmp_path: Path) -> None:
+    d = _pack(tmp_path, pinned=True)  # flat is approved+chosen
+    r = runner.invoke(app, ["next", str(d)])
+    assert r.exit_code == 0, r.output
+    assert "sun#flat" not in r.output
+    assert "nothing open" in r.output
+
+
+def test_next_keeps_history_and_warns_unapplied(tmp_path: Path) -> None:
+    d = _pack(tmp_path)
+    runner.invoke(app, ["next", str(d)])
+    # simulate an undecided previous round then advance
+    (d / ".runs" / "r001" / "flat" / "sun").mkdir(parents=True)
+    (d / ".runs" / "r001" / "flat" / "sun" / "a1.svg").write_text("<svg/>")
+    r = runner.invoke(app, ["next", str(d)])
+    assert r.exit_code == 0
+    assert "never applied" in r.output
+    assert (d / ".runs" / "r001").is_dir()  # history kept
+    assert (d / ".runs" / "r002").is_dir()
+
+
+def test_recraft_style_per_pack_style(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    d = _pack(tmp_path, pinned=True)
+    pack = json.loads((d / "pack.json").read_text())
+    pack["icons"]["sun"]["variants"]["mono"] = {
+        "style": "mono-line",
+        "status": "approved",
+        "chosen": {"run": "r0", "variant": "x"},
+    }
+    (d / "pack.json").write_text(json.dumps(pack))
+    (d / "icons" / "sun" / "mono.svg").write_text("<svg/>")
+
+    made: list[list[str]] = []
+
+    def fake_create(token, refs, match="precise"):
+        made.append(refs)
+        return {"id": f"st-{len(made)}"}
+
+    monkeypatch.setattr(rc, "resolve_token", lambda models_file=None: "tok")
+    monkeypatch.setattr(rc, "create_style", fake_create)
+    r = runner.invoke(app, ["recraft-style", str(d)])
+    assert r.exit_code == 0, r.output
+    pack = json.loads((d / "pack.json").read_text())
+    assert pack["recraft"]["style_ids"] == {"flat-color": "st-1", "mono-line": "st-2"}
+    assert made == [[_pack.__defaults__ and "x" or "x"] for _ in range(2)] or len(made) == 2
+
+
+def test_draft_picks_per_style_id(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    d = _pack(tmp_path, with_style_id=True)
+    pack = json.loads((d / "pack.json").read_text())
+    pack["recraft"]["style_ids"] = {"flat-color": "per-style-9"}
+    (d / "pack.json").write_text(json.dumps(pack))
+    monkeypatch.setattr(rc, "resolve_token", lambda models_file=None: "tok")
+
+    seen: dict = {}
+
+    def fake_generate(token, prompt, n=4, style_id=None, model=None):
+        seen["style_id"] = style_id
+        return [SRC]
+
+    monkeypatch.setattr(rc, "generate", fake_generate)
+    r = runner.invoke(app, ["draft", str(d), "sun", "--n", "1"])
+    assert r.exit_code == 0, r.output
+    assert seen["style_id"] == "per-style-9"

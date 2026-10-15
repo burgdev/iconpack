@@ -99,6 +99,13 @@
         },
         "name": {
           "type": "string"
+        },
+        "style_ids": {
+          "type": "object",
+          "description": "Per pack-style Recraft style ids (e.g. mono vs color each get their own).",
+          "additionalProperties": {
+            "type": "string"
+          }
         }
       },
       "required": [

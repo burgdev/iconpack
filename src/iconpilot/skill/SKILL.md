@@ -162,6 +162,29 @@ and style numbers always win over DESIGN.md prose).
 
 Round layout: `.runs/<round>/<variant>/<icon>/<cand>.svg` (r001, r002, …).
 
+## Round flow — what is open
+
+`iconpilot next <pack>` is the ONLY source of truth for open work. It creates
+the fresh `.runs/rNNN/` (old rounds stay as history) and prints exactly the
+variants that are NOT approved. Draft only what it lists:
+
+- approved/locked variants (10★ + ok applied) never reappear — tooling excludes them
+- rejected candidates (0★) die with their round — history keeps them, you don't
+- NEW notes are always visible: notes live on pack.json variants and are injected
+  into every context build — the LLM always sees current notes, never stale comments
+- never re-draft a locked variant unless the user explicitly unlocks it
+
+## Mono/color consistency
+
+Variants are siblings (redraws, not derivations). Consistency across mono and
+color comes from three places, in order of strength:
+1. Per-style Recraft styles — `iconpilot recraft-style` creates ONE Recraft style
+   per pack style from that style's approved refs (mono refs → mono style,
+   color refs → color style). `draft` picks the right one automatically.
+2. Anchors — pin the best 2-3 icons per style; every context build injects them.
+3. Auto-brief siblings — approving one variant makes it the reference_source for
+   its siblings, so mono informs color and vice versa (same silhouette).
+
 ## Recraft seeding (optional quality floor)
 
 For filled/color variants, Recraft can seed shape language before you redraw:

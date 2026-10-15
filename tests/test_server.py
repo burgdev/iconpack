@@ -381,3 +381,42 @@ def test_anchor_suggestions_endpoint(server: _Server) -> None:
     data = json.loads(body)
     assert "suggestions" in data
     assert isinstance(data["suggestions"], list)
+
+
+def test_round_new_endpoint(server: _Server, srvpack: Path) -> None:
+    code, data = server.req("POST", "/api/round/new", {})
+    assert code == 200
+    assert data["round"].startswith("r")
+    assert isinstance(data["open"], list)
+
+
+def test_recraft_endpoint_no_token(server: _Server) -> None:
+    code, data = server.req("POST", "/api/recraft", {"icon": "hut", "variant": "mono", "n": 2})
+    assert code in (400, 502)
+    assert "token" in data["error"].lower()
+
+
+def test_recraft_endpoint_drafts(server: _Server, srvpack: Path, monkeypatch) -> None:
+    import iconpilot.recraft as rc
+
+    monkeypatch.setattr(rc, "resolve_token", lambda models_file=None: "tok")
+
+    def fake_generate(token, prompt, n=4, style_id=None, model=None):
+        svg = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024"><path d="M0 0h1024v1024H0z"/></svg>'
+        return [svg] * n
+
+    monkeypatch.setattr(rc, "generate", fake_generate)
+    code, data = server.req("POST", "/api/recraft", {"icon": "hut", "variant": "mono", "n": 2})
+    assert code == 200, data
+    assert data["wrote"] == ["r1.svg", "r2.svg"]
+    assert data["variant"] == "mono"
+    seeds = sorted((srvpack / ".runs" / data["round"] / "mono" / "hut").glob("r*.svg"))
+    assert len(seeds) == 2
+    assert seeds[0].read_text().startswith("<svg")
+
+
+def test_run_state_includes_locked(server: _Server) -> None:
+    code, body = server.get("/api/run")
+    assert code == 200
+    data = json.loads(body)
+    assert "locked" in data and isinstance(data["locked"], dict)

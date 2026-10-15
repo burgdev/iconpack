@@ -120,7 +120,19 @@ class ReviewHandler(BaseHTTPRequestHandler):
                     rel = svg.relative_to(self.pack_dir / ".runs" / runs[-1]).parts
                     if len(rel) == 3:
                         entries.append({"variant": rel[0], "icon": rel[1], "cand": rel[2][:-4]})
-            self._json(200, {"round": runs[-1] if runs else None, "candidates": entries})
+            # open/locked per icon+variant so the page can badge locked work
+            locked: dict[str, bool] = {}
+            try:
+                pack, _ = load_pack(self.pack_dir / "pack.json")
+                for iid, icon in pack["icons"].items():
+                    for vid, var in icon.get("variants", {}).items():
+                        locked[f"{iid}/{vid}"] = var.get("status") == "approved"
+            except Exception:  # badges are cosmetic
+                locked = {}
+            self._json(
+                200,
+                {"round": runs[-1] if runs else None, "candidates": entries, "locked": locked},
+            )
             return
 
         if url.path == "/static/vue.esm-browser.prod.js":
@@ -337,8 +349,115 @@ class ReviewHandler(BaseHTTPRequestHandler):
 
         self._json(404, {"error": "no such route"})
 
+    def _start_round(self) -> dict:
+        """Create the next run dir (history untouched); returns round summary."""
+        import json as _json
+
+        runs_dir = self.pack_dir / ".runs"
+        runs = sorted(p.name for p in runs_dir.glob("r*")) if runs_dir.is_dir() else []
+        run = f"r{len(runs) + 1:03d}"
+        (runs_dir / run).mkdir(parents=True, exist_ok=True)
+        try:
+            pack, _ = load_pack(self.pack_dir / "pack.json")
+            open_ = [
+                f"{iid}#{vid}"
+                for iid, icon in pack["icons"].items()
+                for vid, var in icon.get("variants", {}).items()
+                if "style" in var and "link" not in var and var.get("status") != "approved"
+            ]
+        except Exception:
+            open_ = []
+        (runs_dir / run / "round.json").write_text(
+            _json.dumps({"round": run, "open": open_}) + "\n"
+        )
+        return {"round": run, "open": open_}
+
+    def _recraft_draft(self, data: dict) -> dict:
+        """Seed Recraft candidates for one icon (+optional variant) into the latest run."""
+        import iconpilot.recraft as rc
+        from iconpilot.gate.run import run_gate
+
+        token = rc.resolve_token()
+        if not token:
+            raise ValueError("no Recraft token on the server — set RECRAFT_API_TOKEN")
+        icon_id = data.get("icon") or ""
+        variant = data.get("variant")
+        n = int(data.get("n") or 4)
+        with pack_lock(self.pack_dir):
+            pack, styles = load_pack(self.pack_dir / "pack.json")
+        icon = pack["icons"].get(icon_id)
+        if icon is None:
+            raise ValueError(f"unknown icon '{icon_id}'")
+        variants = [v for v in icon.get("variants", {}) if "style" in icon["variants"][v]]
+        if variant:
+            if variant not in variants:
+                raise ValueError(f"no variant '{variant}' on {icon_id}")
+        elif len(variants) == 1:
+            variant = variants[0]
+        else:
+            raise ValueError(f"{icon_id} has variants {variants} — pass 'variant'")
+
+        style = styles[icon["variants"][variant]["style"]]
+        recraft_cfg = pack.get("recraft", {})
+        style_id = recraft_cfg.get("style_ids", {}).get(
+            icon["variants"][variant]["style"]
+        ) or recraft_cfg.get("style_id")
+
+        parts = [icon.get("brief", icon_id), style.label, " ".join(style.style_words)]
+        if style.avoid:
+            parts.append("avoid: " + ", ".join(style.avoid))
+        parts += pack.get("rules", [])
+        if data.get("prompt"):
+            parts.append(str(data["prompt"]))
+        prompt = ", ".join(p for p in parts if p)[:1000]
+
+        svgs = rc.generate(token, prompt, n=n, style_id=style_id)
+
+        runs_dir = self.pack_dir / ".runs"
+        runs = sorted(p.name for p in runs_dir.glob("r*")) if runs_dir.is_dir() else []
+        run = runs[-1] if runs else None
+        if not run:
+            raise ValueError("no round yet — POST /api/round/new first")
+        cand_dir = runs_dir / run / variant / icon_id
+        cand_dir.mkdir(parents=True, exist_ok=True)
+        existing = len(list(cand_dir.glob("r*.svg")))
+        viewbox = pack["spec"]["viewBox"]
+        wrote = []
+        n_pass = 0
+        for i, raw in enumerate(svgs, start=1):
+            f = cand_dir / f"r{existing + i}.svg"
+            f.write_text(rc.normalize(raw, viewbox))
+            wrote.append(f.name)
+            if run_gate(f, pack, style).passed:
+                n_pass += 1
+        return {
+            "round": run,
+            "icon": icon_id,
+            "variant": variant,
+            "wrote": wrote,
+            "gate_passed": n_pass,
+            "cost_usd": round(0.05 * len(wrote), 2),
+        }
+
     def do_POST(self) -> None:
         url = urlparse(self.path)
+        if url.path == "/api/round/new":
+            try:
+                self._json(200, self._start_round())
+            except Exception as exc:
+                self._json(500, {"error": str(exc)})
+            return
+        if url.path == "/api/recraft":
+            data = self._body()
+            try:
+                self._json(200, self._recraft_draft(data))
+            except ValueError as exc:
+                self._json(400, {"error": str(exc)})
+            except Exception as exc:
+                import iconpilot.recraft as _rc
+
+                self._json(502 if isinstance(exc, _rc.RecraftError) else 500, {"error": str(exc)})
+            return
         if url.path != "/api/decision":
             self._json(404, {"error": "no such route"})
             return

@@ -25,6 +25,8 @@ header h1 { font-size:1rem; margin:0; font-weight:650; }
 header .meta { color:var(--muted); font-size:.8rem; }
 .spacer { flex:1; }
 .banner { width:100%; padding:6px 12px; border-radius:8px; font-size:.85rem; display:flex; gap:8px; align-items:center; }
+.chip.done { background:color-mix(in srgb, var(--accent) 18%, transparent); }
+.iconbtn.busy, button.busy { opacity:.45; pointer-events:none; }
 .banner.working { background:color-mix(in srgb, var(--warn) 15%, transparent); color:var(--warn); }
 .banner.ready  { background:color-mix(in srgb, var(--accent) 14%, transparent); color:var(--accent); }
 .dot { width:8px; height:8px; border-radius:50%; background:currentColor; animation:pulse 1.6s infinite; }
@@ -150,6 +152,9 @@ footer { text-align:center; color:var(--muted); font-size:.75rem; padding:20px 0
   <header>
     <h1>{{ S.pack.name || 'iconpilot' }}</h1>
     <span class="meta">rev {{ S.rev }} · S.round {{ S.round || '—' }}</span>
+    <button class="subtle" @click="startRound()"
+            title="apply first, then start the next pass — history is kept">
+      ＋ next round</button>
     <span class="spacer"></span>
     <span class="meta">{{ S.candidates.length }} candidates</span>
     <button class="subtle" @click="openSettings" title="settings">⚙</button>
@@ -169,6 +174,9 @@ footer { text-align:center; color:var(--muted); font-size:.75rem; padding:20px 0
           <b>{{ g.icon }}</b>
           <span class="muted">{{ g.cands.length }} candidates across variants</span>
           <span class="spacer"></span>
+          <button class="subtle" :class="{ busy: S.drafting.startsWith(g.icon + '/') }"
+                  title="Recraft: seed 4 drafts for every open variant of this icon"
+                  @click="recraftIcon(g)">⚡ draft</button>
           <button class="subtle armed-x" @click="rejectAllIcon(g)" title="reject every candidate for this icon">reject all</button>
         </div>
         <div class="gmeta">
@@ -180,7 +188,7 @@ footer { text-align:center; color:var(--muted); font-size:.75rem; padding:20px 0
         <div class="vargrid">
           <div class="vargroup" v-for="vg in variantGroups(g)" :key="vg.variant">
             <div class="varhead">
-              <span class="chip">{{ vg.variant }}</span>
+              <span class="chip" :class="{ done: isLocked(g.icon, vg.variant) }">{{ vg.variant }}{{ isLocked(g.icon, vg.variant) ? ' 🔒' : '' }}</span>
               <select :value="vg.style" @change="switchStyle(g.icon, vg.variant, $event.target.value)" class="varstyle" title="style">
                 <option v-for="(st, sid) in S.styles" :key="sid" :value="sid">{{ sid }}</option>
               </select>
@@ -188,6 +196,9 @@ footer { text-align:center; color:var(--muted); font-size:.75rem; padding:20px 0
                       title="variant note" @click="openVariantNote(g, vg.variant)">💬</button>
               <button class="iconbtn" title="copy SVG path (open in Inkscape)"
                       @click="copyPath(g.icon, vg.variant, vg.cands[0]?.cand)">⧉</button>
+              <button class="iconbtn" :class="{ on: S.drafting === g.icon + '/' + vg.variant }"
+                      title="Recraft: seed 4 new drafts for this variant (~$0.20)"
+                      @click="recraftDraft(g.icon, vg.variant)">⚡</button>
             </div>
             <div class="grid">
               <div class="card" v-for="c in vg.cands" :key="c.cand">
@@ -468,7 +479,7 @@ footer { text-align:center; color:var(--muted); font-size:.75rem; padding:20px 0
 import { createApp, reactive, computed, onMounted } from '/static/vue.esm-browser.prod.js';
 
 const S = reactive({
-  pack: { icons: {} }, rev: 0, round: null, candidates: [],
+  pack: { icons: {} }, rev: 0, round: null, candidates: [], locked: {}, drafting: '',
   styles: {}, ai: { text: '', active: false }, version: '',
   decisions: {}, manual: false, manualText: '',
   msg: '', msgClass: 'muted', editing: null,
@@ -591,6 +602,40 @@ function batchReject(maxScore) {
   }
   flash('batch: rejected ' + (maxScore === 0 ? 'unrated' : 'all rated ≤ ' + maxScore), true);
 }
+function isLocked(icon, variant) { return !!S.locked[icon + '/' + variant]; }
+
+async function recraftDraft(icon, variant, n = 4) {
+  const key = icon + '/' + variant;
+  S.drafting = key;
+  try {
+    const r = await api('/api/recraft', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ icon, variant, n }) });
+    flash(`⚡ ${key}: ${r.wrote.length} seeds (gate ${r.gate_passed}/${r.wrote.length}) ~$${r.cost_usd}`, true);
+    await load();
+  } catch (e) { flash('recraft: ' + e.message, false); }
+  S.drafting = '';
+}
+
+async function recraftIcon(g) {
+  const open = variantGroups(g).filter(vg => !isLocked(g.icon, vg.variant));
+  if (!open.length) { flash('all variants locked — nothing to draft', false); return; }
+  const cost = (open.length * 0.2).toFixed(2);
+  if (!confirm(`Draft ${open.length} variant(s) of "${g.icon}" via Recraft? (~$${cost})`)) return;
+  for (const vg of open) await recraftDraft(g.icon, vg.variant);
+}
+
+async function startRound() {
+  const pending = Object.values(S.decisions).some(e => e.items?.length);
+  if (pending && !confirm('There are unapplied ratings. Start a new round anyway? ' + String.fromCharCode(10) + '(The LLM will not see them — apply first if you want them recorded.)')) return;
+  try {
+    const r = await api('/api/round/new', { method: 'POST' });
+    S.decisions = {}; editDirty = false; S.decisionEdit = ''; S.instructions = '';
+    await load();
+    flash(`round ${r.round} started — ${r.open.length} open (history kept)`, true);
+  } catch (e) { flash('round: ' + e.message, false); }
+}
+
 function rejectAllIcon(g) {
   for (const vg of variantGroups(g)) {
     S.decisions[g.icon + '/' + vg.variant] = { items: [{ cand: '*', t: '* no' }] };
@@ -862,7 +907,7 @@ async function load(manual) {
   const [p, run, styles, ai, hist] = await Promise.all([
     api('/api/pack'), api('/api/run'), api('/api/styles'), api('/api/ai-status'), api('/api/history'),
   ]);
-  S.pack = p.pack; S.rev = p.rev; S.round = run.round;
+  S.pack = p.pack; S.rev = p.rev; S.round = run.round; S.locked = run.locked || {};
   S.candidates = run.candidates.map(c => ({
     ...c,
     path: `.runs/${run.round}/${c.variant}/${c.icon}/${c.cand}.svg`,
@@ -939,6 +984,7 @@ const App = {
       variantGroups, packBriefIcon, mainColorIcon, saveMainColorIcon, rejectAllIcon,
       variantNote, openVariantNote, saveVariantNote, copyPath, togglePin, isPinned, undo,
       batchApprove, batchReject, toggleCompare,
+      isLocked, recraftDraft, recraftIcon, startRound,
     };
   },
 };
