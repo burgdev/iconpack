@@ -117,6 +117,13 @@
     "description": {
       "type": "string",
       "description": "Durable human-facing docs: what this pack is for. NOT agent feedback."
+    },
+    "feedback": {
+      "type": "array",
+      "description": "Live feedback items for the next draft; archived into .runs/<round>/feedback.json by `next`.",
+      "items": {
+        "$ref": "#/$defs/feedbackItem"
+      }
     }
   },
   "$defs": {
@@ -374,6 +381,52 @@
         "stale"
       ],
       "description": "stale = dependency changed or the icons/ file was hand-edited after approval."
+    },
+    "feedbackItem": {
+      "type": "object",
+      "description": "One feedback comment for the next draft (todo-like).",
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "scope": {
+          "type": "string",
+          "enum": [
+            "pack",
+            "icon",
+            "variant"
+          ]
+        },
+        "icon": {
+          "type": "string"
+        },
+        "variant": {
+          "type": "string"
+        },
+        "text": {
+          "type": "string",
+          "minLength": 1
+        },
+        "author": {
+          "type": "string",
+          "enum": [
+            "user",
+            "agent"
+          ]
+        },
+        "round": {
+          "type": "string",
+          "description": "Round active when written."
+        }
+      },
+      "required": [
+        "id",
+        "scope",
+        "text",
+        "author",
+        "round"
+      ],
+      "additionalProperties": false
     }
   }
 }

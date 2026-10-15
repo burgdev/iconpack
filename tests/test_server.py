@@ -478,3 +478,56 @@ def test_icon_description_editable(server: _Server, srvpack: Path) -> None:
     assert code == 200
     pack = json.loads((srvpack / "pack.json").read_text())
     assert pack["icons"]["hut"]["description"] == "An alpine hut"
+
+
+# --- per-round feedback -------------------------------------------------------
+
+
+def test_feedback_add_resolve_promote(server: _Server, srvpack: Path) -> None:
+    code, data = server.req(
+        "POST", "/api/feedback", {"scope": "icon", "icon": "hut", "text": "thinner roof"}
+    )
+    assert code == 200 and data["item"]["author"] == "user"
+    fid = data["item"]["id"]
+    pack = json.loads((srvpack / "pack.json").read_text())
+    assert pack["feedback"][0]["text"] == "thinner roof"
+
+    # agent-authored
+    code, data = server.req(
+        "POST",
+        "/api/feedback",
+        {"scope": "pack", "text": "a2 uses simplified door", "author": "agent"},
+    )
+    assert code == 200 and data["item"]["author"] == "agent"
+
+    # promote → standing note
+    code, data = server.req("POST", "/api/feedback/promote", {"id": fid, "to": "note"})
+    assert code == 200
+    pack = json.loads((srvpack / "pack.json").read_text())
+    assert "thinner roof" in pack["note"]
+    assert all(i["id"] != fid for i in pack["feedback"])
+
+    # resolve the rest
+    code, data = server.req("POST", "/api/feedback/resolve", {"id": data["count"] and "zz"})
+    assert code == 400  # unknown id
+
+
+def test_round_new_archives_feedback(server: _Server, srvpack: Path) -> None:
+    server.req("POST", "/api/feedback", {"scope": "pack", "text": "no chimneys"})
+    code, data = server.req("POST", "/api/round/new", {})
+    assert code == 200
+    assert data["feedback_carried"] == 1
+    fb = json.loads((srvpack / ".runs" / data["round"] / "feedback.json").read_text())
+    assert fb[0]["text"] == "no chimneys"
+    pack = json.loads((srvpack / "pack.json").read_text())
+    assert pack["feedback"] == []  # cleared
+
+
+def test_history_includes_feedback(server: _Server, srvpack: Path) -> None:
+    server.req("POST", "/api/feedback", {"scope": "pack", "text": "x"})
+    _code, data = server.req("POST", "/api/round/new", {})
+    assert data["feedback_carried"] == 1
+    _code, body = server.get("/api/history")
+    rounds = json.loads(body)["rounds"]
+    r_new = next(r for r in rounds if r["round"] == data["round"])
+    assert r_new["feedback"][0]["text"] == "x"

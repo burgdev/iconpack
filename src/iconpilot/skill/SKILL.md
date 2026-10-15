@@ -162,6 +162,25 @@ and style numbers always win over DESIGN.md prose).
 
 Round layout: `.runs/<round>/<variant>/<icon>/<cand>.svg` (r001, r002, …).
 
+## Feedback — the per-round todo list
+
+Feedback items are per-round comments (yours AND the user's) at three scopes:
+pack, icon, variant. They guide exactly ONE draft, then die with their round
+(history keeps them in `.runs/<round>/feedback.json`).
+
+    iconpilot feedback <pack>                        # list live items
+    iconpilot feedback <pack> --add "door too small" --icon hut --variant mono
+    iconpilot feedback <pack> --resolve <id>         # addressed / done
+
+Rules:
+- After drafting, ADD your own comments (author=agent by default): what you
+  tried, what you could not achieve, what you'd suggest. The user sees them
+  on the review page with an `agent` chip.
+- If feedback is generally valid for the pack (not a one-off correction),
+  PROMOTE it — `--promote <id>` moves the text into the standing note so it
+  survives rounds. Promote liberally: standing note beats repeating yourself.
+- Never re-state promoted feedback as a new item.
+
 ## Round flow — what is open
 
 `iconpilot next <pack>` is the ONLY source of truth for open work. It creates

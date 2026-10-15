@@ -8,6 +8,7 @@ what the gate will enforce. Markdown for humans/agents, --json for tooling.
 
 from __future__ import annotations
 
+import json
 from pathlib import Path
 
 from iconpilot.styles import Style
@@ -71,6 +72,37 @@ def build_context(
     # agent feedback (what to change) — carried every round until cleared
     if pack.get("note"):
         ctx["pack_note"] = pack["note"]
+
+    # per-round feedback items: live ones matching this scope, plus the
+    # archived instructions the current round was drafted against
+    def _matches(item: dict) -> bool:
+        if item["scope"] == "pack":
+            return True
+        if item["scope"] == "icon":
+            return item.get("icon") == icon_id
+        return (
+            item["scope"] == "variant"
+            and item.get("icon") == icon_id
+            and item.get("variant") == variant_id
+        )
+
+    fb: list[dict] = [i for i in pack.get("feedback", []) if _matches(i)]
+    runs_dir = pack_dir / ".runs"
+    if runs_dir.is_dir():
+        runs = sorted(p.name for p in runs_dir.glob("r*") if p.is_dir())
+        if runs:
+            fb_file = runs_dir / runs[-1] / "feedback.json"
+            if fb_file.is_file():
+                try:
+                    for item in json.loads(fb_file.read_text()):
+                        if item.get("round") != "legacy" or item not in fb:
+                            fb.append(item)
+                except (ValueError, OSError):
+                    pass
+    if fb:
+        ctx["feedback"] = [
+            {k: i.get(k) for k in ("scope", "icon", "variant", "text", "author")} for i in fb
+        ]
     if icon.get("note"):
         ctx["icon_note"] = icon["note"]
     if variant.get("note"):
@@ -163,6 +195,12 @@ def render_markdown(ctx: dict) -> str:
         lines += [f"**Icon note (from the user):** {ctx['icon_note']}", ""]
     if "variant_note" in ctx:
         lines += [f"**Variant note:** {ctx['variant_note']}", ""]
+    if ctx.get("feedback"):
+        lines += [
+            "**Feedback for this draft (resolve by redrawing, then it dies with the round):**"
+        ]
+        lines += [f"- [{i['author']}] {i['text']}" for i in ctx["feedback"]]
+        lines += [""]
     if "palette" in ctx:
         lines += [f"**Palette (only these colors):** {', '.join(ctx['palette'])}", ""]
     if "style_guidance" in ctx:

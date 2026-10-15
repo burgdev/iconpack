@@ -25,6 +25,8 @@ header h1 { font-size:1rem; margin:0; font-weight:650; }
 header .meta { color:var(--muted); font-size:.8rem; }
 .spacer { flex:1; }
 .banner { width:100%; padding:6px 12px; border-radius:8px; font-size:.85rem; display:flex; gap:8px; align-items:center; }
+.chip.agent { background:color-mix(in srgb, var(--warn) 18%, transparent); }
+.chip.user { background:color-mix(in srgb, var(--line) 40%, transparent); }
 .chip.done { background:color-mix(in srgb, var(--accent) 18%, transparent); }
 .iconbtn.busy, button.busy { opacity:.45; pointer-events:none; }
 .banner.working { background:color-mix(in srgb, var(--warn) 15%, transparent); color:var(--warn); }
@@ -152,6 +154,8 @@ footer { text-align:center; color:var(--muted); font-size:.75rem; padding:20px 0
   <header>
     <h1>{{ S.pack.name || 'iconpilot' }}</h1>
     <span class="meta">rev {{ S.rev }} · S.round {{ S.round || '—' }}</span>
+    <button class="subtle" :class="{ on: fbFor('pack').length }"
+            title="feedback for the whole draft" @click="openFb('pack')">💬 {{ fbFor('pack').length || '' }}</button>
     <button class="subtle" @click="startRound()"
             title="apply first, then start the next pass — history is kept">
       ＋ next round</button>
@@ -181,6 +185,8 @@ footer { text-align:center; color:var(--muted); font-size:.75rem; padding:20px 0
         </div>
         <div class="gmeta">
           <span class="muted brief">{{ packBriefIcon(g) }}</span>
+          <button class="iconbtn" :class="{ on: hasNote(g) }"
+                  title="feedback for this glyph" @click="openFb('icon', g.icon)">💬</button>
           <input type="color" class="colorchip" :value="mainColorIcon(g) || '#89919a'"
                  title="main color"
                  @input="saveMainColorIcon(g, $event.target.value)">
@@ -192,8 +198,8 @@ footer { text-align:center; color:var(--muted); font-size:.75rem; padding:20px 0
               <select :value="vg.style" @change="switchStyle(g.icon, vg.variant, $event.target.value)" class="varstyle" title="style">
                 <option v-for="(st, sid) in S.styles" :key="sid" :value="sid">{{ sid }}</option>
               </select>
-              <button class="iconbtn" :class="{ on: variantNote(g, vg.variant) }"
-                      title="variant note" @click="openVariantNote(g, vg.variant)">💬</button>
+              <button class="iconbtn" :class="{ on: fbFor('variant', g.icon, vg.variant).length }"
+                      title="variant note" @click="openFb('variant', g.icon, vg.variant)">💬</button>
               <button class="iconbtn" title="copy SVG path (open in Inkscape)"
                       @click="copyPath(g.icon, vg.variant, vg.cands[0]?.cand)">⧉</button>
               <button class="iconbtn" :class="{ on: S.drafting === g.icon + '/' + vg.variant }"
@@ -267,6 +273,9 @@ footer { text-align:center; color:var(--muted); font-size:.75rem; padding:20px 0
             <span class="muted">{{ h.decided ? 'decided' : h.candidates + ' drafted' }}</span>
             <span v-if="h.cost_usd" class="chip" title="recraft seeds in this pass">💲 {{ h.cost_usd }}</span>
             <span v-if="h.instructions" class="chip" title="apply-time instructions">💬 {{ h.instructions.slice(0, 40) }}{{ h.instructions.length > 40 ? '…' : '' }}</span>
+            <span v-if="h.feedback && h.feedback.length" class="chip"
+                  :title="h.feedback.map(f => '[' + f.author + '] ' + (f.icon || '') + (f.variant ? '#' + f.variant : '') + ': ' + f.text).join(String.fromCharCode(10))">
+              💬 {{ h.feedback.length }} feedback</span>
           </div>
           <div v-if="h.decided" class="muted" style="font-size:.8rem">
             <template v-for="(dec, key) in h.icons" :key="key">
@@ -361,19 +370,25 @@ footer { text-align:center; color:var(--muted); font-size:.75rem; padding:20px 0
     </div>
   </div>
 
-  <div v-if="S.vNoteDlg" class="overlay" @click.self="S.vNoteDlg = null">
+  <div v-if="S.fbDlg" class="overlay" @click.self="S.fbDlg = null">
     <div class="dialog">
-      <h3><span>💬 feedback: {{ S.vNoteDlg.icon }} / {{ S.vNoteDlg.variant }}</span>
-          <button class="subtle" @click="S.vNoteDlg = null">✕</button></h3>
-      <p class="muted" style="margin:0 0 8px">Note for this specific variant — overrides the icon note.</p>
-      <textarea v-model="S.vNoteDlg.text"></textarea>
+      <h3><span>💬 {{ fbTitle() }}</span>
+          <button class="subtle" @click="S.fbDlg = null">✕</button></h3>
+      <p class="muted" style="margin:0 0 8px">Per-round feedback — guides the next draft, then dies with its round (history keeps it). Generally valid? The agent promotes it into the standing note via CLI.</p>
+      <div v-if="fbItems().length" style="margin-bottom:10px">
+        <div v-for="i in fbItems()" :key="i.id" class="row" style="align-items:flex-start; gap:6px; margin:4px 0">
+          <span class="chip" :class="i.author">{{ i.author }}</span>
+          <span style="flex:1">{{ i.text }}</span>
+          <button class="subtle armed-x" title="resolve (done / addressed)" @click="resolveFeedback(i)">✕</button>
+        </div>
+      </div>
+      <textarea v-model="S.fbDlg.text" placeholder="what to change in the next draft — e.g. 'thinner roof, door on the right'"></textarea>
       <div class="row" style="margin-top:8px">
-        <button class="primary" @click="saveVariantNote">Save</button>
-        <button class="subtle" v-if="S.vNoteDlg.text" @click="S.vNoteDlg.text = ''; saveVariantNote()">Clear</button>
+        <button class="primary" @click="addFeedback">Add</button>
+        <button class="subtle" @click="S.fbDlg = null">close</button>
       </div>
     </div>
   </div>
-
 
   <div v-if="S.compare && S.compare.length === 2" class="overlay" @click.self="S.compare = null">
     <div class="dialog" style="max-width:700px">
@@ -399,19 +414,6 @@ footer { text-align:center; color:var(--muted); font-size:.75rem; padding:20px 0
             <button :class="{ 'armed-x': item(c)?.t?.startsWith(c.cand + ' no') }" @click="drop(c)">✕</button>
           </div>
         </div>
-      </div>
-    </div>
-  </div>
-
-  <div v-if="S.noteDlg" class="overlay" @click.self="S.noteDlg = null">
-    <div class="dialog">
-      <h3><span>💬 feedback: {{ S.noteDlg.g.icon }}</span>
-          <button class="subtle" @click="S.noteDlg = null">✕</button></h3>
-      <p class="muted" style="margin:0 0 8px">FEEDBACK to the agent — carried into every future draft until you clear it. Durable docs belong in the icon description (edit via ⓘ / brief dialog), not here.</p>
-      <textarea v-model="S.noteDlg.text" placeholder="thinner roof, door on the right, less mass at the base…"></textarea>
-      <div class="row" style="margin-top:8px">
-        <button class="primary" @click="saveNote">Save note</button>
-        <button class="subtle" v-if="S.noteDlg.text" @click="S.noteDlg.text = ''; saveNote()">Clear</button>
       </div>
     </div>
   </div>
@@ -492,9 +494,9 @@ const S = reactive({
   styles: {}, ai: { text: '', active: false }, version: '',
   decisions: {}, manual: false, manualText: '',
   msg: '', msgClass: 'muted', editing: null,
-  dlg: null, sheet: null, noteDlg: null, settingsDlg: false,
+  dlg: null, sheet: null, fbDlg: null, settingsDlg: false,
   decisionEdit: '', showGen: false, editingBrief: null,
-  flash: '', flashOk: true, applying: false, instructions: '', vNoteDlg: null,
+  flash: '', flashOk: true, applying: false, instructions: '',
   kbFocus: 0, kbVariant: 0, kbCand: 0, compare: null,
   history: [], showHistory: false,
   set: { version: '', rules: '', strokeWidth: 2, linecap: 'round', linejoin: 'round', padding: 2, precision: 0.5, palette: null, errors: '' },
@@ -567,20 +569,31 @@ async function togglePin(icon, variant) {
 function isPinned(icon, variant) {
   return !!S.pack.icons?.[icon]?.variants?.[variant]?.pinned;
 }
-function variantNote(g, vid) {
-  return S.pack.icons?.[g.icon]?.variants?.[vid]?.note || '';
+function fbFor(scope, icon, vid) {
+  return (S.pack.feedback || []).filter(i =>
+    i.scope === scope && (scope === 'pack' || i.icon === icon) &&
+    (scope !== 'variant' || i.variant === vid));
 }
-function openVariantNote(g, vid) {
-  S.vNoteDlg = { icon: g.icon, variant: vid, text: variantNote(g, vid) };
+function fbTitle() {
+  const d = S.fbDlg || {};
+  return 'feedback: ' + (d.scope === 'pack' ? 'whole draft' : d.icon + (d.variant ? ' / ' + d.variant : ''));
 }
-async function saveVariantNote() {
-  const d = S.vNoteDlg;
+function fbItems() { const d = S.fbDlg || {}; return d.scope ? fbFor(d.scope, d.icon, d.variant) : []; }
+function openFb(scope, icon, vid) { S.fbDlg = { scope, icon, variant: vid, text: '' }; }
+async function addFeedback() {
+  const d = S.fbDlg; if (!d || !d.text || !d.text.trim()) return;
   try {
-    const r = await api('/api/variant', { method: 'PUT', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ icon: d.icon, variant: d.variant, note: d.text.trim() }) });
-    S.msg = `variant note saved (rev ${r.rev})`; S.msgClass = 'ok';
-    S.vNoteDlg = null; await load();
-  } catch (e) { S.msg = e.d?.errors ? e.d.errors.join(' ') : e.message; S.msgClass = 'err'; }
+    await api('/api/feedback', { method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ scope: d.scope, icon: d.icon, variant: d.variant, text: d.text.trim(), author: 'user' }) });
+    d.text = ''; await load();
+  } catch (e) { flash('feedback: ' + e.message, false); }
+}
+async function resolveFeedback(i) {
+  try {
+    await api('/api/feedback/resolve', { method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ id: i.id }) });
+    await load();
+  } catch (e) { flash('resolve: ' + e.message, false); }
 }
 function batchApprove(minScore) {
   // approve all candidates rated >= minScore
@@ -746,17 +759,7 @@ async function saveMainColor(g, color) {
   } catch (e) { S.msg = e.message; S.msgClass = 'err'; }
 }
 function hasNote(g) {
-  return !!S.pack.icons?.[g.icon]?.note;
-}
-function openNote(g) { S.noteDlg = { g, text: S.pack.icons?.[g.icon]?.note || '' }; }
-async function saveNote() {
-  const g = S.noteDlg.g;
-  try {
-    const r = await api('/api/icon', { method: 'PUT', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ icon: g.icon, note: S.noteDlg.text.trim() }) });
-    S.msg = `note saved (rev ${r.rev})`; S.msgClass = 'ok';
-    S.noteDlg = null; await load();
-  } catch (e) { S.msg = e.d?.errors ? e.d.errors.join(' ') : e.message; S.msgClass = 'err'; }
+  return fbFor('icon', g.icon).length > 0 || (S.pack.feedback || []).some(i => i.scope === 'variant' && i.icon === g.icon);
 }
 async function switchStyle(icon, variant, sid) {
   try {
@@ -955,8 +958,8 @@ const App = {
 
     // keyboard shortcuts
     const onKey = (e) => {
-      if (S.dlg || S.sheet || S.noteDlg || S.vNoteDlg || S.settingsDlg || S.compare) {
-        if (e.key === 'Escape') { S.dlg = null; S.sheet = null; S.noteDlg = null; S.vNoteDlg = null; S.settingsDlg = false; S.compare = null; }
+      if (S.dlg || S.sheet || S.fbDlg || S.settingsDlg || S.compare) {
+        if (e.key === 'Escape') { S.dlg = null; S.sheet = null; S.fbDlg = null; S.settingsDlg = false; S.compare = null; }
         return;
       }
       if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA' || e.target.tagName === 'SELECT') return;
@@ -1000,12 +1003,13 @@ const App = {
       S, render, item, rating, drop, approve, keep, rate,
       styleLabel, open, openIcon, openSheet, switchStyle, startManual,
       apply, copy, saveIcon, edited, load, chosenCand, variantStatus,
-      mainColor, packBrief, saveBrief, saveMainColor, hasNote, openNote, saveNote,
+      mainColor, packBrief, saveBrief, saveMainColor, hasNote,
       openSettings, saveSettings, markDirty,
       variantGroups, packBriefIcon, mainColorIcon, saveMainColorIcon, rejectAllIcon,
       variantNote, openVariantNote, saveVariantNote, copyPath, togglePin, isPinned, undo,
       batchApprove, batchReject, toggleCompare,
       isLocked, recraftDraft, recraftIcon, startRound, saveIconDesc, totalCost,
+      fbFor, fbTitle, fbItems, openFb, addFeedback, resolveFeedback,
     };
   },
 };

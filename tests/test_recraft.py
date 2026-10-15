@@ -375,3 +375,80 @@ def test_draft_without_style_uses_fallback_and_its_price(
     assert "recraftv2_vector" in r.output
     rj = json.loads((d / ".runs" / "r001" / "round.json").read_text())
     assert rj["estimated_cost_usd"] == 0.044
+
+
+# --- feedback CLI + context ----------------------------------------------------
+
+
+def test_feedback_cli_lifecycle(tmp_path: Path) -> None:
+    d = _pack(tmp_path)
+    r = runner.invoke(app, ["feedback", str(d), "--add", "thinner roof", "--icon", "sun"])
+    assert r.exit_code == 0 and "added" in r.output
+    r = runner.invoke(app, ["feedback", str(d)])
+    assert "thinner roof" in r.output
+    fid = r.output.split("[")[1].split("]")[0]
+    r = runner.invoke(app, ["feedback", str(d), "--promote", fid])
+    assert r.exit_code == 0 and "standing note" in r.output
+    pack = json.loads((d / "pack.json").read_text())
+    assert "thinner roof" in pack["note"] and pack["feedback"] == []
+
+
+def test_context_includes_feedback_scopes(tmp_path: Path) -> None:
+    d = _pack(tmp_path)
+    pack = json.loads((d / "pack.json").read_text())
+    pack["feedback"] = [
+        {"id": "a", "scope": "pack", "text": "pack fb", "author": "user", "round": "r001"},
+        {
+            "id": "b",
+            "scope": "icon",
+            "icon": "sun",
+            "text": "icon fb",
+            "author": "agent",
+            "round": "r001",
+        },
+        {
+            "id": "c",
+            "scope": "variant",
+            "icon": "sun",
+            "variant": "flat",
+            "text": "var fb",
+            "author": "user",
+            "round": "r001",
+        },
+        {
+            "id": "d",
+            "scope": "icon",
+            "icon": "other",
+            "text": "not mine",
+            "author": "user",
+            "round": "r001",
+        },
+    ]
+    (d / "pack.json").write_text(json.dumps(pack))
+    from iconpilot.context import build_context, render_markdown
+    from iconpilot.pack import load_pack
+
+    pack_data, styles = load_pack(d / "pack.json")
+    ctx = build_context(d, pack_data, styles, "sun", "flat")
+    texts = [i["text"] for i in ctx["feedback"]]
+    assert "pack fb" in texts and "icon fb" in texts and "var fb" in texts
+    assert "not mine" not in texts
+    md = render_markdown(ctx)
+    assert "[user] pack fb" in md and "[agent] icon fb" in md
+
+
+def test_next_archives_and_migrates_legacy_notes(tmp_path: Path) -> None:
+    d = _pack(tmp_path)
+    pack = json.loads((d / "pack.json").read_text())
+    pack["icons"]["sun"]["note"] = "legacy icon note"
+    pack["feedback"] = [
+        {"id": "z", "scope": "pack", "text": "live item", "author": "user", "round": "r001"}
+    ]
+    (d / "pack.json").write_text(json.dumps(pack))
+    r = runner.invoke(app, ["next", str(d)])
+    assert r.exit_code == 0 and "feedback carried" in r.output
+    fb = json.loads((d / ".runs" / "r001" / "feedback.json").read_text())
+    texts = [i["text"] for i in fb]
+    assert "live item" in texts and "legacy icon note" in texts
+    pack = json.loads((d / "pack.json").read_text())
+    assert pack["feedback"] == [] and "note" not in pack["icons"]["sun"]

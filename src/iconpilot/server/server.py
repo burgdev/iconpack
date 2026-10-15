@@ -22,7 +22,13 @@ from urllib.parse import parse_qs, urlparse
 
 from iconpilot import __version__
 from iconpilot.decide import apply_decisions, parse_decision_text
-from iconpilot.pack import load_pack, next_run_id, revalidate, write_pack_atomic
+from iconpilot.pack import (
+    advance_feedback,
+    load_pack,
+    next_run_id,
+    revalidate,
+    write_pack_atomic,
+)
 from iconpilot.render.contact import contact_sheet
 from iconpilot.render.render import render_png_text
 
@@ -259,6 +265,21 @@ class ReviewHandler(BaseHTTPRequestHandler):
                         "instructions": None,
                         "cost_usd": 0.0,
                     }
+                    fb_file = runs_dir / run / "feedback.json"
+                    if fb_file.is_file():
+                        try:
+                            info["feedback"] = [
+                                {
+                                    "author": i.get("author"),
+                                    "scope": i.get("scope"),
+                                    "icon": i.get("icon"),
+                                    "variant": i.get("variant"),
+                                    "text": str(i.get("text", ""))[:80],
+                                }
+                                for i in json.loads(fb_file.read_text())
+                            ]
+                        except (ValueError, OSError):
+                            pass
                     rj = runs_dir / run / "round.json"
                     if rj.is_file():
                         try:
@@ -364,14 +385,18 @@ class ReviewHandler(BaseHTTPRequestHandler):
         self._json(404, {"error": "no such route"})
 
     def _start_round(self) -> dict:
-        """Create the next run dir (history untouched); returns round summary."""
+        """Create the next run dir; archive live feedback into it (history)."""
         import json as _json
 
         runs_dir = self.pack_dir / ".runs"
         run = next_run_id(runs_dir)
         (runs_dir / run).mkdir(parents=True, exist_ok=True)
+        carried = 0
         try:
-            pack, _ = load_pack(self.pack_dir / "pack.json")
+            with pack_lock(self.pack_dir):
+                pack, _ = load_pack(self.pack_dir / "pack.json")
+                carried = len(advance_feedback(pack, runs_dir / run))
+                write_pack_atomic(self.pack_dir, pack)
             open_ = [
                 f"{iid}#{vid}"
                 for iid, icon in pack["icons"].items()
@@ -381,9 +406,9 @@ class ReviewHandler(BaseHTTPRequestHandler):
         except Exception:
             open_ = []
         (runs_dir / run / "round.json").write_text(
-            _json.dumps({"round": run, "open": open_}) + "\n"
+            _json.dumps({"round": run, "open": open_, "feedback_carried": carried}) + "\n"
         )
-        return {"round": run, "open": open_}
+        return {"round": run, "open": open_, "feedback_carried": carried}
 
     def _recraft_draft(self, data: dict) -> dict:
         """Seed Recraft candidates for one icon (+optional variant) into the latest run."""
@@ -482,8 +507,102 @@ class ReviewHandler(BaseHTTPRequestHandler):
             "model": style_id and rc.DEFAULT_MODEL or rc.FALLBACK_MODEL,
         }
 
+    def _feedback_write(self, op: str, data: dict) -> dict:
+        """add / resolve / promote feedback items (lock + atomic)."""
+        import uuid
+
+        with pack_lock(self.pack_dir):
+            pack, _ = load_pack(self.pack_dir / "pack.json")
+            items = pack.setdefault("feedback", [])
+            runs_dir = self.pack_dir / ".runs"
+            runs = sorted(p.name for p in runs_dir.glob("r*")) if runs_dir.is_dir() else []
+            cur_round = runs[-1] if runs else "pre"
+
+            if op == "add":
+                text = str(data.get("text") or "").strip()
+                if not text:
+                    raise ValueError("text required")
+                scope = data.get("scope") or "pack"
+                if scope not in ("pack", "icon", "variant"):
+                    raise ValueError("scope must be pack|icon|variant")
+                item = {
+                    "id": uuid.uuid4().hex[:8],
+                    "scope": scope,
+                    "text": text[:500],
+                    "author": data.get("author") or "user",
+                    "round": cur_round,
+                }
+                if scope in ("icon", "variant"):
+                    icon_id = data.get("icon")
+                    if icon_id not in pack.get("icons", {}):
+                        raise ValueError(f"unknown icon '{icon_id}'")
+                    item["icon"] = icon_id
+                if scope == "variant":
+                    vid = data.get("variant")
+                    if vid not in pack["icons"][icon_id].get("variants", {}):
+                        raise ValueError(f"unknown variant '{vid}'")
+                    item["variant"] = vid
+                items.append(item)
+                write_pack_atomic(self.pack_dir, pack)
+                return {"item": item, "count": len(items)}
+
+            fid = data.get("id") or ""
+            item = next((i for i in items if i["id"] == fid), None)
+            if item is None:
+                raise ValueError(f"no feedback item '{fid}'")
+
+            if op == "resolve":
+                items.remove(item)
+                write_pack_atomic(self.pack_dir, pack)
+                return {"resolved": fid, "count": len(items)}
+
+            # promote: fold into standing pack surfaces, drop from live list
+            target = data.get("to") or "note"
+            label = (
+                f"{item.get('icon', '')}#{item.get('variant', '')}: "
+                if item["scope"] != "pack"
+                else ""
+            )
+            if target == "rules":
+                pack.setdefault("rules", []).append(f"{label}{item['text']}".strip())
+            else:
+                prefix = label.strip()
+                standing = str(pack.get("note") or "")
+                sep = " · " if standing else ""
+                pack["note"] = f"{standing}{sep}{prefix}{item['text']}".strip()
+            items.remove(item)
+            write_pack_atomic(self.pack_dir, pack)
+            return {"promoted": fid, "to": target, "count": len(items)}
+
     def do_POST(self) -> None:
         url = urlparse(self.path)
+        if url.path == "/api/feedback":
+            data = self._body()
+            try:
+                self._json(200, self._feedback_write("add", data))
+            except ValueError as exc:
+                self._json(400, {"error": str(exc)})
+            except Exception as exc:
+                self._json(500, {"error": str(exc)})
+            return
+        if url.path == "/api/feedback/resolve":
+            data = self._body()
+            try:
+                self._json(200, self._feedback_write("resolve", data))
+            except ValueError as exc:
+                self._json(400, {"error": str(exc)})
+            except Exception as exc:
+                self._json(500, {"error": str(exc)})
+            return
+        if url.path == "/api/feedback/promote":
+            data = self._body()
+            try:
+                self._json(200, self._feedback_write("promote", data))
+            except ValueError as exc:
+                self._json(400, {"error": str(exc)})
+            except Exception as exc:
+                self._json(500, {"error": str(exc)})
+            return
         if url.path == "/api/round/new":
             try:
                 self._json(200, self._start_round())

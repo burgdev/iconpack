@@ -30,6 +30,51 @@ def schema_errors(pack: dict) -> list[str]:
     ]
 
 
+def advance_feedback(pack: dict, new_round_dir: Path) -> list[dict]:
+    """Archive live feedback into the new round's dir; clear the live list.
+
+    Called by `next` / `_start_round` when a new round begins. The archived
+    `.runs/<round>/feedback.json` is the immutable history of what that round
+    was drafted against. Legacy icon/variant `note` strings migrate into
+    feedback items once, then are removed from pack.json.
+    """
+    import uuid
+
+    feedback = list(pack.get("feedback", []))
+    # one-time migration: legacy icon/variant notes become feedback items
+    for iid, icon in pack.get("icons", {}).items():
+        legacy = icon.pop("note", None)
+        if legacy:
+            feedback.append(
+                {
+                    "id": uuid.uuid4().hex[:8],
+                    "scope": "icon",
+                    "icon": iid,
+                    "text": legacy,
+                    "author": "user",
+                    "round": "legacy",
+                }
+            )
+        for vid, v in icon.get("variants", {}).items():
+            vlegacy = v.pop("note", None)
+            if vlegacy:
+                feedback.append(
+                    {
+                        "id": uuid.uuid4().hex[:8],
+                        "scope": "variant",
+                        "icon": iid,
+                        "variant": vid,
+                        "text": vlegacy,
+                        "author": "user",
+                        "round": "legacy",
+                    }
+                )
+    if feedback:
+        (new_round_dir / "feedback.json").write_text(json.dumps(feedback, indent=2))
+    pack["feedback"] = []
+    return feedback
+
+
 def next_run_id(runs_dir: Path) -> str:
     """Gap-safe monotonic run id: max existing number + 1.
 

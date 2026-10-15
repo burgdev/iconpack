@@ -20,7 +20,14 @@ from iconpilot.export.export import (
     export_svg,
 )
 from iconpilot.gate.run import run_gate
-from iconpilot.pack import PackError, load_pack, next_run_id, revalidate, write_pack_atomic
+from iconpilot.pack import (
+    PackError,
+    advance_feedback,
+    load_pack,
+    next_run_id,
+    revalidate,
+    write_pack_atomic,
+)
 from iconpilot.packs import summarize
 from iconpilot.render.contact import contact_sheet
 from iconpilot.render.render import hamming, hash_file
@@ -242,6 +249,9 @@ def next_round(pack: str) -> None:
 
     run = next_run_id(runs_dir)
     (runs_dir / run).mkdir(parents=True, exist_ok=True)
+    with pack_lock(pack_dir):
+        carried = advance_feedback(pack_data, runs_dir / run)
+        write_pack_atomic(pack_dir, pack_data)
     open_ = open_variants(pack_data)
     (runs_dir / run / "round.json").write_text(
         json.dumps(
@@ -263,6 +273,15 @@ def next_round(pack: str) -> None:
     typer.secho(
         f"── round {run} started (history: {len(runs)} round(s) kept)", fg=typer.colors.GREEN
     )
+    if carried:
+        typer.secho(f"  feedback carried into {run}: {len(carried)} item(s)", fg=typer.colors.CYAN)
+        for i in carried:
+            where = (
+                f"{i.get('icon', '')}#{i.get('variant', '')}"
+                if i.get("scope") != "pack"
+                else "pack"
+            )
+            typer.echo(f"    [{i['author']}] {where}: {i['text'][:70]}")
     typer.secho(f"OPEN WORK ({len(open_)}):", fg=typer.colors.GREEN)
     for iid, vid, style in open_:
         typer.echo(f"  {iid}#{vid} ({style})")
@@ -272,6 +291,98 @@ def next_round(pack: str) -> None:
         "locked variants are excluded; draft exactly what is listed above",
         fg=typer.colors.CYAN,
     )
+
+
+@app.command()
+def feedback(
+    pack: str,
+    add: str = typer.Option(None, "--add", help="Feedback text to add."),
+    icon: str = typer.Option(None, "--icon", help="Scope: icon id."),
+    variant: str = typer.Option(None, "--variant", help="Scope: variant id (needs --icon)."),
+    author: str = typer.Option("agent", help="user or agent."),
+    resolve: str = typer.Option(None, "--resolve", help="Resolve (remove) item by id."),
+    promote: str = typer.Option(None, "--promote", help="Promote item by id into the pack."),
+    to: str = typer.Option("note", "--to", help="promote target: note (standing) or rules."),
+) -> None:
+    """Per-round feedback: add / resolve / promote / list (default: list).
+
+    Feedback guides exactly the next draft, then dies with its round (history
+    keeps it). If an item is generally relevant, PROMOTE it — the text moves
+    into the pack's standing note (or rules) and survives rounds.
+    """
+    import uuid
+
+    try:
+        pack_data, _styles = _load_pack_arg(pack)
+    except PackError as exc:
+        typer.secho(str(exc), fg=typer.colors.RED, err=True)
+        raise typer.Exit(code=2) from exc
+    pack_dir = resolve_pack_dir(pack)
+
+    with pack_lock(pack_dir):
+        pack_data, _styles = _load_pack_arg(pack)
+        items = pack_data.setdefault("feedback", [])
+
+        if add:
+            scope = "variant" if variant else "icon" if icon else "pack"
+            item = {
+                "id": uuid.uuid4().hex[:8],
+                "scope": scope,
+                "text": add.strip()[:500],
+                "author": author if author in ("user", "agent") else "agent",
+                "round": "cli",
+            }
+            if icon:
+                if icon not in pack_data["icons"]:
+                    typer.secho(f"unknown icon '{icon}'", fg=typer.colors.RED, err=True)
+                    raise typer.Exit(code=2)
+                item["icon"] = icon
+            if variant:
+                if not icon or variant not in pack_data["icons"][icon].get("variants", {}):
+                    typer.secho(f"unknown variant '{variant}'", fg=typer.colors.RED, err=True)
+                    raise typer.Exit(code=2)
+                item["variant"] = variant
+            items.append(item)
+            write_pack_atomic(pack_dir, pack_data)
+            typer.secho(f"added [{item['id']}] {scope}: {item['text'][:70]}", fg=typer.colors.GREEN)
+        elif resolve or promote:
+            fid = resolve or promote
+            item = next((i for i in items if i["id"] == fid), None)
+            if item is None:
+                typer.secho(f"no feedback item '{fid}'", fg=typer.colors.RED, err=True)
+                raise typer.Exit(code=2)
+            if resolve:
+                items.remove(item)
+                typer.secho(f"resolved {fid}", fg=typer.colors.GREEN)
+            else:
+                label = (
+                    f"{item.get('icon', '')}#{item.get('variant', '')}: "
+                    if item.get("scope") != "pack"
+                    else ""
+                )
+                if to == "rules":
+                    pack_data.setdefault("rules", []).append(f"{label}{item['text']}".strip())
+                else:
+                    standing = str(pack_data.get("note") or "")
+                    sep = " · " if standing else ""
+                    pack_data["note"] = f"{standing}{sep}{label}{item['text']}".strip()
+                items.remove(item)
+                typer.secho(
+                    f"promoted {fid} → {'rules' if to == 'rules' else 'standing note'}",
+                    fg=typer.colors.GREEN,
+                )
+            write_pack_atomic(pack_dir, pack_data)
+
+    if not add and not resolve and not promote:
+        if not items:
+            typer.echo("no live feedback — the next draft starts clean")
+        for i in items:
+            where = (
+                f"{i.get('icon', '')}#{i.get('variant', '')}"
+                if i.get("scope") != "pack"
+                else "pack"
+            )
+            typer.echo(f"  [{i['id']}] ({i['author']}, {where}) {i['text'][:80]}")
 
 
 @app.command(name="recraft-style")
