@@ -692,6 +692,24 @@ def draft(
     )
     n_cfg = int(recraft_cfg.get("n", n))
 
+    # Recraft rejects SVG refs — render to PNG
+    _ref_urls = None
+    if refs:
+        import base64 as _b64
+        import io as _io
+
+        from iconpilot.render.render import render_png_text
+
+        ref_pngs = []
+        for svg_text in refs:
+            try:
+                img = render_png_text(svg_text, 256)
+                buf = _io.BytesIO()
+                img.save(buf, "PNG")
+                ref_pngs.append("data:image/png;base64," + _b64.b64encode(buf.getvalue()).decode())
+            except (ValueError, OSError):  # skip unrenderable
+                pass
+        _ref_urls = ref_pngs or None
     try:
         if sheet:
             grid = max(2, min(int(sheet), 4))
@@ -701,7 +719,7 @@ def draft(
                 n=1,
                 style_id=style_id,
                 model=model,
-                reference_urls=[rc._svg_data_url(s) for s in refs] or None,
+                reference_urls=_ref_urls,
             )
             raw_svgs = rc.split_sheet(sheet_svgs[0], grid, target=24.0)
             n_cfg = len(raw_svgs)
@@ -712,7 +730,7 @@ def draft(
                 n=n_cfg,
                 style_id=style_id,
                 model=model,
-                reference_urls=[rc._svg_data_url(s) for s in refs] or None,
+                reference_urls=_ref_urls,
             )
     except rc.RecraftError as exc:
         typer.secho(str(exc), fg=typer.colors.RED, err=True)

@@ -468,6 +468,9 @@ def generate(
         raise RecraftError(f"n must be 1-6, got {n}")
     if reference_urls and style_id:
         raise RecraftError("pass style_id OR reference_urls, not both")
+    # style_reference_urls is V4-only — silently drop for V2/V3 models
+    if reference_urls and "v4" not in model:
+        reference_urls = None
     model = model or (DEFAULT_MODEL if (style_id or reference_urls) else FALLBACK_MODEL)
     if model not in VECTOR_MODELS:
         raise RecraftError(f"model must be a vector model, got '{model}'")

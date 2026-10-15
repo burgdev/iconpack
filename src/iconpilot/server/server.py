@@ -809,7 +809,39 @@ class ReviewHandler(BaseHTTPRequestHandler):
         style = plan["style"]
         style_id = plan["style_id"]
 
-        ref_urls = [rc._svg_data_url(s) for s in plan["refs"]] or None
+        # Recraft rejects SVG references — render to PNG first
+        ref_urls = None
+        if plan["refs"]:
+            import base64 as _b64
+            import io as _io
+
+            from iconpilot.render.render import render_png_text
+
+            png_urls = []
+            for svg_text in plan["refs"]:
+                try:
+                    img = render_png_text(svg_text, 256)
+                    buf = _io.BytesIO()
+                    img.save(buf, "PNG")
+                    png_urls.append(
+                        "data:image/png;base64," + _b64.b64encode(buf.getvalue()).decode()
+                    )
+                except (ValueError, OSError):
+                    pass  # skip unrenderable refs
+            ref_urls = png_urls or None
+            # auto-upgrade: refs need V4 — don't send them to V2 models
+            if ref_urls and "v4" not in plan["model"]:
+                plan["model"] = rc.DEFAULT_MODEL  # v4_styles_vector
+                ref_urls = png_urls or None
+            # DEBUG: log what we're sending
+            import sys as _sys
+
+            print(
+                f"DEBUG recraft: model={plan['model']} style_id={plan.get('style_id')} "
+                f"refs={len(plan['refs'])} png_refs={len(png_urls)} ref_urls={len(ref_urls) if ref_urls else 0} "
+                f"refs_detail={[u[:40] for u in (ref_urls or [])[:1]]}",
+                file=_sys.stderr,
+            )
         grid = int(data.get("grid") or 0)
         if grid == 0:
             grid = int(data.get("sheet") or 0)  # backwards compat

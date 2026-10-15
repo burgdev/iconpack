@@ -819,8 +819,11 @@ footer { text-align:center; color:var(--muted); font-size:.75rem; padding:20px 0
         <span class="muted">generating {{ S.debugDlg.n }} version(s) via {{ S.debugDlg.model }}…</span>
       </div>
 
+      <div v-if="S.debugDlg.error" class="err" style="margin-bottom:8px; padding:8px; border-radius:8px; background:color-mix(in oklab, var(--danger) 10%, var(--card))">
+        {{ S.debugDlg.error }}
+      </div>
+
       <template v-else>
-        <div class="row" style="margin-bottom:8px">
           <label class="muted" style="flex:0 0 60px">model</label>
           <select v-model="S.debugDlg.model" @change="showDebug(S.debugDlg.icon, S.debugDlg.variant, S.debugDlg.model, +S.debugDlg.n, +S.debugDlg.grid)">
             <option v-for="m in S.debugDlg.models" :key="m" :value="m">{{ m }}</option>
@@ -1446,6 +1449,7 @@ function totalCost() { return S.history.reduce((a, h) => a + (h.cost_usd || 0), 
 
 async function showDebug(icon, variant, model, n, grid) {
   try {
+    if (S.debugDlg) S.debugDlg.error = '';
     const q = new URLSearchParams({ icon, variant });
     if (model) q.set('model', model);
     if (n) q.set('n', n);
@@ -1513,7 +1517,7 @@ async function recraftGenerate() {
     await load();
   } catch (e) {
     d.generating = false;
-    flash('recraft: ' + e.message, false);
+    d.error = e.message || 'Recraft request failed';
   }
 }
 async function recraftDraft(icon, variant, n = 4) {
