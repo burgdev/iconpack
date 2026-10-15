@@ -97,6 +97,13 @@ header .meta { color:var(--muted); font-size:.8rem; }
 .refcell { margin:0; text-align:center; position:relative; }
 .refcell img { border-radius:8px; background:#fff; display:block; }
 .refcell .armed-x { position:absolute; top:-6px; right:-6px; padding:0 5px; }
+.palchip { width:44px; height:32px; border-radius:8px; border:1px solid var(--line); position:relative;
+           display:inline-flex; align-items:center; justify-content:center; overflow:hidden; }
+.palchip input[type=color] { position:absolute; inset:0; opacity:0; cursor:pointer; width:100%; height:100%; min-height:0; padding:0; border:none; }
+.palchip .palx { position:absolute; top:-1px; right:-1px; padding:0 3px; font-size:.7rem; background:var(--card); border:1px solid var(--line); border-radius:0 0 0 6px; }
+.paladd { border-style:dashed; color:var(--muted); }
+.palrow { display:inline-flex; gap:3px; align-items:center; }
+.paldot { width:12px; height:12px; border-radius:50%; display:inline-block; border:1px solid var(--line); }
 .chat { max-height:300px; overflow-y:auto; border:1px solid var(--line); border-radius:10px; padding:10px; margin-bottom:10px;
        background:color-mix(in oklab, var(--bg) 60%, var(--card)); display:flex; flex-direction:column; gap:6px; }
 .chat-head { font-size:.68rem; text-transform:uppercase; letter-spacing:.08em; color:var(--muted); text-align:center; margin:6px 0 2px; }
@@ -274,7 +281,7 @@ footer { text-align:center; color:var(--muted); font-size:.75rem; padding:20px 0
       <span class="ic" v-html="IC.plus"></span> next round</button>
     <span class="spacer"></span>
     <span class="meta">{{ S.candidates.length }} candidates</span>
-    <button class="subtle" @click="openSettings" title="settings" aria-label="settings"><span class="ic" v-html="IC.gear"></span></button>
+    <button class="subtle" @click="setTab('settings')" title="settings" aria-label="settings"><span class="ic" v-html="IC.gear"></span></button>
     <button class="subtle" @click="load(true)">refresh</button>
     <div v-if="S.ai.text" class="banner" :class="S.ai.active ? 'working' : 'ready'">
       <span class="dot"></span>{{ S.ai.text }}
@@ -462,7 +469,8 @@ footer { text-align:center; color:var(--muted); font-size:.75rem; padding:20px 0
         <div class="ghead">
           <b>{{ sid }}</b>
           <span class="chip" v-if="S.styleRefs[sid]">{{ S.styleRefs[sid].source }} refs</span>
-          <span class="muted">{{ styleSummary(sid) }}</span>
+          <span class="chip" v-for="ru in styleRules(sid)" :key="ru">{{ ru }}</span>
+          <span class="palrow"><i v-for="c in stylePalette(sid)" :key="c" class="paldot" :style="{background: c}"></i></span>
           <span class="spacer"></span>
           <button class="subtle" @click="editStyle(sid)">edit rules</button>
           <button class="subtle armed-x" @click="removeStyle(sid)" title="remove the variant from every glyph">remove</button>
@@ -478,7 +486,9 @@ footer { text-align:center; color:var(--muted); font-size:.75rem; padding:20px 0
           <figure v-for="p in (S.styleDetail?.[sid]?.pinned || [])" :key="'p' + p.icon" class="refcell">
             <img width="48" height="48" loading="lazy"
                  :src="render('icons/' + p.icon + '/' + p.variant + '.svg', 48, '#ffffff')">
-            <figcaption class="muted">📌 {{ p.icon }}</figcaption>
+            <figcaption class="muted">{{ p.icon }}</figcaption>
+            <button class="subtle" @click="togglePin(p.icon, p.variant)" title="unpin from style references"
+                    aria-label="unpin"><span class="ic filled" v-html="IC.pin"></span></button>
           </figure>
           <button class="subtle" @click="pickRefFile(sid)" title="upload an own SVG reference">＋ upload</button>
         </div>
@@ -509,13 +519,24 @@ footer { text-align:center; color:var(--muted); font-size:.75rem; padding:20px 0
             <label style="width:110px; margin-left:12px" class="muted">stroke width</label><input v-model="S.styleEdit.strokeWidth" type="number" step="0.5" style="width:90px"></div>
           <div class="row"><label style="width:110px" class="muted">min gap</label><input v-model="S.styleEdit.minGap" type="number" step="0.5" style="width:90px">
             <label style="width:110px; margin-left:12px" class="muted">max nodes</label><input v-model="S.styleEdit.maxNodes" type="number" style="width:90px"></div>
-          <div class="row"><label style="width:110px" class="muted">palette</label><input v-model="S.styleEdit.palette" placeholder="hex, comma separated" style="flex:1"></div>
+          <div class="row" style="align-items:flex-start"><label style="width:110px" class="muted">palette</label>
+            <div class="row" style="flex:1; flex-wrap:wrap; gap:6px">
+              <label v-for="(c, i) in S.styleEdit.paletteList" :key="i" class="palchip" :style="{background: c}">
+                <input type="color" :value="c" @input="S.styleEdit.paletteList[i] = $event.target.value" :aria-label="'color ' + (i+1)">
+                <button class="palx" @click="S.styleEdit.paletteList.splice(i, 1)" :aria-label="'remove color ' + (i+1)">✕</button>
+              </label>
+              <label class="palchip paladd"><input type="color" value="#2b6cb0" @input="S.styleEdit.paletteList.push($event.target.value)" aria-label="add color"><span>＋</span></label>
+            </div>
+          </div>
           <div class="row"><label style="width:110px" class="muted">style words</label><input v-model="S.styleEdit.words" placeholder="comma separated" style="flex:1"></div>
           <div class="row"><label style="width:110px" class="muted">avoid</label><input v-model="S.styleEdit.avoid" placeholder="comma separated" style="flex:1"></div>
-          <div class="row"><label style="width:110px" class="muted">gate checks</label>
-            <label v-for="gk in ['min_gap','grid','live_area','max_nodes','palette']" :key="gk" style="display:flex; gap:4px; align-items:center">
-              <input type="checkbox" :checked="!(S.styleEdit.gateOff || []).includes(gk)" @change="toggleGate(gk)"> {{ gk }}
-            </label>
+          <div class="row" style="align-items:flex-start"><label style="width:110px" class="muted">gate checks</label>
+            <div style="flex:1; display:flex; flex-direction:column; gap:4px">
+              <label v-for="g in GATE_HELP" :key="g.k" style="display:flex; gap:8px; align-items:baseline">
+                <input type="checkbox" :checked="!(S.styleEdit.gateOff || []).includes(g.k)" @change="toggleGate(g.k)" style="min-height:0">
+                <span><b>{{ g.k }}</b> <span class="muted">— {{ g.h }}</span></span>
+              </label>
+            </div>
           </div>
           <div class="row"><label style="width:110px" class="muted">guidance</label><input v-model="S.styleEdit.guidance" style="flex:1"></div>
         </div>
@@ -564,8 +585,6 @@ footer { text-align:center; color:var(--muted); font-size:.75rem; padding:20px 0
   <section>
     <h2>Settings</h2>
     <div class="group" id="settings-panel"></div>
-    <p class="muted">open the settings dialog:</p>
-    <button class="primary" @click="openSettings()">open settings</button>
   </section>
 </div>
 
@@ -906,6 +925,13 @@ function relTime(iso) {
   return Math.floor(s / 86400) + 'd';
 }
 function seenKey() { return 'iconpilot.seen.' + (S.pack.name || ''); }
+const GATE_HELP = [
+  { k: 'min_gap', h: 'no near-miss spacing — strokes must join or keep clear distance (off for broken lines)' },
+  { k: 'grid', h: 'coordinates snapped to the 0.5 design grid' },
+  { k: 'live_area', h: 'artwork stays inside the padded live area' },
+  { k: 'max_nodes', h: 'path complexity budget per icon' },
+  { k: 'palette', h: 'only colors from the style palette are allowed' },
+];
 const FAV = {
   // phase → [bg, glyph-path, title-suffix]
   agent:  ['#b7791f', 'M13 2 3 14h9l-1 8 10-12h-9l1-8z', 'agent drafting'],
@@ -1108,6 +1134,17 @@ function batchReject(maxScore) {
   flash('batch: rejected ' + (maxScore === 0 ? 'unrated' : 'all rated ≤ ' + maxScore), true);
 }
 function isViewing() { return !!(S.viewRound && S.viewRound !== S.latest); }
+function styleRules(sid) {
+  const st = S.styles[sid]; if (!st) return [];
+  const r = [];
+  if (st.stroke) r.push('stroke ' + st.stroke.width);
+  if (st.size) r.push(st.size + 'px');
+  r.push('gap ≥ ' + st.min_gap);
+  r.push('≤ ' + st.max_nodes + ' nodes');
+  if (st.gate) r.push(...Object.entries(st.gate).filter(([, off]) => !off).map(([k]) => k + ' off'));
+  return r;
+}
+function stylePalette(sid) { return (S.styles[sid]?.palette) || []; }
 function styleSummary(sid) {
   const st = S.styles[sid]; if (!st) return '';
   const bits = [st.construction, st.color_mode];
@@ -1129,7 +1166,7 @@ async function editStyle(sid) {
       strokeWidth: def.stroke ? def.stroke.width : '',
       minGap: def.min_gap,
       maxNodes: def.max_nodes,
-      palette: (def.palette || []).join(', '),
+      paletteList: (def.palette || []).slice(),
       words: (def.style_words || []).join(', '),
       avoid: (def.avoid || []).join(', '),
       guidance: def.guidance || '',
@@ -1152,7 +1189,7 @@ async function saveStyleRules() {
   if (e.strokeWidth) sdef.stroke = { width: +e.strokeWidth, linecap: 'round', linejoin: 'round' };
   sdef.min_gap = +e.minGap || 1.5;
   sdef.max_nodes = +e.maxNodes || 40;
-  if (e.palette.trim()) sdef.palette = e.palette.split(',').map(s => s.trim()).filter(Boolean);
+  if (e.paletteList && e.paletteList.length) sdef.palette = e.paletteList;
   if (e.words.trim()) sdef.style_words = e.words.split(',').map(s => s.trim()).filter(Boolean);
   if (e.avoid.trim()) sdef.avoid = e.avoid.split(',').map(s => s.trim()).filter(Boolean);
   if (e.guidance.trim()) sdef.guidance = e.guidance;
@@ -1768,7 +1805,7 @@ const App = {
       fbFor, fbNew, fbTitle, fbItems, fbChat, openFb, addFeedback, resolveFeedback, switchRound, isViewing,
       IC, relTime, isNew, copyPrompt, reopen, toggleTheme, cmpLabel, initTheme, loadIconHist, hasRating,
       showDebug, openNextDlg, addVariantBulk, addCustomStyle, saveRecraftDefaults,
-      isPostponed, togglePostpone, applyAndNext, colState, toggleCol, toggleAll, usedStyles, setTab,
+      GATE_HELP, isPostponed, togglePostpone, applyAndNext, colState, toggleCol, toggleAll, usedStyles, setTab,
       styleSummary, isOwnRef, editStyle, toggleGate, saveStyleRules, removeStyle, addStyleToPack, pickRefFile, removeRef,
 
     };
