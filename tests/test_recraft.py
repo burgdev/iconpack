@@ -735,9 +735,10 @@ def test_split_sheet_falls_back_when_groups_missing() -> None:
     assert all("svg:" not in c for c in cells)
 
 
-def test_sheet_prompt_asks_for_named_groups() -> None:
+def test_sheet_prompt_has_clean_margins() -> None:
     p = rc.sheet_prompt("a sailboat", 3)
-    assert "g id='icon1'" in p and "icon9" in p
+    assert "clean margins" in p and "no touching" in p
+    assert "g id" not in p  # wrapper instruction removed
 
 
 def test_curated_style_map_covers_registry() -> None:

@@ -668,7 +668,7 @@ def test_recraft_request_preview_no_token(server: _Server, srvpack: Path) -> Non
     code, body = server.get("/api/recraft-request?icon=hut&variant=mono&n=2")
     assert code == 200
     data = json.loads(body)
-    assert data["endpoint"].endswith("/images/generations")
+    assert data["endpoint"].endswith("/images/generations/vector")
     req = data["request"]
     assert req["n"] == 2 and req["size"] == "1:1" and "prompt" in req
     assert "model" in req

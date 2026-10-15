@@ -365,7 +365,7 @@ class ReviewHandler(BaseHTTPRequestHandler):
             self._json(
                 200,
                 {
-                    "endpoint": rc.API_BASE + "/images/generations",
+                    "endpoint": rc.API_BASE + "/images/generations/vector",
                     "request": req,
                     "style_refs_attached": len(plan["refs"]),
                     "full_prompt": build_prompt(
@@ -731,7 +731,7 @@ class ReviewHandler(BaseHTTPRequestHandler):
         style_id = cfg.get("style_ids", {}).get(v["style"]) or cfg.get("style_id")
 
         refs: list[str] = []
-        if not style_id:
+        if True:  # always collect — needed for staleness check + V4 fallback
             # ALL style refs (own uploads + bundled) as the look, then
             # pinned/approved pack icons on the same style
             from iconpilot.styles import style_refs as _sr
@@ -785,9 +785,11 @@ class ReviewHandler(BaseHTTPRequestHandler):
             raise ValueError(f"model must be a vector model, got '{model}'")
 
         images_billed = 1 if n > 6 else n
-        cost = rc.price_per_image(model) * images_billed + (
-            rc.STYLE_REF_PRICE if refs and "v4" in model else 0
-        )
+        cost = rc.price_per_image(model) * images_billed
+        if refs and "v4" in model and not style_id:
+            cost += rc.STYLE_REF_PRICE
+        if needs_style_refresh:
+            cost += rc.STYLE_CREATE_PRICE
         return {
             "prompt": prompt,
             "style_id": style_id,
@@ -860,6 +862,10 @@ class ReviewHandler(BaseHTTPRequestHandler):
             except rc.RecraftError:
                 pass
         ref_urls = None
+        # V2 + curated = use style param (no refs needed)
+        # V2 without curated but with refs → upgrade to V4 (refs need V4)
+        if plan["refs"] and "v4" not in plan["model"] and not plan.get("curated"):
+            plan["model"] = rc.DEFAULT_MODEL
         if plan["refs"] and "v4" in plan["model"] and not plan.get("curated"):
             import base64 as _b64
             import io as _io
@@ -906,7 +912,7 @@ class ReviewHandler(BaseHTTPRequestHandler):
                 curated_style=plan.get("curated"),
             )
             cells = rc.split_sheet(sheet_svgs[0], grid, target=24.0)
-            svgs = cells[: plan["n"]]  # only the requested versions
+            svgs = cells  # keep ALL cells — same cost, more candidates
         else:
             svgs = rc.generate(
                 token,
