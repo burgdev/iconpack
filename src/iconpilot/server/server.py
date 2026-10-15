@@ -787,8 +787,8 @@ class ReviewHandler(BaseHTTPRequestHandler):
             n = int(data.get("n") or 0) or None
         except (TypeError, ValueError) as exc:
             raise ValueError("n must be an integer 1-6") from exc
-        if n is not None and not 1 <= n <= 6:
-            raise ValueError("n must be 1-6")
+        if n is not None and not 1 <= n <= 16:
+            raise ValueError("n must be 1-16")
         with pack_lock(self.pack_dir):
             pack, _styles = load_pack(self.pack_dir / "pack.json")
         icon = pack["icons"].get(icon_id)
