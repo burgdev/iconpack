@@ -380,11 +380,11 @@ footer { text-align:center; color:var(--muted); font-size:.75rem; padding:20px 0
                       @click="copyPrompt(g.icon, vg.variant)"><span class="ic" v-html="IC.copy"></span></button>
               <button v-if="S.recraftReady || S.debug" class="iconbtn" :class="{ on: S.drafting === g.icon + '/' + vg.variant }"
                       :title="S.debug && !S.recraftReady ? 'preview the Recraft request (no call)' : 'Recraft: seed 4 drafts for this variant (~$0.18-0.20)'" aria-label="Recraft draft"
-                      @click="S.debug && !S.recraftReady ? showDebug(g.icon, vg.variant) : recraftDraft(g.icon, vg.variant)"><span class="ic" v-html="IC.bolt"></span></button>
+                      @click="showDebug(g.icon, vg.variant)"><span class="ic" v-html="IC.bolt"></span></button>
             </div>
             <div v-if="!vg.cands.length" class="card empty" style="border-style:dashed">
               <span class="muted">open — no drafts yet</span>
-              <button v-if="S.recraftReady || S.debug" class="subtle" @click="S.debug && !S.recraftReady ? showDebug(g.icon, vg.variant) : recraftDraft(g.icon, vg.variant)"><span class="ic" v-html="IC.bolt"></span> seed</button>
+              <button v-if="S.recraftReady || S.debug" class="subtle" @click="showDebug(g.icon, vg.variant)"><span class="ic" v-html="IC.bolt"></span> seed</button>
               <button class="subtle" @click="copyPrompt(g.icon, vg.variant)"><span class="ic" v-html="IC.spark"></span> LLM hint</button>
             </div>
             <div class="grid">
@@ -806,41 +806,58 @@ footer { text-align:center; color:var(--muted); font-size:.75rem; padding:20px 0
     </div>
   </div>
 
-  <div v-if="S.debugDlg" class="overlay" @click.self="S.debugDlg = null">
+  <div v-if="S.debugDlg" class="overlay" @click.self="!S.debugDlg.generating && (S.debugDlg = null)">
     <div class="dialog" style="max-width:640px">
       <h3><span><span class="ic-lg" v-html="IC.bolt"></span> Recraft · {{ S.debugDlg.icon }}#{{ S.debugDlg.variant }}</span>
-          <button class="subtle" @click="S.debugDlg = null" aria-label="Close">✕</button></h3>
+          <button class="subtle" @click="S.debugDlg = null" aria-label="Close" :disabled="S.debugDlg.generating">✕</button></h3>
 
-      <div class="row" style="margin-bottom:8px">
-        <label class="muted" style="flex:0 0 80px">model</label>
-        <select v-model="S.debugDlg.model" @change="showDebug(S.debugDlg.icon, S.debugDlg.variant, S.debugDlg.model)">
-          <option v-for="m in S.debugDlg.models" :key="m" :value="m">{{ m }}</option>
-        </select>
-        <label class="muted" style="margin-left:10px" title="image layout: 1×1 = separate images, 2×2+ = one sheet">grid</label>
-        <select v-model="S.debugDlg.grid" @change="showDebug(S.debugDlg.icon, S.debugDlg.variant, null, +S.debugDlg.n, +S.debugDlg.grid)">
-          <option v-for="g in [1,2,3,4]" :key="g" :value="g">{{ g }}×{{ g }}</option>
-        </select>
-        <label class="muted" style="margin-left:10px" title="how many icon versions to generate (max = grid capacity)">versions</label>
-        <input v-model.number="S.debugDlg.n" type="number" min="1" :max="S.debugDlg.grid * S.debugDlg.grid === 1 ? 6 : S.debugDlg.grid * S.debugDlg.grid"
-               style="width:56px"
-               @change="showDebug(S.debugDlg.icon, S.debugDlg.variant, null, +S.debugDlg.n, +S.debugDlg.grid)">
-        <select v-if="S.debugDlg.variants && S.debugDlg.variants.length > 1" v-model="S.debugDlg.variant" @change="showDebug(S.debugDlg.icon, S.debugDlg.variant)">
-          <option v-for="vd in S.debugDlg.variants" :key="vd" :value="vd">{{ vd }}</option>
-        </select>
-        <span class="chip">{{ S.debugDlg.style }}</span>
+      <!-- generating spinner -->
+      <div v-if="S.debugDlg.generating" style="display:flex; align-items:center; gap:12px; padding:24px 0; justify-content:center">
+        <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="var(--accent)" stroke-width="2.5" stroke-linecap="round" style="animation:spin 1s linear infinite">
+          <path d="M21 12a9 9 0 1 1-6.2-8.5"/>
+        </svg>
+        <span class="muted">generating {{ S.debugDlg.n }} version(s) via {{ S.debugDlg.model }}…</span>
       </div>
 
-      <p class="muted" style="margin:0 0 6px">{{ S.debugDlg.endpoint }} · {{ S.debugDlg.refs }} style ref(s) · {{ S.debugDlg.promptChars }}/{{ S.debugDlg.promptLimit }} chars</p>
+      <template v-else>
+        <div class="row" style="margin-bottom:8px">
+          <label class="muted" style="flex:0 0 60px">model</label>
+          <select v-model="S.debugDlg.model" @change="showDebug(S.debugDlg.icon, S.debugDlg.variant, S.debugDlg.model, +S.debugDlg.n, +S.debugDlg.grid)">
+            <option v-for="m in S.debugDlg.models" :key="m" :value="m">{{ m }}</option>
+          </select>
+          <label class="muted" style="margin-left:10px" title="1×1 = separate images, 2×2+ = one sheet">grid</label>
+          <select v-model="S.debugDlg.grid" @change="showDebug(S.debugDlg.icon, S.debugDlg.variant, null, +S.debugDlg.n, +S.debugDlg.grid)">
+            <option v-for="g in [1,2,3,4]" :key="g" :value="g">{{ g }}×{{ g }}</option>
+          </select>
+          <label class="muted" style="margin-left:10px" title="how many versions">n</label>
+          <input v-model.number="S.debugDlg.n" type="number" min="1"
+                 :max="S.debugDlg.grid * S.debugDlg.grid === 1 ? 6 : S.debugDlg.grid * S.debugDlg.grid"
+                 style="width:52px"
+                 @change="showDebug(S.debugDlg.icon, S.debugDlg.variant, null, +S.debugDlg.n, +S.debugDlg.grid)">
+          <select v-if="S.debugDlg.variants && S.debugDlg.variants.length > 1" v-model="S.debugDlg.variant" @change="showDebug(S.debugDlg.icon, S.debugDlg.variant)">
+            <option v-for="vd in S.debugDlg.variants" :key="vd" :value="vd">{{ vd }}</option>
+          </select>
+          <span class="chip">{{ S.debugDlg.style }}</span>
+        </div>
 
-      <textarea :value="S.debugDlg.request" readonly rows="12" style="font-size:.8rem"></textarea>
+        <div class="row" style="justify-content:space-between; margin-bottom:8px">
+          <span class="muted">{{ S.debugDlg.refs }} style ref(s) · {{ S.debugDlg.promptChars }}/{{ S.debugDlg.promptLimit }} chars</span>
+          <span class="chip rule" title="estimated cost">≈ ${{ S.debugDlg.cost }}</span>
+        </div>
 
-      <div class="row" style="margin-top:8px">
-        <button class="primary" @click="debugCopy('request')">copy request JSON</button>
-        <button class="subtle" @click="debugCopy('full')">copy full hint ({{ S.debugDlg.full.length }} chars)</button>
-        <button v-if="S.debug && !S.recraftReady" class="subtle" @click="debugCopy('prompt')">copy prompt only</button>
-        <span v-if="S.debugDlg.copied" class="chip new" style="margin-left:4px">✓ {{ S.debugDlg.copied }}</span>
-        <button class="subtle" @click="S.debugDlg = null" aria-label="Close" style="margin-left:auto">close</button>
-      </div>
+        <details style="margin-bottom:8px">
+          <summary class="muted" style="cursor:pointer; font-size:.8rem">request JSON</summary>
+          <textarea :value="S.debugDlg.request" readonly rows="10" style="font-size:.78rem; margin-top:6px"></textarea>
+        </details>
+
+        <div class="row">
+          <button class="primary" @click="recraftGenerate()">
+            <span class="ic" v-html="IC.bolt"></span> generate {{ S.debugDlg.n }} version(s) · ~${{ S.debugDlg.cost }}
+          </button>
+          <button class="subtle" @click="debugCopy('full')" title="copy the full drafting hint">copy hint</button>
+          <button class="subtle" @click="S.debugDlg = null" aria-label="Close">cancel</button>
+        </div>
+      </template>
     </div>
   </div>
 
@@ -1481,6 +1498,24 @@ async function saveRecraftDefaults(model, n) {
     await load();
   } catch (e) { flash('defaults: ' + (e.d?.error || e.message), false); }
 }
+async function recraftGenerate() {
+  const d = S.debugDlg;
+  if (!d || d.generating) return;
+  d.generating = true;
+  try {
+    const body = { icon: d.icon, variant: d.variant, n: d.n, model: d.model };
+    if (d.grid >= 2) body.grid = d.grid;
+    const r = await api('/api/recraft', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body) });
+    flash(`⚡ ${d.icon}#${d.variant}: ${r.wrote.length} seeds (gate ${r.gate_passed}/${r.wrote.length}) ~$${r.cost_usd}`, true);
+    S.debugDlg = null;
+    await load();
+  } catch (e) {
+    d.generating = false;
+    flash('recraft: ' + e.message, false);
+  }
+}
 async function recraftDraft(icon, variant, n = 4) {
   const key = icon + '/' + variant;
   S.drafting = key;
@@ -1497,7 +1532,7 @@ async function recraftDraft(icon, variant, n = 4) {
 async function recraftIcon(g) {
   const open = variantGroups(g).filter(vg => !isLocked(g.icon, vg.variant));
   if (!open.length) { flash('all variants locked — nothing to draft', false); return; }
-  if (S.debug && !S.recraftReady) { showDebug(g.icon, open[0].variant); return; }
+  showDebug(g.icon, open[0].variant); return;
   const cost = (open.length * 0.2).toFixed(2);
   if (!confirm(`Draft ${open.length} variant(s) of "${g.icon}" via Recraft? (~$${cost})`)) return;
   for (const vg of open) await recraftDraft(g.icon, vg.variant);
@@ -2052,7 +2087,7 @@ const App = {
       showDebug, debugCopy, openNextDlg, addVariantBulk, addCustomStyle, saveRecraftDefaults,
       GATE_HELP, styleRules, stylePalette, ruleTitle, styleUsageCount, isPostponed, togglePostpone, applyAndNext, colState, toggleCol, toggleAll, usedStyles, setTab, iconSuggest, pickSuggestion, addNewIcon, startRoundWithNew,
       styleSummary, isOwnRef, editStyle, toggleGate, saveStyleRules, removeStyle, addStyleToPack, pickRefFile, removeRef,
-      vectorModels, styleDetail, editCustomStyle,
+      vectorModels, styleDetail, editCustomStyle, recraftGenerate,
 
     };
   },
