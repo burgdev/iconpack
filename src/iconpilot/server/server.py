@@ -759,14 +759,31 @@ class ReviewHandler(BaseHTTPRequestHandler):
                             refs = [f.read_text()]
                             break
 
-        model = cfg.get("model") or (rc.DEFAULT_MODEL if (style_id or refs) else rc.FALLBACK_MODEL)
+        style_snap = pack.get("styles", {}).get(v.get("style"), {})
+        curated = style_snap.get("recraft_curated") or rc.CURATED_STYLE_MAP.get(v["style"])
+        per_style_model = style_snap.get("recraft_model")
+        model = (
+            per_style_model
+            or cfg.get("model")
+            or (
+                rc.FALLBACK_MODEL
+                if (curated or style_id)
+                else rc.DEFAULT_MODEL
+                if refs
+                else rc.FALLBACK_MODEL
+            )
+        )
         if model not in rc.VECTOR_MODELS:
             raise ValueError(f"model must be a vector model, got '{model}'")
 
-        cost = rc.price_per_image(model) * n + (rc.STYLE_REF_PRICE if refs else 0)
+        images_billed = 1 if n > 6 else n
+        cost = rc.price_per_image(model) * images_billed + (
+            rc.STYLE_REF_PRICE if refs and "v4" in model else 0
+        )
         return {
             "prompt": prompt,
             "style_id": style_id,
+            "curated": curated,
             "refs": refs,
             "model": model,
             "n": n,
@@ -816,7 +833,7 @@ class ReviewHandler(BaseHTTPRequestHandler):
 
         # Recraft rejects SVG references — render to PNG first
         ref_urls = None
-        if plan["refs"]:
+        if plan["refs"] and "v4" in plan["model"] and not plan.get("curated"):
             import base64 as _b64
             import io as _io
 
@@ -913,10 +930,10 @@ class ReviewHandler(BaseHTTPRequestHandler):
             "wrote": wrote,
             "gate_passed": n_pass,
             "cost_usd": round(
-                rc.price_per_image(style_id and rc.DEFAULT_MODEL or rc.FALLBACK_MODEL) * len(wrote),
-                2,
+                rc.price_per_image(plan["model"]) * (1 if grid >= 2 else plan["n"]), 2
             ),
-            "model": style_id and rc.DEFAULT_MODEL or rc.FALLBACK_MODEL,
+            "model": plan["model"],
+            "grid": grid,
         }
 
     def _recraft_batch(self, data: dict) -> dict:
