@@ -65,6 +65,8 @@ input[type="range"] { min-height: 0; padding: 0; }
   outline: 2px solid var(--focus); outline-offset: 1px;
 }
 button { transition: border-color .12s ease-out, background-color .12s ease-out, color .12s ease-out; }
+button:disabled { opacity:.45; cursor:not-allowed; }
+.ab-apply:disabled { background:var(--card); color:var(--muted); border-color:var(--line); }
 body { margin:0; font:15px/1.45 system-ui,-apple-system,Segoe UI,Roboto,sans-serif;
        background:var(--bg); color:var(--ink); }
 header { position:sticky; top:0; z-index:10; background:var(--card); border-bottom:1px solid var(--line);
@@ -77,7 +79,7 @@ header .meta { color:var(--muted); font-size:.8rem; }
 .ic svg { width:14px; height:14px; }
 .ic-lg svg { width:18px; height:18px; vertical-align:-4px; }
 .dotnew { width:7px; height:7px; border-radius:50%; background:var(--warn); display:inline-block; margin-left:2px; }
-.chip.new { background:var(--warn); color:#fff; font-size:.65rem; padding:1px 6px; }
+.chip.new { background:var(--warn); color:var(--bg); font-size:.65rem; padding:1px 6px; font-weight:600; }
 .chat { max-height:280px; overflow-y:auto; border:1px solid var(--line); border-radius:8px; padding:8px; margin-bottom:10px; background:color-mix(in srgb, var(--bg) 60%, transparent); }
 .chat-head { font-size:.7rem; text-transform:uppercase; letter-spacing:.06em; color:var(--muted); margin:8px 0 4px; }
 .chat-head:first-child { margin-top:0; }
@@ -99,10 +101,11 @@ main { max-width:1200px; margin:0 auto; padding:16px; }
 section h2 { font-size:.85rem; text-transform:uppercase; letter-spacing:.06em; color:var(--muted); margin:22px 0 10px; }
 .group { background:var(--card); border:1px solid var(--line); border-radius:12px; padding:12px; margin:10px 0; box-shadow:var(--shadow); }
 .group > .ghead { display:flex; align-items:center; gap:10px; margin-bottom:8px; flex-wrap:wrap; }
-.group b { font-size:.95rem; }
+.group b { font-size:1.15rem; letter-spacing:-0.01em; }
 .grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(150px,1fr)); gap:12px; }
-.card { background:var(--card); border:1px solid var(--line); border-radius:12px; padding:10px; text-align:center;
-        box-shadow:var(--shadow); display:flex; flex-direction:column; gap:8px; }
+.card { background:var(--card); border:1px solid transparent; border-radius:12px; padding:10px; text-align:center;
+        display:flex; flex-direction:column; gap:8px; }
+.card:hover { border-color:var(--line); }
 .card .thumb { cursor:zoom-in; align-self:center; border-radius:8px; background:#fff; }
 .card .name { font-size:.85rem; font-weight:600; }
 .rating { display:flex; align-items:center; gap:10px; justify-content:center; }
@@ -114,10 +117,10 @@ button:hover { border-color:var(--accent); }
 button.primary { background:var(--accent); color:var(--accent-ink); border-color:var(--accent); }
 button.subtle { font-size:.8rem; padding:4px 8px; color:var(--muted); }
 button.armed { border-color:var(--accent); color:var(--accent); font-weight:600; }
-button.armed-x { border-color:var(--danger); color:var(--danger); font-weight:600; }
+button.armed-x { border-color:var(--warn); color:var(--warn); font-weight:600; }
 .chip { display:inline-block; padding:1px 8px; border-radius:99px; font-size:.72rem; background:var(--chip); color:var(--muted); }
 .chip.approved { background:var(--accent); color:var(--accent-ink); }
-.chip.in_review, .chip.stale { background:var(--warn); color:#fff; }
+.chip.in_review, .chip.stale { background:var(--warn); color:var(--bg); }
 textarea { font:13px/1.5 ui-monospace,Menlo,Consolas,monospace; width:100%; min-height:64px; padding:8px;
            border-radius:8px; border:1px solid var(--line); background:var(--card); color:var(--ink); resize:vertical; }
 textarea[readonly] { color:var(--muted); }
@@ -149,7 +152,7 @@ input[type=color] { width:34px; height:28px; padding:0 2px; border:1px solid var
 .sheet .sheetbox { position:fixed; bottom:0; left:0; right:0; max-width:560px; margin:0 auto;
                    background:var(--card); border:1px solid var(--line); border-bottom:none;
                    border-radius:16px 16px 0 0; padding:16px 16px calc(16px + env(safe-area-inset-bottom));
-                   box-shadow:0 -8px 32px rgba(0,0,0,.25); }
+                   box-shadow:var(--shadow-lg); }
 .sheet .sheetbox h3 { display:flex; justify-content:space-between; align-items:center; margin:0 0 10px; font-size:.95rem; }
 .sheetstage { display:flex; align-items:flex-end; justify-content:center; gap:20px; padding:12px 0 16px; }
 .stars { display:flex; gap:2px; }
@@ -168,7 +171,7 @@ footer { text-align:center; color:var(--muted); font-size:.75rem; padding:20px 0
 /* sticky action bar */
 .actionbar { position:fixed; bottom:0; left:0; right:0; z-index:20; display:flex; align-items:center;
              gap:12px; padding:10px 16px calc(10px + env(safe-area-inset-bottom));
-             background:var(--card); border-top:1px solid var(--line); box-shadow:0 -4px 16px rgba(10,16,22,.12); }
+             background:var(--card); border-top:1px solid var(--line); box-shadow:var(--shadow-lg); }
 .actionbar.ready { border-top-color:color-mix(in srgb, var(--accent) 40%, transparent); }
 .ab-status { flex:1; font-size:.85rem; color:var(--muted); display:flex; align-items:center; gap:8px; min-width:0; }
 .actionbar.ready .ab-status { color:var(--accent); font-weight:600; }
@@ -183,7 +186,7 @@ footer { text-align:center; color:var(--muted); font-size:.75rem; padding:20px 0
 .gmeta .brief { flex:1 1 160px; cursor:text; min-width:120px; font-size:.85rem; }
 .brief-input { flex:1 1 160px; font:inherit; font-size:.85rem; padding:4px 8px; border-radius:8px;
                border:1px solid var(--accent); background:var(--card); color:var(--ink); min-width:120px; }
-.colorchip { width:30px; height:30px; flex:none; }
+.colorchip { width:30px; height:30px; flex:none; border-radius:99px; border:2px solid var(--line); cursor:pointer; }
 .gmeta select { font:inherit; font-size:.8rem; padding:4px 6px; border-radius:8px;
                 border:1px solid var(--line); background:var(--card); color:var(--ink); max-width:140px; }
 .vargrid { display:flex; flex-direction:column; gap:10px; }
@@ -215,6 +218,7 @@ footer { text-align:center; color:var(--muted); font-size:.75rem; padding:20px 0
             border:1px solid var(--line); background:var(--card); color:var(--ink); }
 @media (max-width: 640px) {
   main { padding:12px; }
+  input, select, textarea { min-height:40px; }
   .grid { grid-template-columns:repeat(auto-fill,minmax(130px,1fr)); gap:10px; }
   .rating button, .ratebtn { min-height:48px; min-width:48px; }   /* thumb targets */
   .ab-apply { min-height:48px; flex:1; max-width:220px; }
@@ -229,7 +233,8 @@ footer { text-align:center; color:var(--muted); font-size:.75rem; padding:20px 0
     <h1>{{ S.pack.name || 'iconpilot' }}</h1>
     <span class="meta">rev {{ S.rev }} · S.round {{ S.round || '—' }}</span>
     <button class="subtle iconbtn-lg" @click="toggleTheme"
-            :title="S.theme === 'dark' ? 'switch to light' : 'switch to dark'">
+            :title="S.theme === 'dark' ? 'switch to light' : 'switch to dark'"
+            :aria-label="S.theme === 'dark' ? 'Switch to light theme' : 'Switch to dark theme'">
       <span class="ic" v-html="S.theme === 'dark' ? IC.sun : IC.moon"></span>
     </button>
     <select v-if="S.rounds.length" :value="S.viewRound || S.latest" @change="switchRound($event.target.value)"
@@ -237,7 +242,7 @@ footer { text-align:center; color:var(--muted); font-size:.75rem; padding:20px 0
       <option v-for="r in S.rounds" :key="r" :value="r">{{ r }}{{ r === S.latest ? ' (live)' : '' }}</option>
     </select>
     <button class="subtle" :class="{ on: fbFor('pack').length }"
-            title="feedback for the whole draft" @click="openFb('pack')">
+            title="feedback for the whole draft" aria-label="feedback for the whole draft" @click="openFb('pack')">
       <span class="ic" v-html="IC.comment"></span> {{ fbFor('pack').length || '' }}
       <span v-if="fbNew('pack')" class="chip new">{{ fbNew('pack') }} new</span>
     </button>
@@ -246,7 +251,7 @@ footer { text-align:center; color:var(--muted); font-size:.75rem; padding:20px 0
       <span class="ic" v-html="IC.plus"></span> next round</button>
     <span class="spacer"></span>
     <span class="meta">{{ S.candidates.length }} candidates</span>
-    <button class="subtle" @click="openSettings" title="settings">⚙</button>
+    <button class="subtle" @click="openSettings" title="settings" aria-label="settings"><span class="ic" v-html="IC.gear"></span></button>
     <button class="subtle" @click="load(true)">refresh</button>
     <div v-if="S.ai.text" class="banner" :class="S.ai.active ? 'working' : 'ready'">
       <span class="dot"></span>{{ S.ai.text }}
@@ -263,7 +268,7 @@ footer { text-align:center; color:var(--muted); font-size:.75rem; padding:20px 0
     </section>
     <section v-if="S.grouped.length">
       <h2>{{ S.viewRound && S.viewRound !== S.latest ? 'Archived pass ' + S.viewRound : 'Current pass — rate, then decide' }}</h2>
-      <div class="group" v-for="g in S.grouped" :key="g.key">
+      <div class="group" v-for="(g, gi) in S.grouped" :key="g.key">
         <div class="ghead">
           <b>{{ g.icon }}</b>
           <span class="muted">{{ g.cands.length }} candidates across variants</span>
@@ -271,16 +276,17 @@ footer { text-align:center; color:var(--muted); font-size:.75rem; padding:20px 0
           <button class="subtle" :class="{ busy: S.drafting.startsWith(g.icon + '/') }"
                   title="Recraft: seed 4 drafts for every open variant of this icon"
                   @click="recraftIcon(g)"><span class="ic" v-html="IC.bolt"></span> draft</button>
-          <button class="subtle armed-x" @click="rejectAllIcon(g)" title="reject every candidate for this icon">reject all</button>
+          <button class="subtle" :class="{ 'armed-x': S.rejectArm === g.icon }" @click="rejectAllIcon(g)"
+                  title="reject every candidate for this icon (click twice)">reject all</button>
         </div>
         <div class="gmeta">
           <span class="muted brief">{{ packBriefIcon(g) }}</span>
           <button class="iconbtn" :class="{ on: hasNote(g) }"
-                  title="feedback for this glyph" @click="openFb('icon', g.icon)">
+                  title="feedback for this glyph" aria-label="feedback for this glyph" @click="openFb('icon', g.icon)">
             <span class="ic" v-html="IC.comment"></span><span v-if="fbNew('icon', g.icon)" class="dotnew"></span>
           </button>
           <input type="color" class="colorchip" :value="mainColorIcon(g) || '#89919a'"
-                 title="main color"
+                 title="main color" aria-label="main color"
                  @input="saveMainColorIcon(g, $event.target.value)">
         </div>
         <details class="histstrip" @toggle="e => e.target.open && loadIconHist(g)">
@@ -295,26 +301,27 @@ footer { text-align:center; color:var(--muted); font-size:.75rem; padding:20px 0
           <p v-else class="muted">no earlier drafts</p>
         </details>
         <div class="vargrid">
-          <div class="vargroup" v-for="vg in variantGroups(g)" :key="vg.variant">
+          <div class="vargroup" v-for="(vg, vi) in variantGroups(g)" :key="vg.variant">
             <div class="varhead">
               <span class="chip" :class="{ done: isLocked(g.icon, vg.variant) }">{{ vg.variant }}<span v-if="isLocked(g.icon, vg.variant)" class="ic" v-html="IC.lock"></span></span>
-              <button v-if="isLocked(g.icon, vg.variant)" class="iconbtn" title="reopen for the next pass (approved file stays in history)"
+              <button v-if="isLocked(g.icon, vg.variant)" class="iconbtn" title="reopen for the next pass (approved file stays in history)" aria-label="reopen"
                       @click="reopen(g.icon, vg.variant)"><span class="ic" v-html="IC.unlock"></span></button>
               <select :value="vg.style" @change="switchStyle(g.icon, vg.variant, $event.target.value)" class="varstyle" title="style">
                 <option v-for="(st, sid) in S.styles" :key="sid" :value="sid">{{ sid }}</option>
               </select>
               <button class="iconbtn" :class="{ on: fbFor('variant', g.icon, vg.variant).length }"
-                      title="feedback for this variant" @click="openFb('variant', g.icon, vg.variant)">
+                      title="feedback for this variant" aria-label="feedback for this variant" @click="openFb('variant', g.icon, vg.variant)">
                 <span class="ic" v-html="IC.comment"></span><span v-if="fbNew('variant', g.icon, vg.variant)" class="dotnew"></span>
               </button>
               <button class="iconbtn" title="copy a complete LLM hint for this variant — paste into any model, bring SVGs back"
                       @click="copyPrompt(g.icon, vg.variant)"><span class="ic" v-html="IC.copy"></span></button>
               <button class="iconbtn" :class="{ on: S.drafting === g.icon + '/' + vg.variant }"
-                      title="Recraft: seed 4 drafts for this variant (~$0.18-0.20)"
+                      title="Recraft: seed 4 drafts for this variant (~$0.18-0.20)" aria-label="Recraft draft"
                       @click="recraftDraft(g.icon, vg.variant)"><span class="ic" v-html="IC.bolt"></span></button>
             </div>
             <div class="grid">
-              <div class="card" v-for="c in vg.cands" :key="c.cand">
+              <div class="card" v-for="(c, ci) in vg.cands" :key="c.cand"
+                   :class="{ kbactive: gi === S.kbFocus && vi === S.kbVariant && ci === S.kbCand && !isViewing() }">
                 <img class="thumb" loading="lazy" width="64" height="64"
                      :src="render(c.path, 64, '#f6f9f7', mainColorIcon(g))" @click="open(c)">
             <div class="name">{{ c.cand }}
@@ -322,9 +329,9 @@ footer { text-align:center; color:var(--muted); font-size:.75rem; padding:20px 0
             <div class="rating">
               <button :class="{ 'armed-x': item(c)?.t?.startsWith(c.cand + ' no') }"
                       title="drop (rate 0)" @click="drop(c)">✕</button>
-              <button class="ratebtn" :class="{ armed: rating(c) > 0 }"
-                      @click="openSheet(c)" :title="'rate ' + c.cand">
-                <template v-if="rating(c) > 0">★ {{ rating(c) }}</template>
+              <button class="ratebtn" :class="{ armed: hasRating(c) }"
+                      @click="openSheet(c)" :title="'rate ' + c.cand" aria-label="rate">
+                <template v-if="hasRating(c)">★ {{ rating(c) }}</template>
                 <template v-else>rate</template>
               </button>
               <button :class="{ armed: item(c)?.t === c.cand + ' ok' }"
@@ -361,6 +368,9 @@ footer { text-align:center; color:var(--muted); font-size:.75rem; padding:20px 0
           <button @click="copy">copy JSON</button>
         </div>
         <div class="row" style="margin-top:6px">
+          <span class="muted">keys: ←→ move · [ ] group · 1 ok · 2 keep · 3 drop · 0 rate · esc close</span>
+        </div>
+        <div class="row" style="margin-top:6px">
           <span class="muted">batch:</span>
           <button class="subtle" @click="batchApprove(7)" title="approve all rated ≥7">✓ all ≥7</button>
           <button class="subtle" @click="batchApprove(8)" title="approve all rated ≥8">✓ all ≥8</button>
@@ -378,8 +388,8 @@ footer { text-align:center; color:var(--muted); font-size:.75rem; padding:20px 0
           <div class="ghead">
             <b>{{ h.round }}</b>
             <span class="muted">{{ h.decided ? 'decided' : h.candidates + ' drafted' }}</span>
-            <span v-if="h.cost_usd" class="chip" title="recraft seeds in this pass">💲 {{ h.cost_usd }}</span>
-            <span v-if="h.instructions" class="chip" title="apply-time instructions">💬 {{ h.instructions.slice(0, 40) }}{{ h.instructions.length > 40 ? '…' : '' }}</span>
+            <span v-if="h.cost_usd" class="chip" title="recraft seeds in this pass">$ {{ h.cost_usd }}</span>
+            <span v-if="h.instructions" class="chip" title="apply-time instructions"><span class="ic" v-html="IC.comment"></span> {{ h.instructions.slice(0, 40) }}{{ h.instructions.length > 40 ? '…' : '' }}</span>
             <span v-if="h.feedback && h.feedback.length" class="chip"><span class="ic" v-html="IC.comment"></span> {{ h.feedback.length }}</span>
           </div>
           <div v-if="h.feedback && h.feedback.length" class="chat" style="margin:4px 0">
@@ -405,7 +415,7 @@ footer { text-align:center; color:var(--muted); font-size:.75rem; padding:20px 0
       <div class="group" v-for="(icon, id) in S.pack.icons" :key="id">
         <div class="ghead">
           <b>{{ id }}</b>
-          <span v-if="icon.main_color" class="chip" :style="{background: icon.main_color, color:'#fff'}">{{ icon.main_color }}</span>
+          <span v-if="icon.main_color" class="chip" :style="{background: icon.main_color}">{{ icon.main_color }}</span>
           <div v-if="S.editing === id" style="display:flex; gap:6px; flex:1">
             <input style="flex:1; min-width:100px" :value="icon.brief"
                    placeholder="brief — what to draw (agent instruction)"
@@ -446,7 +456,7 @@ footer { text-align:center; color:var(--muted); font-size:.75rem; padding:20px 0
         {{ S.actionBar.text }}
       </template>
     </span>
-    <button class="subtle" @click="undo" title="undo last apply">↩</button>
+    <button class="subtle" @click="undo" title="undo last apply" aria-label="undo"><span class="ic" v-html="IC.undo"></span></button>
     <button class="primary ab-apply" @click="apply"
             :disabled="!S.decisionEdit.trim() || S.applying">
       {{ S.applying ? '…' : 'Apply' + (S.lines.length ? ' · ' + S.lines.length : '') }}</button>
@@ -454,7 +464,7 @@ footer { text-align:center; color:var(--muted); font-size:.75rem; padding:20px 0
 
   <div v-if="S.settingsDlg" class="overlay" @click.self="S.settingsDlg = false">
     <div class="dialog">
-      <h3><span>⚙ {{ S.pack.name }} settings</span>
+      <h3><span><span class="ic-lg" v-html="IC.gear"></span> {{ S.pack.name }} settings</span>
           <button class="subtle" @click="S.settingsDlg = false">✕</button></h3>
       <div class="controls"><label>version</label>
         <input v-model="S.set.version" style="width:110px"></div>
@@ -486,7 +496,7 @@ footer { text-align:center; color:var(--muted); font-size:.75rem; padding:20px 0
 
   <div v-if="S.fbDlg" class="overlay" @click.self="S.fbDlg = null">
     <div class="dialog">
-      <h3><span class="ic-lg" v-html="IC.comment"></span> {{ fbTitle() }}</span>
+      <h3><span><span class="ic-lg" v-html="IC.comment"></span> {{ fbTitle() }}</span>
           <button class="subtle" @click="S.fbDlg = null">✕</button></h3>
       <p class="muted" style="margin:0 0 8px">Per-round feedback — guides the next draft, then dies with its round (history keeps it). Generally valid? The agent promotes it into the standing note via CLI.</p>
       <div class="chat">
@@ -505,7 +515,7 @@ footer { text-align:center; color:var(--muted); font-size:.75rem; padding:20px 0
       <textarea v-model="S.fbDlg.text" placeholder="what to change in the next draft — e.g. 'thinner roof, door on the right'"></textarea>
       <div class="row" style="margin-top:8px">
         <button class="primary" @click="addFeedback">Add</button>
-        <button class="subtle" @click="S.fbDlg = null">close</button>
+        <button class="subtle" @click="S.fbDlg = null" aria-label="Close">✕</button>
       </div>
     </div>
   </div>
@@ -530,7 +540,7 @@ footer { text-align:center; color:var(--muted); font-size:.75rem; padding:20px 0
           </div>
           <div class="rating" style="margin-top:6px">
             <button :class="{ armed: item(c)?.t === c.cand + ' ok' }" @click="approve(c)">✓</button>
-            <button class="ratebtn" @click="openSheet(c)">★ {{ rating(c) }}</button>
+            <button class="ratebtn" @click="openSheet(c)"><template v-if="hasRating(c)">★ {{ rating(c) }}</template><template v-else>rate</template></button>
             <button :class="{ 'armed-x': item(c)?.t?.startsWith(c.cand + ' no') }" @click="drop(c)">✕</button>
           </div>
         </div>
@@ -622,7 +632,7 @@ const S = reactive({
   dlg: null, sheet: null, fbDlg: null, settingsDlg: false,
   decisionEdit: '', showGen: false, editingBrief: null,
   flash: '', flashOk: true, applying: false, instructions: '',
-  kbFocus: 0, kbVariant: 0, kbCand: 0, compare: null, theme: 'light', iconHist: {}, svgFiles: {},
+  kbFocus: 0, kbVariant: 0, kbCand: 0, compare: null, theme: 'light', iconHist: {}, svgFiles: {}, rejectArm: null,
   history: [], showHistory: false,
   set: { version: '', rules: '', strokeWidth: 2, linecap: 'round', linejoin: 'round', padding: 2, precision: 0.5, palette: null, errors: '' },
   bgs: [
@@ -653,6 +663,7 @@ const IC = {
   moon: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3a6 6 0 0 0 9 9 9 9 0 1 1-9-9z"/></svg>',
   history: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/><path d="M12 7v5l4 2"/></svg>',
   spark: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v2m0 14v2M3 12h2m14 0h2M5.6 5.6l1.4 1.4m10 10 1.4 1.4m0-12.8-1.4 1.4m-10 10-1.4 1.4"/><path d="M12 8.5 13.5 12 12 15.5 10.5 12z"/></svg>',
+  gear: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09a1.65 1.65 0 0 0-1-1.51 1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09a1.65 1.65 0 0 0 1.51-1 1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33h0a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51h0a1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82v0a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>',
 };
 function relTime(iso) {
   if (!iso) return '';
@@ -763,6 +774,7 @@ function fbItems() { const d = S.fbDlg || {}; return d.scope ? fbFor(d.scope, d.
 function openFb(scope, icon, vid) {
   S.fbDlg = { scope, icon, variant: vid, text: '' };
   markSeen();
+  focusDialog();
 }
 function fbChat() {
   const d = S.fbDlg;
@@ -883,6 +895,8 @@ async function startRound() {
 
 function rejectAllIcon(g) {
   if (isViewing()) { flash('viewing history — switch back to the live pass to decide', false); return; }
+  if (S.rejectArm !== g.icon) { S.rejectArm = g.icon; flash('click again to reject ALL of ' + g.icon, false); return; }
+  S.rejectArm = null;
   for (const vg of variantGroups(g)) {
     S.decisions[g.icon + '/' + vg.variant] = { items: [{ cand: '*', t: '* no' }] };
   }
@@ -915,13 +929,16 @@ function render(p, size, bg, color) {
 function item(c) {
   return (S.decisions[c.icon + '/' + c.variant]?.items || []).find(i => i.cand === c.cand);
 }
+function hasRating(c) {
+  const it = item(c);
+  return !!it && (/(^| )rate [0-9]+$/.test(it.t) || it.t.endsWith(' ok'));
+}
 function rating(c) {
   const it = item(c);
-  if (!it) return 5;
+  if (!it) return 0;
   const m = it.t.match(/rate ([0-9]+)/); if (m) return +m[1];
   if (it.t.endsWith(' ok')) return 10;
-  if (it.t.includes(' no') || it.t.endsWith(' keep')) return 0;
-  return 5;
+  return 0;
 }
 const draftKey = () => `iconpilot.draft.${S.pack.name}.${S.round}`;
 function saveDraft() {
@@ -1003,8 +1020,26 @@ function styleLabel(sid) {
   const s = S.styles[sid];
   return sid + (s ? ` — ${s.label}` : '');
 }
-function openSheet(c) { S.sheet = { c }; }
+function openSheet(c) {
+  focusDialog(); S.sheet = { c }; }
 function cmpLabel(c) { return c.variant + '/' + c.cand; }
+let _lastFocus = null;
+function focusDialog() {
+  _lastFocus = document.activeElement;
+  requestAnimationFrame(() => {
+    const dlg = document.querySelector('.overlay:not([style*="none"]) .dialog, .overlay .sheetbox');
+    (dlg?.querySelector('textarea, select, input, button') || dlg)?.focus();
+  });
+}
+function restoreFocus() {
+  _lastFocus?.focus?.();
+  _lastFocus = null;
+}
+function kbScroll() {
+  requestAnimationFrame(() => {
+    document.querySelector('.card.kbactive')?.scrollIntoView({ block: 'nearest' });
+  });
+}
 function toggleCompare(c) {
   if (S.compare && S.compare.length === 1
       && S.compare[0].variant === c.variant && S.compare[0].cand === c.cand) {
@@ -1014,11 +1049,12 @@ function toggleCompare(c) {
     S.compare = [c];
     flash('compare: picked ' + cmpLabel(c) + ' — pick a second one', true);
   } else {
-    S.compare.push(c);
+    S.compare.push(c); focusDialog();
     flash('comparing ' + S.compare.map(cmpLabel).join(' vs '), true);
   }
 }
 function openSettings() {
+  focusDialog();
   const sp = S.pack.spec || {};
   S.set = {
     version: S.pack.version || '',
@@ -1081,7 +1117,7 @@ async function undo() {
   try {
     const r = await api('/api/undo', { method: 'POST', headers: { 'Content-Type': 'application/json' },
       body: '{}' });
-    flash('↩ undone (rev ' + r.rev + ')', true);
+    flash('undone (rev ' + r.rev + ')', true);
     S.decisions = {}; editDirty = false; S.decisionEdit = ''; S.instructions = '';
     clearDraft(); await load();
   } catch (e) { flash('✗ ' + e.message, false); }
@@ -1192,7 +1228,7 @@ const App = {
     // keyboard shortcuts
     const onKey = (e) => {
       if (S.dlg || S.sheet || S.fbDlg || S.settingsDlg || S.compare) {
-        if (e.key === 'Escape') { S.dlg = null; S.sheet = null; S.fbDlg = null; S.settingsDlg = false; S.compare = null; }
+        if (e.key === 'Escape') { S.dlg = null; S.sheet = null; S.fbDlg = null; S.settingsDlg = false; S.compare = null; restoreFocus(); }
         return;
       }
       if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA' || e.target.tagName === 'SELECT') return;
@@ -1211,19 +1247,21 @@ const App = {
       if (e.key === '1') { approve(c); e.preventDefault(); }
       else if (e.key === '2') { keep(c); e.preventDefault(); }
       else if (e.key === '3') { drop(c); e.preventDefault(); }
-      else if (e.key === '[') { S.kbFocus = Math.max(0, gi - 1); S.kbVariant = 0; S.kbCand = 0; e.preventDefault(); }
-      else if (e.key === ']') { S.kbFocus = Math.min(groups.length - 1, gi + 1); S.kbVariant = 0; S.kbCand = 0; e.preventDefault(); }
+      else if (e.key === '[') { S.kbFocus = Math.max(0, gi - 1); S.kbVariant = 0; S.kbCand = 0; e.preventDefault(); kbScroll(); }
+      else if (e.key === ']') { S.kbFocus = Math.min(groups.length - 1, gi + 1); S.kbVariant = 0; S.kbCand = 0; e.preventDefault(); kbScroll(); }
       else if (e.key === 'ArrowRight' || e.key === 'ArrowDown') {
         const next = ci + 1;
         if (next < vg.cands.length) S.kbCand = next;
         else if (vi + 1 < vgs.length) { S.kbVariant = vi + 1; S.kbCand = 0; }
         else if (gi + 1 < groups.length) { S.kbFocus = gi + 1; S.kbVariant = 0; S.kbCand = 0; }
+        kbScroll();
         e.preventDefault();
       } else if (e.key === 'ArrowLeft' || e.key === 'ArrowUp') {
         const prev = ci - 1;
         if (prev >= 0) S.kbCand = prev;
         else if (vi - 1 >= 0) { S.kbVariant = vi - 1; S.kbCand = (vgs[vi-1]?.cands.length || 1) - 1; }
         else if (gi - 1 >= 0) { S.kbFocus = gi - 1; S.kbVariant = vgs.length - 1; S.kbCand = 0; }
+        kbScroll();
         e.preventDefault();
       } else if (e.key === 'Enter') {
         if (S.decisionEdit.trim()) apply();
@@ -1243,7 +1281,7 @@ const App = {
       batchApprove, batchReject, toggleCompare,
       isLocked, recraftDraft, recraftIcon, startRound, saveIconDesc, totalCost,
       fbFor, fbNew, fbTitle, fbItems, fbChat, openFb, addFeedback, resolveFeedback, switchRound, isViewing,
-      IC, relTime, isNew, copyPrompt, reopen, toggleTheme, cmpLabel, initTheme, loadIconHist,
+      IC, relTime, isNew, copyPrompt, reopen, toggleTheme, cmpLabel, initTheme, loadIconHist, hasRating,
 
     };
   },
