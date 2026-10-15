@@ -497,6 +497,11 @@ class ReviewHandler(BaseHTTPRequestHandler):
                     status = f.read_text().strip()
                 except OSError:
                     status = ""
+            # an applied round outranks a stale step message: the ball is with
+            # the user (start the next pass), not the agent
+            runs = sorted(p.name for p in (self.pack_dir / ".runs").glob("r*") if p.is_dir())
+            if runs and (self.pack_dir / ".runs" / runs[-1] / "decisions.json").is_file():
+                status = f"{runs[-1]} applied — waiting: start the next pass (agent drafts after)"
             self._json(200, {"status": status, "active": bool(status)})
             return
 

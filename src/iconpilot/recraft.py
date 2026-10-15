@@ -60,13 +60,15 @@ VECTOR_MODELS = (
 
 
 def draft_prompt(icon: dict, style, pack: dict) -> str:
-    """Rich text-to-image prompt: durable description, color, style, rules.
+    """Rich text-to-image prompt: icon brief, color world, style, rules.
 
-    Uses the icon DESCRIPTION (docs) over the brief when present; always names
-    the main color and palette so Recraft lands in the pack's color world.
+    The brief is the single icon description (humans and agent share it);
+    always names the main color and palette so Recraft lands in the pack's
+    color world.
     """
+    # one field: the brief describes the icon for humans AND the agent
     parts = [
-        icon.get("description") or icon.get("brief") or "",
+        icon.get("brief") or icon.get("description") or "",
         f"{style.label} style",
         ", ".join(style.style_words[:4]),
     ]

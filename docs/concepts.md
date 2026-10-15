@@ -113,14 +113,15 @@ is the new refinement base.
 
 | Field | Lives on | Audience | Lifecycle | Example |
 |---|---|---|---|---|
-| `description` | pack, icon | **Humans** — docs, exports, README | durable | "Icons for wodore accommodation POIs" |
+| `description` | pack | **Humans** — docs, exports, README | durable | "Icons for wodore accommodation POIs" |
 | `brief` | pack, icon | **Agent** — what to draw | durable until redrawn | "alpine hut, gabled roof, chimney left" |
 | `prompt` | icon | **Agent** — overrides brief when set | durable | full custom prompt |
 | `feedback` items (💬) | pack, icon, variant — **per round** | **Agent + user** (both author) | guides ONE draft, then archived to that round's history; resolve early or let `next` archive it | "thinner roof" |
 | `rules` | pack | **Agent** — hard guidance, every draft | durable | "no chimneys anywhere" |
 | rating comments (`rate 7`) | candidate, per round | **you + history** | die with the round; history keeps them | "a1 rate 7" |
 
-Rule of thumb: **description documents, brief directs, feedback corrects.**
+Rule of thumb: **the pack description documents, the icon brief describes (one text for
+human and agent), feedback corrects.**
 Feedback is a per-round todo list: user and agent both add items (💬 dialogs or
 `iconpilot feedback`), items guide exactly one draft, `next` archives them into
 `.runs/<round>/feedback.json` (history) and starts clean. Durable insight?

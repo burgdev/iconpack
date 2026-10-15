@@ -329,13 +329,12 @@ def test_schema_description_fields(tmp_path: Path) -> None:
     assert not errors
 
 
-def test_context_separates_description_and_note(tmp_path: Path) -> None:
+def test_context_pack_description_and_feedback(tmp_path: Path) -> None:
     d = _pack(tmp_path)
     pack = json.loads((d / "pack.json").read_text())
     pack["description"] = "pack docs"
     pack["note"] = "pack feedback"
-    pack["icons"]["sun"]["description"] = "icon docs"
-    pack["icons"]["sun"]["note"] = "icon feedback"
+    pack["icons"]["sun"]["note"] = "legacy icon note"
     (d / "pack.json").write_text(json.dumps(pack))
     from iconpilot.context import build_context
     from iconpilot.pack import load_pack
@@ -343,9 +342,10 @@ def test_context_separates_description_and_note(tmp_path: Path) -> None:
     pack_data, styles = load_pack(d / "pack.json")
     ctx = build_context(d, pack_data, styles, "sun", "flat")
     assert ctx["pack_description"] == "pack docs"
-    assert ctx["icon_description"] == "icon docs"
+    assert "icon_description" not in ctx  # brief is the single icon description
+    assert ctx["brief"]  # the brief is present, shared human+agent
     assert ctx["pack_note"] == "pack feedback"
-    assert ctx["icon_note"] == "icon feedback"
+    assert ctx["icon_note"] == "legacy icon note"
 
 
 def test_fallback_model_is_cheapest_vector() -> None:
@@ -506,13 +506,12 @@ def test_styles_extends_resolution() -> None:
         resolve_styles({"bad": {"extends": "nope"}})
 
 
-def test_draft_prompt_uses_description_and_colors() -> None:
+def test_draft_prompt_uses_brief_and_colors() -> None:
     from iconpilot.recraft import draft_prompt
     from iconpilot.styles import resolve_styles
 
     icon = {
-        "brief": "peaks brief",
-        "description": "Two alpine peaks under a low sun",
+        "brief": "Two alpine peaks under a low sun",
         "main_color": "#2b6cb0",
     }
     pack = {"rules": ["no chimneys"], "styles": {}}
@@ -523,8 +522,7 @@ def test_draft_prompt_uses_description_and_colors() -> None:
         palette=("#2b6cb0", "#2f855a", "#c05621", "#4a5568"),
     )
     p = draft_prompt(icon, style, pack)
-    assert "Two alpine peaks under a low sun" in p
-    assert "peaks brief" not in p  # description wins over brief
+    assert "Two alpine peaks under a low sun" in p  # the brief describes the icon
     assert "#2b6cb0" in p  # main color + palette
     assert "no chimneys" in p
 

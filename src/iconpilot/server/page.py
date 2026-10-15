@@ -435,11 +435,8 @@ footer { text-align:center; color:var(--muted); font-size:.75rem; padding:20px 0
           <span v-if="icon.main_color" class="chip" :style="{background: icon.main_color}">{{ icon.main_color }}</span>
           <div v-if="S.editing === id" style="display:flex; gap:6px; flex:1">
             <input style="flex:1; min-width:100px" :value="icon.brief"
-                   placeholder="brief — what to draw (agent instruction)"
+                   placeholder="describe the icon — human and agent read the same text"
                    @keydown.enter="saveIcon(id, $event.target.value)" @blur="saveIcon(id, $event.target.value)">
-            <input style="flex:1; min-width:100px" :value="icon.description"
-                   placeholder="description — durable docs for humans"
-                   @keydown.enter="saveIconDesc(id, $event.target.value)" @blur="saveIconDesc(id, $event.target.value)">
           </div>
           <span v-else class="muted" style="flex:1; cursor:text" @click="S.editing = id">{{ icon.brief }}</span>
           <button class="subtle" @click="S.editing = S.editing === id ? null : id">edit</button>
@@ -1141,15 +1138,6 @@ async function saveBrief(g, brief) {
     S.msg = `brief saved (rev ${r.rev})`; S.msgClass = 'ok'; await load();
   } catch (e) { S.msg = e.d?.errors ? e.d.errors.join('\\n') : e.message; S.msgClass = 'err'; }
 }
-async function saveIconDesc(id, desc) {
-  const cur = S.pack.icons?.[id]?.description || '';
-  if (desc === cur) return;
-  try {
-    const r = await api('/api/icon', { method: 'PUT', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ icon: id, description: desc }) });
-    S.msg = `description saved (rev ${r.rev})`; S.msgClass = 'ok'; await load();
-  } catch (e) { S.msg = e.message; S.msgClass = 'err'; }
-}
 async function saveMainColor(g, color) {
   try {
     const r = await api('/api/icon', { method: 'PUT', headers: { 'Content-Type': 'application/json' },
@@ -1469,7 +1457,7 @@ const App = {
       variantGroups, packBriefIcon, mainColorIcon, saveMainColorIcon, rejectAllIcon,
        copyPath, togglePin, isPinned, undo,
       batchApprove, batchReject, toggleCompare,
-      isLocked, recraftDraft, recraftIcon, startRound, saveIconDesc, totalCost,
+      isLocked, recraftDraft, recraftIcon, startRound, totalCost,
       fbFor, fbNew, fbTitle, fbItems, fbChat, openFb, addFeedback, resolveFeedback, switchRound, isViewing,
       IC, relTime, isNew, copyPrompt, reopen, toggleTheme, cmpLabel, initTheme, loadIconHist, hasRating,
       showDebug, openNextDlg, addVariantBulk, addCustomStyle, saveRecraftDefaults,

@@ -64,11 +64,10 @@ def build_context(
     }
     if icon.get("main_color"):
         ctx["main_color"] = icon["main_color"]
-    # durable docs (what this is) — distinct from feedback below
+    # pack docs (what this pack is for) — the icon BRIEF is the single
+    # per-icon description, shared by humans and the agent
     if pack.get("description"):
         ctx["pack_description"] = pack["description"]
-    if icon.get("description"):
-        ctx["icon_description"] = icon["description"]
     # agent feedback (what to change) — carried every round until cleared
     if pack.get("note"):
         ctx["pack_note"] = pack["note"]
@@ -266,8 +265,6 @@ def render_markdown(ctx: dict) -> str:
         lines += [f"**Main color:** `{ctx['main_color']}`", ""]
     if "pack_description" in ctx:
         lines += [f"**Pack (docs):** {ctx['pack_description']}", ""]
-    if "icon_description" in ctx:
-        lines += [f"**Icon (docs):** {ctx['icon_description']}", ""]
     if "pack_note" in ctx:
         lines += [f"**Pack note (standing instructions):** {ctx['pack_note']}", ""]
     if "icon_note" in ctx:
