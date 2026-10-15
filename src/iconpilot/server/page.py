@@ -54,6 +54,7 @@ PAGE = """<!doctype html>
   color-scheme: dark;
 }
 * { box-sizing: border-box; }
+.dialog .row > label.muted { flex:0 0 110px; min-width:0; }
 input, select, textarea {
   font: inherit; color: var(--ink); background: var(--card);
   border: 1px solid var(--line); border-radius: 8px;
@@ -65,7 +66,7 @@ input[type="range"] { min-height: 0; padding: 0; }
 :is(button, input, select, textarea, summary):focus-visible {
   outline: 2px solid var(--focus); outline-offset: 1px;
 }
-button { transition: border-color .12s ease-out, background-color .12s ease-out, color .12s ease-out; }
+button, .card, .iconbtn, .histhumb, .stylestrip summary, .chip { transition: border-color .12s ease-out, background-color .12s ease-out, color .12s ease-out; }
 button:disabled { opacity:.45; cursor:not-allowed; }
 .ab-apply:disabled { background:var(--card); color:var(--muted); border-color:var(--line); }
 body { margin:0; font:15px/1.45 system-ui,-apple-system,Segoe UI,Roboto,sans-serif;
@@ -94,7 +95,7 @@ header .meta { color:var(--muted); font-size:.8rem; }
 .tabs button { border:none; border-bottom:2px solid transparent; border-radius:8px 8px 0 0; background:none;
                color:var(--muted); padding:8px 14px; font-weight:600; }
 .tabs button.on { color:var(--accent); border-bottom-color:var(--accent); }
-.refcell { margin:0; text-align:center; position:relative; }
+.refcell { margin:0; width:56px; display:inline-flex; flex-direction:column; align-items:center; gap:2px; position:relative; }
 .refcell img { border-radius:8px; background:#fff; display:block; }
 .refcell .armed-x { position:absolute; top:-6px; right:-6px; padding:0 5px; }
 .palchip { width:44px; height:32px; border-radius:8px; border:1px solid var(--line); position:relative;
@@ -103,10 +104,11 @@ header .meta { color:var(--muted); font-size:.8rem; }
 .palchip .palx { position:absolute; top:-1px; right:-1px; padding:0 3px; font-size:.7rem; background:var(--card); border:1px solid var(--line); border-radius:0 0 0 6px; }
 .paladd { border-style:dashed; color:var(--muted); }
 .palrow { display:inline-flex; gap:3px; align-items:center; }
+.chip.rule { background:color-mix(in oklab, var(--accent) 10%, var(--card)); }
 .paldot { width:12px; height:12px; border-radius:50%; display:inline-block; border:1px solid var(--line); }
 .chat { max-height:300px; overflow-y:auto; border:1px solid var(--line); border-radius:10px; padding:10px; margin-bottom:10px;
        background:color-mix(in oklab, var(--bg) 60%, var(--card)); display:flex; flex-direction:column; gap:6px; }
-.chat-head { font-size:.68rem; text-transform:uppercase; letter-spacing:.08em; color:var(--muted); text-align:center; margin:6px 0 2px; }
+.chat-head { font-size:.75rem; text-transform:uppercase; letter-spacing:.08em; color:var(--muted); text-align:center; margin:6px 0 2px; }
 .chat-head:first-child { margin-top:0; }
 .bubble { display:flex; align-items:baseline; gap:8px; padding:5px 10px; border-radius:12px; max-width:88%; font-size:.88rem; }
 .bubble.user { align-self:flex-end; background:color-mix(in oklab, var(--accent) 14%, var(--card)); }
@@ -114,7 +116,7 @@ header .meta { color:var(--muted); font-size:.8rem; }
 .bubble.agent .bubble-text { color:var(--ink); }
 .r-archived .bubble { opacity:.75; }
 .bubble-text { flex:1; overflow-wrap:anywhere; }
-.bubble-time { font-size:.66rem; color:var(--muted); white-space:nowrap; }
+.bubble-time { font-size:.75rem; color:var(--muted); white-space:nowrap; }
 .scope { font-size:.75rem; }
 .chip.agent { background:color-mix(in srgb, var(--warn) 18%, transparent); }
 .chip.user { background:color-mix(in srgb, var(--line) 40%, transparent); }
@@ -146,14 +148,15 @@ button.primary { background:var(--accent); color:var(--accent-ink); border-color
 button.subtle { font-size:.8rem; padding:4px 8px; color:var(--muted); }
 button.armed { border-color:var(--accent); color:var(--accent); font-weight:600; }
 button.armed-x { border-color:var(--warn); color:var(--warn); font-weight:600; }
-.chip { display:inline-block; padding:1px 8px; border-radius:99px; font-size:.72rem; background:var(--chip); color:var(--muted); }
+.chip { display:inline-block; padding:1px 8px; border-radius:99px; font-size:.75rem; background:var(--chip); color:var(--muted); }
 .chip.approved { background:var(--accent); color:var(--accent-ink); }
 .chip.in_review, .chip.stale { background:var(--warn); color:var(--bg); }
 textarea { font:13px/1.5 ui-monospace,Menlo,Consolas,monospace; width:100%; min-height:64px; padding:8px;
            border-radius:8px; border:1px solid var(--line); background:var(--card); color:var(--ink); resize:vertical; }
 textarea[readonly] { color:var(--muted); }
 .composer { background:var(--card); border:1px solid var(--line); border-radius:12px; padding:12px; margin:14px 0; }
-.composer .row { display:flex; gap:8px; align-items:center; flex-wrap:wrap; margin-top:8px; }
+.row { display:flex; gap:8px; align-items:center; flex-wrap:wrap; }
+.composer .row { margin-top:8px; }
 .err { color:var(--danger); font-size:.85rem; white-space:pre-wrap; margin:4px 0; }
 .ok { color:var(--accent); font-size:.85rem; }
 /* dialog */
@@ -172,7 +175,7 @@ textarea[readonly] { color:var(--muted); }
 input[type=color] { width:34px; height:28px; padding:0 2px; border:1px solid var(--line); border-radius:8px; background:none; }
 .matrix { display:flex; gap:12px; margin:10px 0; flex-wrap:wrap; }
 .matrix .col { flex:1; min-width:200px; }
-.matrix .colhead { font-size:.72rem; letter-spacing:.08em; color:var(--muted); margin-bottom:4px; }
+.matrix .colhead { font-size:.75rem; letter-spacing:.08em; color:var(--muted); margin-bottom:4px; }
 .matrix .stage { border-radius:10px; display:flex; align-items:flex-end; justify-content:space-around;
                  padding:14px 8px; gap:8px; min-height:130px; }
 .matrix .sizes { font-size:.7rem; color:var(--muted); text-align:center; margin-top:4px; }
@@ -237,7 +240,7 @@ footer { text-align:center; color:var(--muted); font-size:.75rem; padding:20px 0
 .histcell img { display:block; margin:0 auto; border-radius:6px; }
 .histhumb { padding:0; border:1px solid var(--line); border-radius:8px; background:var(--card); cursor:zoom-in; }
 .histhumb:hover { border-color:var(--accent); }
-.histcell figcaption { font-size:.68rem; }
+.histcell figcaption { font-size:.75rem; }
 .thumb.missing { width:64px; height:64px; display:flex; align-items:center; justify-content:center;
                  color:var(--muted); border:1px dashed var(--line); border-radius:8px; }
 .iconbtn { padding:3px 7px; font-size:.85rem; border:none; background:none; cursor:pointer;
@@ -417,7 +420,7 @@ footer { text-align:center; color:var(--muted); font-size:.75rem; padding:20px 0
           <button @click="copy">copy JSON</button>
         </div>
         <div class="row" style="margin-top:6px">
-          <span class="muted">keys: ←→ move · [ ] group · 1 ok · 2 drop · 0 rate · esc close</span>
+          <span class="muted">keys: ←→ move · [ ] group · 1 ok · 2 drop · 0 rate · enter apply · esc close</span>
         </div>
         <div class="row" style="margin-top:6px">
           <span class="muted">batch:</span>
@@ -468,13 +471,16 @@ footer { text-align:center; color:var(--muted); font-size:.75rem; padding:20px 0
       <div class="group" v-for="sid in usedStyles()" :key="sid">
         <div class="ghead">
           <b>{{ sid }}</b>
-          <span class="chip" v-if="S.styleRefs[sid]">{{ S.styleRefs[sid].source }} refs</span>
-          <span class="chip" v-for="ru in styleRules(sid)" :key="ru">{{ ru }}</span>
-          <span class="palrow"><i v-for="c in stylePalette(sid)" :key="c" class="paldot" :style="{background: c}"></i></span>
+          <span class="chip" title="glyphs using this style">{{ styleUsageCount(sid) }} glyphs</span>
+          <span class="chip" v-if="S.styleRefs[sid]" title="where the reference icons come from">{{ S.styleRefs[sid].source }} refs</span>
+          <span class="chip rule" v-for="ru in styleRules(sid)" :key="ru" :title="ruleTitle(ru)">{{ ru }}</span>
+          <span class="palrow" v-if="stylePalette(sid).length" title="style palette"><i v-for="c in stylePalette(sid)" :key="c" class="paldot" :style="{background: c}" :title="c"></i></span>
           <span class="spacer"></span>
           <button class="subtle" @click="editStyle(sid)">edit rules</button>
-          <button class="subtle armed-x" @click="removeStyle(sid)" title="remove the variant from every glyph">remove</button>
+          <button class="subtle" :class="{ 'armed-x': S.removeArm === sid }" @click="removeStyle(sid)"
+                  title="remove the variant from every glyph (click twice)">remove</button>
         </div>
+        <p class="muted" style="margin:0 0 4px">references — the look to match (own uploads replace bundled)</p>
         <div class="row" style="flex-wrap:wrap">
           <figure v-for="ic in (S.styleRefs[sid]?.icons || [])" :key="sid + ic.name" class="refcell">
             <img width="48" height="48" loading="lazy"
@@ -498,8 +504,7 @@ footer { text-align:center; color:var(--muted); font-size:.75rem; padding:20px 0
         <div class="ghead"><b>add a style to every glyph</b></div>
         <div class="row" style="flex-wrap:wrap; gap:10px">
           <button v-for="(st, sid) in S.styles" :key="sid" v-show="!usedStyles().includes(sid)"
-                  class="subtle" style="flex-direction:column; display:flex; align-items:center; gap:4px"
-                  @click="addStyleToPack(sid)">
+                  class="subtle stylepick" @click="addStyleToPack(sid)">
             <img v-if="S.styleRefs[sid]" width="40" height="40" style="border-radius:6px"
                  :src="'/api/style-ref-file?style=' + encodeURIComponent(sid) + '&name=' + encodeURIComponent(S.styleRefs[sid].icons[0]?.name || '')">
             <span>{{ sid }}</span>
@@ -514,12 +519,12 @@ footer { text-align:center; color:var(--muted); font-size:.75rem; padding:20px 0
         <h3><span>style rules · {{ S.styleEdit.id }}</span>
             <button class="subtle" @click="S.styleEdit = null" aria-label="Close">✕</button></h3>
         <div class="row" style="flex-direction:column; align-items:stretch; gap:6px">
-          <div class="row"><label style="width:110px" class="muted">label</label><input v-model="S.styleEdit.label" style="flex:1"></div>
-          <div class="row"><label style="width:110px" class="muted">grid px</label><input v-model="S.styleEdit.size" type="number" style="width:90px">
-            <label style="width:110px; margin-left:12px" class="muted">stroke width</label><input v-model="S.styleEdit.strokeWidth" type="number" step="0.5" style="width:90px"></div>
-          <div class="row"><label style="width:110px" class="muted">min gap</label><input v-model="S.styleEdit.minGap" type="number" step="0.5" style="width:90px">
-            <label style="width:110px; margin-left:12px" class="muted">max nodes</label><input v-model="S.styleEdit.maxNodes" type="number" style="width:90px"></div>
-          <div class="row" style="align-items:flex-start"><label style="width:110px" class="muted">palette</label>
+          <div class="row"><label class="muted">label</label><input v-model="S.styleEdit.label" style="flex:1"></div>
+          <div class="row"><label class="muted" title="canvas size the icons are drawn on (24 or 48 typical)">grid px</label><input v-model="S.styleEdit.size" type="number" style="width:90px">
+            <label class="muted" title="outline stroke thickness">stroke width</label><input v-model="S.styleEdit.strokeWidth" type="number" step="0.5" style="width:90px"></div>
+          <div class="row"><label class="muted" title="minimum spacing between separate strokes — near-misses fail the gate">min gap</label><input v-model="S.styleEdit.minGap" type="number" step="0.5" style="width:90px">
+            <label class="muted" title="complexity budget: total path points">max nodes</label><input v-model="S.styleEdit.maxNodes" type="number" style="width:90px"></div>
+          <div class="row" style="align-items:flex-start"><label class="muted" title="allowed colors — only these pass the gate">palette</label>
             <div class="row" style="flex:1; flex-wrap:wrap; gap:6px">
               <label v-for="(c, i) in S.styleEdit.paletteList" :key="i" class="palchip" :style="{background: c}">
                 <input type="color" :value="c" @input="S.styleEdit.paletteList[i] = $event.target.value" :aria-label="'color ' + (i+1)">
@@ -528,9 +533,9 @@ footer { text-align:center; color:var(--muted); font-size:.75rem; padding:20px 0
               <label class="palchip paladd"><input type="color" value="#2b6cb0" @input="S.styleEdit.paletteList.push($event.target.value)" aria-label="add color"><span>＋</span></label>
             </div>
           </div>
-          <div class="row"><label style="width:110px" class="muted">style words</label><input v-model="S.styleEdit.words" placeholder="comma separated" style="flex:1"></div>
-          <div class="row"><label style="width:110px" class="muted">avoid</label><input v-model="S.styleEdit.avoid" placeholder="comma separated" style="flex:1"></div>
-          <div class="row" style="align-items:flex-start"><label style="width:110px" class="muted">gate checks</label>
+          <div class="row"><label class="muted" title="vocabulary injected into every drafting brief">style words</label><input v-model="S.styleEdit.words" placeholder="comma separated" style="flex:1"></div>
+          <div class="row"><label class="muted" title="negative vocabulary — never appears in drafts">avoid</label><input v-model="S.styleEdit.avoid" placeholder="comma separated" style="flex:1"></div>
+          <div class="row" style="align-items:flex-start"><label class="muted">gate checks</label>
             <div style="flex:1; display:flex; flex-direction:column; gap:4px">
               <label v-for="g in GATE_HELP" :key="g.k" style="display:flex; gap:8px; align-items:baseline">
                 <input type="checkbox" :checked="!(S.styleEdit.gateOff || []).includes(g.k)" @change="toggleGate(g.k)" style="min-height:0">
@@ -538,7 +543,7 @@ footer { text-align:center; color:var(--muted); font-size:.75rem; padding:20px 0
               </label>
             </div>
           </div>
-          <div class="row"><label style="width:110px" class="muted">guidance</label><input v-model="S.styleEdit.guidance" style="flex:1"></div>
+          <div class="row"><label class="muted" title="freeform prose for the drafting agent">guidance</label><input v-model="S.styleEdit.guidance" style="flex:1"></div>
         </div>
         <div class="row" style="margin-top:10px">
           <button class="primary" @click="saveStyleRules">save rules</button>
@@ -591,7 +596,7 @@ footer { text-align:center; color:var(--muted); font-size:.75rem; padding:20px 0
 <footer>iconpilot review v{{ S.version }} · flock-serialized writes · approval is always yours</footer>
   </main>
 
-  <div class="actionbar" :class="{ ready: S.actionBar.ready }">
+  <div class="actionbar" v-show="S.tab === 'round'" :class="{ ready: S.actionBar.ready }">
     <span class="ab-status" :class="{ 'flash-ok': S.flash && S.flashOk, 'flash-err': S.flash && !S.flashOk }">
       <template v-if="S.flash">{{ S.flash }}</template>
       <template v-else>
@@ -613,7 +618,7 @@ footer { text-align:center; color:var(--muted); font-size:.75rem; padding:20px 0
       <h3><span><span class="ic-lg" v-html="IC.gear"></span> {{ S.pack.name }} settings</span>
           <button class="subtle" @click="S.settingsDlg = false">✕</button></h3>
       <div class="controls"><label>version</label>
-        <input v-model="S.set.version" style="width:110px"></div>
+        <input v-model="S.set.version"></div>
       <div class="controls" style="align-items:flex-start"><label>description</label>
         <textarea v-model="S.set.description" placeholder="durable docs: what this collection is for — shown to humans, exports, READMEs"></textarea></div>
       <div class="controls" style="align-items:flex-start"><label>global note</label>
@@ -881,7 +886,7 @@ const S = reactive({
   kbFocus: 0, kbVariant: 0, kbCand: 0, kbUsed: false, compare: null, histView: null,
   recraftReady: false, debug: new URLSearchParams(location.search).has('debug'), debugDlg: null, nextDlg: null,
   appliedRound: null,
-  recraftModels: {}, styleRefs: {}, styleDetail: {}, styleEdit: null, theme: 'light', iconHist: {}, svgFiles: {}, rejectArm: null,
+  recraftModels: {}, styleRefs: {}, styleDetail: {}, styleEdit: null, removeArm: null, theme: 'light', iconHist: {}, svgFiles: {}, rejectArm: null,
   history: [], showHistory: false,
   set: { version: '', rules: '', strokeWidth: 2, linecap: 'round', linejoin: 'round', padding: 2, precision: 0.5, palette: null, errors: '' },
   bgs: [
@@ -1134,6 +1139,21 @@ function batchReject(maxScore) {
   flash('batch: rejected ' + (maxScore === 0 ? 'unrated' : 'all rated ≤ ' + maxScore), true);
 }
 function isViewing() { return !!(S.viewRound && S.viewRound !== S.latest); }
+function ruleTitle(ru) {
+  if (ru.startsWith('stroke')) return 'stroke width in px';
+  if (ru.endsWith('px')) return 'design grid size';
+  if (ru.startsWith('gap')) return 'minimum spacing between strokes (near-miss check)';
+  if (ru.includes('nodes')) return 'path complexity budget';
+  if (ru.endsWith(' off')) return 'gate check disabled for this style';
+  return ru;
+}
+function styleUsageCount(sid) {
+  let n = 0;
+  for (const icon of Object.values(S.pack.icons || {}))
+    for (const v of Object.values(icon.variants || {}))
+      if (v.style === sid && !v.link) n += 1;
+  return n;
+}
 function styleRules(sid) {
   const st = S.styles[sid]; if (!st) return [];
   const r = [];
@@ -1203,7 +1223,8 @@ async function saveStyleRules() {
   } catch (err) { flash('save style: ' + (err.d?.error || err.message), false); }
 }
 async function removeStyle(sid) {
-  if (!confirm('Remove style "' + sid + '"? This deletes its variant from every glyph (approved ones must be unlocked first).')) return;
+  if (S.removeArm !== sid) { S.removeArm = sid; flash('click remove again to delete "' + sid + '" from every glyph', false); return; }
+  S.removeArm = null;
   try {
     await api('/api/pack-style-remove', { method: 'POST', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ id: sid }) });
@@ -1768,6 +1789,7 @@ const App = {
       const c = vg.cands[Math.min(ci, vg.cands.length - 1)];
       if (e.key === '1') { approve(c); e.preventDefault(); }
       else if (e.key === '2') { drop(c); e.preventDefault(); }
+      else if (e.key === '0') { openSheet(c); e.preventDefault(); }
       else if (e.key === '3') { drop(c); e.preventDefault(); }
       else if (e.key === '[') { kbUsedNow(); S.kbFocus = Math.max(0, gi - 1); S.kbVariant = 0; S.kbCand = 0; e.preventDefault(); kbScroll(); }
       else if (e.key === ']') { kbUsedNow(); S.kbFocus = Math.min(groups.length - 1, gi + 1); S.kbVariant = 0; S.kbCand = 0; e.preventDefault(); kbScroll(); }
@@ -1805,7 +1827,7 @@ const App = {
       fbFor, fbNew, fbTitle, fbItems, fbChat, openFb, addFeedback, resolveFeedback, switchRound, isViewing,
       IC, relTime, isNew, copyPrompt, reopen, toggleTheme, cmpLabel, initTheme, loadIconHist, hasRating,
       showDebug, openNextDlg, addVariantBulk, addCustomStyle, saveRecraftDefaults,
-      GATE_HELP, styleRules, stylePalette, isPostponed, togglePostpone, applyAndNext, colState, toggleCol, toggleAll, usedStyles, setTab,
+      GATE_HELP, styleRules, stylePalette, ruleTitle, styleUsageCount, isPostponed, togglePostpone, applyAndNext, colState, toggleCol, toggleAll, usedStyles, setTab,
       styleSummary, isOwnRef, editStyle, toggleGate, saveStyleRules, removeStyle, addStyleToPack, pickRefFile, removeRef,
 
     };
