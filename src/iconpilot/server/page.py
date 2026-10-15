@@ -93,6 +93,7 @@ header .meta { color:var(--muted); font-size:.8rem; }
                       border-radius:10px; background:var(--card); display:inline-flex; gap:8px; align-items:center;
                       user-select:none; }
 .stylestrip summary:hover { color:var(--ink); border-color:var(--accent); }
+@keyframes spin { to { transform: rotate(360deg); } }
 .tabs { display:flex; gap:4px; margin: 0 0 14px; border-bottom:1px solid var(--line); }
 .tabs button { border:none; border-bottom:2px solid transparent; border-radius:8px 8px 0 0; background:none;
                color:var(--muted); padding:8px 14px; font-weight:600; display:inline-flex; gap:6px; align-items:center; }
@@ -269,7 +270,13 @@ footer { text-align:center; color:var(--muted); font-size:.75rem; padding:20px 0
 </style>
 </head>
 <body>
-<div id="app">
+<div id="loader" style="display:flex; align-items:center; justify-content:center; min-height:50vh; flex-direction:column; gap:12px;">
+  <svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="var(--accent, #2f855a)" stroke-width="2.5" stroke-linecap="round" style="animation:spin 1s linear infinite">
+    <path d="M21 12a9 9 0 1 1-6.2-8.5"/>
+  </svg>
+  <span style="color:var(--muted, #66707a); font-size:.85rem">loading pack…</span>
+</div>
+<div id="app" style="visibility:hidden">
   <header>
     <h1>{{ S.pack.name || 'iconpilot' }}</h1>
     <span class="meta">rev {{ S.rev }} · S.round {{ S.round || '—' }}</span>
@@ -1964,6 +1971,8 @@ async function load(manual) {
 const App = {
   setup() {
     onMounted(() => {
+      document.getElementById('app').style.visibility = 'visible';
+      document.getElementById('loader')?.remove();
       initTheme();
       if (S.tab === 'settings') loadSettings();
       load().catch(e => { S.msg = e.message; S.msgClass = 'err'; });
