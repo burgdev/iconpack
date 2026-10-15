@@ -515,13 +515,32 @@ def _inner(svg: str) -> str:
     return m.group(1) if m else svg
 
 
+def strip_metadata(svg: str) -> str:
+    """Remove Recraft's C2PA watermark, comments, and non-drawing elements."""
+    import re as _re
+
+    # strip <metadata>…</metadata> (C2PA manifest, provenance data)
+    svg = _re.sub(r"<metadata[\s\S]*?</metadata>", "", svg)
+    # strip <title> and <desc>
+    svg = _re.sub(r"<title[\s\S]*?</title>", "", svg)
+    svg = _re.sub(r"<desc[\s\S]*?</desc>", "", svg)
+    # strip XML comments
+    svg = _re.sub(r"<!--[\s\S]*?-->", "", svg)
+    # strip processing instructions
+    svg = _re.sub(r"<\?[^>]*\?>", "", svg)
+    return svg.strip()
+
+
 def normalize(svg: str, target_viewbox: str) -> str:
     """Rescale a Recraft SVG (native ~1024 grid) onto the pack's grid.
 
-    Wraps content in ``<g transform="scale(k)">`` and rewrites the viewBox.
-    Packed packs that forbid ``<g>`` in allowed_elements will fail the gate —
-    by design: seeds are redrawn by the agent before certification.
+    Strips C2PA metadata first (Recraft embeds provenance watermarks that
+    break renderers), then wraps content in ``<g transform="scale(k)">``
+    and rewrites the viewBox. Packed packs that forbid ``<g>`` in
+    allowed_elements will fail the gate — by design: seeds are redrawn
+    by the agent before certification.
     """
+    svg = strip_metadata(svg)
     tm = re.match(r"0 0 ([\d.]+) ([\d.]+)", target_viewbox.strip())
     if not tm:
         raise RecraftError(f"unsupported target viewBox: {target_viewbox!r}")
