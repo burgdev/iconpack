@@ -765,8 +765,10 @@ class ReviewHandler(BaseHTTPRequestHandler):
         # stale style check: if refs changed since style creation, recreate
         snap_style_id = style_snap.get("recraft_style_id")
         snap_hash = style_snap.get("recraft_style_hash")
+        needs_style_refresh = False
         if snap_style_id and snap_hash and refs and rc.refs_hash(refs) != snap_hash:
-            style_id = None  # stale — fall back to refs until recreated
+            style_id = None
+            needs_style_refresh = True
         per_style_model = style_snap.get("recraft_model")
         model = (
             per_style_model
@@ -790,6 +792,7 @@ class ReviewHandler(BaseHTTPRequestHandler):
             "prompt": prompt,
             "style_id": style_id,
             "curated": curated,
+            "needs_style_refresh": needs_style_refresh,
             "refs": refs,
             "model": model,
             "n": n,
