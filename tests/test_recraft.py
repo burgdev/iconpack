@@ -651,3 +651,87 @@ def test_waiver_suppresses_with_reason(tmp_path: Path) -> None:
     rep = run_gate(svg, pack, style)
     assert rep.passed
     assert any("waiver by user" in c and "gap is intentional" in c for c in rep.checks)
+
+
+# --- sheet mode: 3x3 / 4x4 in one call -----------------------------------------
+
+
+def _sheet_svg(grid: int = 3) -> str:
+    """Synthetic NxN sheet: one small square per cell, cells at 100px pitch."""
+    parts = []
+    for gy in range(grid):
+        for gx in range(grid):
+            x, y = gx * 100 + 30, gy * 100 + 30
+            parts.append(f'<rect x="{x}" y="{y}" width="40" height="40" fill="#2b6cb0"/>')
+    return (
+        f'<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 {grid * 100} {grid * 100}">'
+        + "".join(parts)
+        + "</svg>"
+    )
+
+
+def test_sheet_prompt_wraps_grid_instruction() -> None:
+    p = rc.sheet_prompt("a sailboat", 3)
+    assert "3 by 3 grid of 9 distinct icons" in p
+    assert "a sailboat" in p
+    assert len(p) <= 1000
+
+
+def test_split_sheet_3x3() -> None:
+    cells = rc.split_sheet(_sheet_svg(3), 3, target=24.0)
+    assert len(cells) == 9
+    for svg in cells:
+        assert svg.startswith('<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"')
+        assert "<rect" in svg
+
+
+def test_split_sheet_4x4() -> None:
+    cells = rc.split_sheet(_sheet_svg(4), 4, target=24.0)
+    assert len(cells) == 16
+
+
+def test_split_sheet_rejects_no_viewbox() -> None:
+    with pytest.raises(rc.RecraftError):
+        rc.split_sheet("<svg><rect x='1' y='1' width='2' height='2'/></svg>", 3)
+
+
+def test_draft_sheet_mode_writes_grid_candidates(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    d = _pack(tmp_path, with_style_id=True)
+    monkeypatch.setattr(rc, "resolve_token", lambda models_file=None: "tok")
+
+    def fake_generate(token, prompt, n=4, style_id=None, model=None, reference_urls=None):
+        assert "3 by 3 grid" in prompt and n == 1
+        return [_sheet_svg(3)]
+
+    monkeypatch.setattr(rc, "generate", fake_generate)
+    r = runner.invoke(app, ["draft", str(d), "sun", "--sheet", "3"])
+    assert r.exit_code == 0, r.output
+    seeds = sorted((d / ".runs" / "r001" / "flat" / "sun").glob("r*.svg"))
+    assert len(seeds) == 9  # 9 candidates from 1 image
+    assert "9 seeds" in r.output
+
+
+def test_split_sheet_prefers_named_groups() -> None:
+    """Model complied with <g id='iconN'> → deterministic extraction."""
+    groups = "".join(
+        f'<g id="icon{i}"><rect x="{(i - 1) * 40 + 10}" y="10" width="20" height="20" '
+        f'fill="#2b6cb0"/></g>'
+        for i in range(1, 10)
+    )
+    svg = f'<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 360 40">{groups}</svg>'
+    cells = rc.split_sheet(svg, 3)
+    assert len(cells) == 9
+    assert all("<rect" in c and "svg:" not in c for c in cells)
+
+
+def test_split_sheet_falls_back_when_groups_missing() -> None:
+    cells = rc.split_sheet(_sheet_svg(3), 3)  # no ids → clustering
+    assert len(cells) == 9
+    assert all("svg:" not in c for c in cells)
+
+
+def test_sheet_prompt_asks_for_named_groups() -> None:
+    p = rc.sheet_prompt("a sailboat", 3)
+    assert "g id='icon1'" in p and "icon9" in p

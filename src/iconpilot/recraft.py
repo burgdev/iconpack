@@ -156,6 +156,156 @@ def create_style(token: str, svg_texts: list[str], match: str = "precise") -> di
     return out
 
 
+SHEET_PROMPT_SUFFIX = (
+    ", arranged as a {g} by {g} grid of {n} distinct icons on one canvas. "
+    "IMPORTANT: wrap each icon in its own group element like <g id='icon1'>, "
+    "<g id='icon2'>, … <g id='icon{n}'> (row by row), each icon drawn at the "
+    "same size centered in its cell. Plain empty background, no grid lines, "
+    "no borders, no labels, no numbers"
+)
+
+
+def sheet_prompt(prompt: str, grid: int) -> str:
+    """Wrap a drafting prompt so one image carries grid x grid variants."""
+    g = int(grid)
+    return (
+        prompt[: 900 - len(SHEET_PROMPT_SUFFIX) // 2] + SHEET_PROMPT_SUFFIX.format(g=g, n=g * g)
+    )[:1000]
+
+
+def split_sheet(svg: str, grid: int, target: float = 24.0) -> list[str]:
+    """Split a grid SVG into per-cell candidate SVGs.
+
+    Prefers named groups when the model followed the prompt (<g id='iconN'>):
+    deterministic extraction. Falls back to bbox clustering otherwise. Either
+    way every output still has to pass the gate — and the agent redraws seeds.
+    """
+    grouped = _split_by_groups(svg, target)
+    if grouped and len(grouped) >= grid:  # model complied well enough
+        return grouped
+    return _split_by_clustering(svg, grid, target)
+
+
+def _split_by_groups(svg: str, target: float = 24.0) -> list[str]:
+    """Extract <g id='iconN'> groups; returns [] when the model ignored it."""
+    import re as _re
+    from xml.etree import ElementTree as _ET
+
+    try:
+        root = _ET.fromstring(svg)
+    except _ET.ParseError:
+        return []
+    out = []
+    for g in root.iter():
+        tag = g.tag.split("}")[-1]
+        gid = g.get("id") or ""
+        if tag != "g" or not _re.match(r"icon\d+$", gid):
+            continue
+        els = [e for e in g if e.tag.split("}")[-1] not in ("defs",)]
+        if not els:
+            continue
+        bs = []
+        for e in els:
+            b = _el_bbox(e)
+            if b:
+                bs.append(b)
+        if not bs:
+            continue
+        x0, y0 = min(b[0] for b in bs), min(b[1] for b in bs)
+        x1, y1 = max(b[2] for b in bs), max(b[3] for b in bs)
+        w, h = max(x1 - x0, 1e-6), max(y1 - y0, 1e-6)
+        k = (target * 0.85) / max(w, h)
+        tx = (target - w * k) / 2 - x0 * k
+        ty = (target - h * k) / 2 - y0 * k
+        out.append(
+            f'<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 {target:g} {target:g}">'
+            f'<g transform="translate({tx:.3f} {ty:.3f}) scale({k:.6f})">'
+            f"{_serialize(els)}</g></svg>"
+        )
+    return out
+
+
+def _el_bbox(el) -> tuple[float, float, float, float] | None:
+    """Crude bbox from numeric attributes; None for non-drawing elements."""
+    import re as _re
+
+    tag = el.tag.split("}")[-1]
+    if tag in ("defs", "linearGradient", "radialGradient", "stop"):
+        return None
+    if tag == "circle" and el.get("cx") is not None:
+        cx, cy, rr = float(el.get("cx", 0)), float(el.get("cy", 0)), float(el.get("r", 0))
+        return (cx - rr, cy - rr, cx + rr, cy + rr)
+    if tag == "rect" and el.get("x") is not None:
+        x, y = float(el.get("x", 0)), float(el.get("y", 0))
+        return (x, y, x + float(el.get("width", 0)), y + float(el.get("height", 0)))
+    nums = [float(n) for n in _re.findall(r"-?\d+\.?\d*", " ".join(el.attrib.values()))]
+    if len(nums) < 4:
+        return None
+    xs, ys = nums[0::2], nums[1::2]
+    if not xs or not ys:
+        return None
+    return (min(xs), min(ys), max(xs), max(ys))
+
+
+def _split_by_clustering(svg: str, grid: int, target: float = 24.0) -> list[str]:
+    import re as _re
+    from xml.etree import ElementTree as _ET
+
+    g = int(grid)
+    root = _ET.fromstring(svg)
+    vb = _re.search(r"viewBox=\"([0-9.eE+-]+)[ ,]+([0-9.eE+-]+)[ ,]+([0-9.eE+-]+)", svg)
+    if not vb:
+        raise RecraftError("sheet svg has no viewBox")
+    x0, y0, cw = float(vb.group(1)), float(vb.group(2)), float(vb.group(3))
+    cell = cw / g
+
+    # cluster elements into cells
+    cells: dict[tuple[int, int], list[_ET.Element]] = {}
+    for el in root.iter():
+        if el is root:
+            continue
+        b = _el_bbox(el)
+        if b is None:
+            continue
+        cx, cy = (b[0] + b[2]) / 2, (b[1] + b[3]) / 2
+        gx = min(g - 1, max(0, int((cx - x0) // cell)))
+        gy = min(g - 1, max(0, int((cy - y0) // cell)))
+        cells.setdefault((gx, gy), []).append(el)
+
+    out = []
+    for gx, gy in sorted(cells):
+        els = cells[(gx, gy)]
+        # ink bbox of the cell
+        bs = [_el_bbox(e) for e in els]
+        bs = [b for b in bs if b]
+        if not bs:
+            continue
+        ix0, iy0 = min(b[0] for b in bs), min(b[1] for b in bs)
+        ix1, iy1 = max(b[2] for b in bs), max(b[3] for b in bs)
+        w, h = max(ix1 - ix0, 1e-6), max(iy1 - iy0, 1e-6)
+        k = (target * 0.85) / max(w, h)  # 15% live-area margin
+        tx = (target - w * k) / 2 - ix0 * k
+        ty = (target - h * k) / 2 - iy0 * k
+        inner = _serialize(els)
+        out.append(
+            f'<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 {target:g} {target:g}">'
+            f'<g transform="translate({tx:.3f} {ty:.3f}) scale({k:.6f})">{inner}</g></svg>'
+        )
+    return out
+
+
+def _serialize(els) -> str:
+    """Serialize elements without namespace prefixes (svg:rect → rect)."""
+    import re as _re2
+    from xml.etree import ElementTree as _ET
+
+    _ET.register_namespace("", "http://www.w3.org/2000/svg")
+    out = "".join(_ET.tostring(e, encoding="unicode") for e in els)
+    out = _re2.sub(r"</?svg:", lambda m: m.group(0).replace("svg:", ""), out)
+    out = _re2.sub(r'\sxmlns:svg="[^"]*"', "", out)
+    return out
+
+
 def _svg_data_url(svg: str) -> str:
     return "data:image/svg+xml;base64," + base64.b64encode(svg.encode()).decode()
 

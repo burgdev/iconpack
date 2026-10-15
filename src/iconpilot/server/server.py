@@ -756,14 +756,27 @@ class ReviewHandler(BaseHTTPRequestHandler):
         style_id = plan["style_id"]
 
         ref_urls = [rc._svg_data_url(s) for s in plan["refs"]] or None
-        svgs = rc.generate(
-            token,
-            plan["prompt"],
-            n=plan["n"],
-            style_id=style_id,
-            model=plan["model"],
-            reference_urls=ref_urls,
-        )
+        sheet = int(data.get("sheet") or 0)
+        if sheet:
+            grid = max(2, min(sheet, 4))
+            sheet_svgs = rc.generate(
+                token,
+                rc.sheet_prompt(plan["prompt"], grid),
+                n=1,
+                style_id=style_id,
+                model=plan["model"],
+                reference_urls=ref_urls,
+            )
+            svgs = rc.split_sheet(sheet_svgs[0], grid, target=24.0)
+        else:
+            svgs = rc.generate(
+                token,
+                plan["prompt"],
+                n=plan["n"],
+                style_id=style_id,
+                model=plan["model"],
+                reference_urls=ref_urls,
+            )
         n = plan["n"]
 
         runs_dir = self.pack_dir / ".runs"

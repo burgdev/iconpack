@@ -565,6 +565,11 @@ def draft(
     n: int = typer.Option(4, min=1, max=6, help="Candidates to generate."),
     prompt: str = typer.Option("", help="Extra prompt text appended to the brief."),
     new_round: bool = typer.Option(False, "--new-round", help="Start a fresh run directory."),
+    sheet: int = typer.Option(
+        0,
+        "--sheet",
+        help="Sheet mode: generate a NxN grid in ONE call (9-16 candidates for the price of 1).",
+    ),
 ) -> None:
     """Seed candidates for one icon via the Recraft API, then gate them."""
     import iconpilot.recraft as rc
@@ -646,14 +651,27 @@ def draft(
     n_cfg = int(recraft_cfg.get("n", n))
 
     try:
-        raw_svgs = rc.generate(
-            token,
-            full_prompt,
-            n=n_cfg,
-            style_id=style_id,
-            model=model,
-            reference_urls=[rc._svg_data_url(s) for s in refs] or None,
-        )
+        if sheet:
+            grid = max(2, min(int(sheet), 4))
+            sheet_svgs = rc.generate(
+                token,
+                rc.sheet_prompt(full_prompt, grid),
+                n=1,
+                style_id=style_id,
+                model=model,
+                reference_urls=[rc._svg_data_url(s) for s in refs] or None,
+            )
+            raw_svgs = rc.split_sheet(sheet_svgs[0], grid, target=24.0)
+            n_cfg = len(raw_svgs)
+        else:
+            raw_svgs = rc.generate(
+                token,
+                full_prompt,
+                n=n_cfg,
+                style_id=style_id,
+                model=model,
+                reference_urls=[rc._svg_data_url(s) for s in refs] or None,
+            )
     except rc.RecraftError as exc:
         typer.secho(str(exc), fg=typer.colors.RED, err=True)
         raise typer.Exit(code=1) from exc

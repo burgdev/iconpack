@@ -252,7 +252,7 @@ def test_load_pack_raises_on_semantic_error(tmp_path: Path) -> None:
 
 
 def test_builtin_styles_complete() -> None:
-    expected = {
+    core = {
         "primitive",
         "mono-line",
         "mono-line-thin",
@@ -263,7 +263,16 @@ def test_builtin_styles_complete() -> None:
         "flat-color",
         "gradient-color",
     }
-    assert expected == set(BUILTIN_STYLES)
+    advanced = {
+        "broken-line",
+        "colored-outline",
+        "isometric",
+        "offset-fill",
+        "pixel",
+        "doodle",
+    }
+    assert core <= set(BUILTIN_STYLES)
+    assert advanced <= set(BUILTIN_STYLES)
 
 
 # --- 0.0.1 backlog: enforced checks ------------------------------------------
