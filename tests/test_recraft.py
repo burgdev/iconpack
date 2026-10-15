@@ -714,13 +714,16 @@ def test_draft_sheet_mode_writes_grid_candidates(
 
 
 def test_split_sheet_prefers_named_groups() -> None:
-    """Model complied with <g id='iconN'> → deterministic extraction."""
-    groups = "".join(
-        f'<g id="icon{i}"><rect x="{(i - 1) * 40 + 10}" y="10" width="20" height="20" '
-        f'fill="#2b6cb0"/></g>'
-        for i in range(1, 10)
-    )
-    svg = f'<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 360 40">{groups}</svg>'
+    """Named groups or vector bboxes — 9 cells from a proper 2D 3x3 grid."""
+    groups = ""
+    for gy in range(3):
+        for gx in range(3):
+            i = gy * 3 + gx + 1
+            groups += (
+                f'<g id="icon{i}"><rect x="{gx * 120 + 40}" y="{gy * 120 + 40}" '
+                f'width="40" height="40" fill="#2b6cb0"/></g>'
+            )
+    svg = f'<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 360 360">{groups}</svg>'
     cells = rc.split_sheet(svg, 3)
     assert len(cells) == 9
     assert all("<rect" in c and "svg:" not in c for c in cells)
