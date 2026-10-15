@@ -352,7 +352,8 @@ def recraft_style(
     with pack_lock(pack_dir):
         write_pack_atomic(pack_dir, pack_data)
     typer.secho(
-        f"recraft styles created for {list(style_ids)} (~${0.005 * len(style_ids):.3f}) "
+        f"recraft styles created for {list(style_ids)} "
+        f"(~${rc.STYLE_CREATE_PRICE * len(style_ids):.3f}) "
         "— stored in pack.json",
         fg=typer.colors.GREEN,
     )
@@ -456,7 +457,10 @@ def draft(
             pack_data.get("recraft", {}).get("model") or rc.FALLBACK_MODEL
         )
         rj["candidates_generated"] = rj.get("candidates_generated", 0) + len(wrote)
-        rj["estimated_cost_usd"] = round(rj.get("estimated_cost_usd", 0) + 0.05 * len(wrote), 4)
+        model_used = style_id and rc.DEFAULT_MODEL or rc.FALLBACK_MODEL
+        rj["estimated_cost_usd"] = round(
+            rj.get("estimated_cost_usd", 0) + rc.price_per_image(model_used) * len(wrote), 4
+        )
         round_json.write_text(json.dumps(rj, indent=2) + "\n")
 
     # gate each seed (informational — seeds are redrawn by the agent, not shipped)
@@ -468,7 +472,8 @@ def draft(
     typer.secho(
         f"{run}/{variant}/{icon_id}: {len(wrote)} seeds written (r{existing + 1}"
         f"..r{existing + len(wrote)}), gate {n_pass}/{len(wrote)} pass "
-        f"~${0.05 * len(wrote):.2f}",
+        f"~${rc.price_per_image(style_id and rc.DEFAULT_MODEL or rc.FALLBACK_MODEL) * len(wrote):.2f}"
+        f" ({style_id and rc.DEFAULT_MODEL or rc.FALLBACK_MODEL})",
         fg=typer.colors.GREEN,
     )
     if n_pass < len(wrote):

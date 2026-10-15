@@ -312,3 +312,66 @@ def test_recraft_style_asserts_refs_per_style(
     assert r.exit_code == 0, r.output
     flat_ref = (d / "icons" / "sun" / "flat.svg").read_text()
     assert made == [[flat_ref], ["<svg>MONO-REF</svg>"]]
+
+
+# --- description vs feedback + pricing ----------------------------------------
+
+
+def test_schema_description_fields(tmp_path: Path) -> None:
+    d = _pack(tmp_path)
+    pack = json.loads((d / "pack.json").read_text())
+    pack["description"] = "Wodore outdoor accommodation icons"
+    pack["icons"]["sun"]["description"] = "A sun with eight rays"
+    (d / "pack.json").write_text(json.dumps(pack))
+    from iconpilot.pack import revalidate
+
+    _, errors = revalidate(pack)
+    assert not errors
+
+
+def test_context_separates_description_and_note(tmp_path: Path) -> None:
+    d = _pack(tmp_path)
+    pack = json.loads((d / "pack.json").read_text())
+    pack["description"] = "pack docs"
+    pack["note"] = "pack feedback"
+    pack["icons"]["sun"]["description"] = "icon docs"
+    pack["icons"]["sun"]["note"] = "icon feedback"
+    (d / "pack.json").write_text(json.dumps(pack))
+    from iconpilot.context import build_context
+    from iconpilot.pack import load_pack
+
+    pack_data, styles = load_pack(d / "pack.json")
+    ctx = build_context(d, pack_data, styles, "sun", "flat")
+    assert ctx["pack_description"] == "pack docs"
+    assert ctx["icon_description"] == "icon docs"
+    assert ctx["pack_note"] == "pack feedback"
+    assert ctx["icon_note"] == "icon feedback"
+
+
+def test_fallback_model_is_cheapest_vector() -> None:
+    from iconpilot.recraft import FALLBACK_MODEL, price_per_image
+
+    assert FALLBACK_MODEL == "recraftv2_vector"
+    assert price_per_image(FALLBACK_MODEL) == 0.044
+    assert price_per_image("recraftv4_styles_vector") == 0.05
+    assert price_per_image("unknown") == 0.08
+
+
+def test_draft_without_style_uses_fallback_and_its_price(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    d = _pack(tmp_path)  # no recraft block → fallback model
+    monkeypatch.setattr(rc, "resolve_token", lambda models_file=None: "tok")
+
+    seen: dict = {}
+
+    def fake_generate(token, prompt, n=4, style_id=None, model=None):
+        seen["model"] = model
+        return [SRC]
+
+    monkeypatch.setattr(rc, "generate", fake_generate)
+    r = runner.invoke(app, ["draft", str(d), "sun", "--n", "1"])
+    assert r.exit_code == 0, r.output
+    assert "recraftv2_vector" in r.output
+    rj = json.loads((d / ".runs" / "r001" / "round.json").read_text())
+    assert rj["estimated_cost_usd"] == 0.044

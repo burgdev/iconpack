@@ -460,3 +460,21 @@ def test_recraft_endpoint_cross_origin(server: _Server) -> None:
     except urllib.error.HTTPError as e:
         code = e.code
     assert code == 403
+
+
+def test_history_includes_cost(server: _Server, srvpack: Path) -> None:
+    (srvpack / ".runs" / "r001" / "round.json").write_text(
+        json.dumps({"round": "r001", "estimated_cost_usd": 0.15})
+    )
+    code, body = server.get("/api/history")
+    assert code == 200
+    rounds = json.loads(body)["rounds"]
+    r1 = next(r for r in rounds if r["round"] == "r001")
+    assert r1["cost_usd"] == 0.15
+
+
+def test_icon_description_editable(server: _Server, srvpack: Path) -> None:
+    code, _data = server.req("PUT", "/api/icon", {"icon": "hut", "description": "An alpine hut"})
+    assert code == 200
+    pack = json.loads((srvpack / "pack.json").read_text())
+    assert pack["icons"]["hut"]["description"] == "An alpine hut"

@@ -27,9 +27,27 @@ import urllib.request
 from pathlib import Path
 
 API_BASE = "https://external.api.recraft.ai/v1"
-DEFAULT_MODEL = "recraftv4_styles_vector"
-FALLBACK_MODEL = "recraftv4_1_vector"  # no style_id available
+DEFAULT_MODEL = "recraftv4_styles_vector"  # cheapest vector WITH custom styles
+FALLBACK_MODEL = "recraftv2_vector"  # cheapest vector overall ($0.044, has "Icon" style)
 TIMEOUT_S = 180
+
+# USD per image (Recraft list prices, 2026). Used for cost estimates everywhere.
+MODEL_PRICES: dict[str, float] = {
+    "recraftv2_vector": 0.044,
+    "recraftv3_vector": 0.08,
+    "recraftv4_vector": 0.08,
+    "recraftv4_1_vector": 0.08,
+    "recraftv4_1_utility_vector": 0.08,
+    "recraftv4_styles_vector": 0.05,
+    "recraftv4_1_pro_vector": 0.30,
+    "recraftv4_styles_pro_vector": 0.12,
+}
+STYLE_CREATE_PRICE = 0.005
+
+
+def price_per_image(model: str) -> float:
+    """Estimated USD per generated image for a model (unknown → v4 price)."""
+    return MODEL_PRICES.get(model, 0.08)
 
 
 class RecraftError(Exception):

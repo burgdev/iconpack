@@ -197,7 +197,7 @@ footer { text-align:center; color:var(--muted); font-size:.75rem; padding:20px 0
               <button class="iconbtn" title="copy SVG path (open in Inkscape)"
                       @click="copyPath(g.icon, vg.variant, vg.cands[0]?.cand)">⧉</button>
               <button class="iconbtn" :class="{ on: S.drafting === g.icon + '/' + vg.variant }"
-                      title="Recraft: seed 4 new drafts for this variant (~$0.20)"
+                      title="Recraft: seed 4 drafts for this variant (~$0.18-0.20)"
                       @click="recraftDraft(g.icon, vg.variant)">⚡</button>
             </div>
             <div class="grid">
@@ -260,11 +260,12 @@ footer { text-align:center; color:var(--muted); font-size:.75rem; padding:20px 0
 
     <section>
       <details>
-        <summary>Round history · {{ S.history.length }} rounds</summary>
+        <summary>Round history · {{ S.history.length }} rounds · ≈${{ totalCost().toFixed(2) }} recraft</summary>
         <div v-for="h in S.history" :key="h.round" class="group" style="margin:6px 0">
           <div class="ghead">
             <b>{{ h.round }}</b>
             <span class="muted">{{ h.decided ? 'decided' : h.candidates + ' drafted' }}</span>
+            <span v-if="h.cost_usd" class="chip" title="recraft seeds in this pass">💲 {{ h.cost_usd }}</span>
             <span v-if="h.instructions" class="chip" title="apply-time instructions">💬 {{ h.instructions.slice(0, 40) }}{{ h.instructions.length > 40 ? '…' : '' }}</span>
           </div>
           <div v-if="h.decided" class="muted" style="font-size:.8rem">
@@ -283,8 +284,14 @@ footer { text-align:center; color:var(--muted); font-size:.75rem; padding:20px 0
         <div class="ghead">
           <b>{{ id }}</b>
           <span v-if="icon.main_color" class="chip" :style="{background: icon.main_color, color:'#fff'}">{{ icon.main_color }}</span>
-          <input v-if="S.editing === id" style="flex:1; min-width:120px" :value="icon.brief"
-                 @keydown.enter="saveIcon(id, $event.target.value)" @blur="saveIcon(id, $event.target.value)">
+          <div v-if="S.editing === id" style="display:flex; gap:6px; flex:1">
+            <input style="flex:1; min-width:100px" :value="icon.brief"
+                   placeholder="brief — what to draw (agent instruction)"
+                   @keydown.enter="saveIcon(id, $event.target.value)" @blur="saveIcon(id, $event.target.value)">
+            <input style="flex:1; min-width:100px" :value="icon.description"
+                   placeholder="description — durable docs for humans"
+                   @keydown.enter="saveIconDesc(id, $event.target.value)" @blur="saveIconDesc(id, $event.target.value)">
+          </div>
           <span v-else class="muted" style="flex:1; cursor:text" @click="S.editing = id">{{ icon.brief }}</span>
           <button class="subtle" @click="S.editing = S.editing === id ? null : id">edit</button>
         </div>
@@ -328,8 +335,10 @@ footer { text-align:center; color:var(--muted); font-size:.75rem; padding:20px 0
           <button class="subtle" @click="S.settingsDlg = false">✕</button></h3>
       <div class="controls"><label>version</label>
         <input v-model="S.set.version" style="width:110px"></div>
+      <div class="controls" style="align-items:flex-start"><label>description</label>
+        <textarea v-model="S.set.description" placeholder="durable docs: what this collection is for — shown to humans, exports, READMEs"></textarea></div>
       <div class="controls" style="align-items:flex-start"><label>global note</label>
-        <textarea v-model="S.set.note" placeholder="standing instructions for every draft — e.g. 'no chimneys anywhere'"></textarea></div>
+        <textarea v-model="S.set.note" placeholder="FEEDBACK to the agent, every draft — e.g. 'no chimneys anywhere'. Clear when resolved."></textarea></div>
       <div class="controls" style="align-items:flex-start"><label>rules</label>
         <textarea v-model="S.set.rules" placeholder="one rule per line — injected into every drafting context"></textarea></div>
       <div class="controls"><label>stroke width</label>
@@ -354,7 +363,7 @@ footer { text-align:center; color:var(--muted); font-size:.75rem; padding:20px 0
 
   <div v-if="S.vNoteDlg" class="overlay" @click.self="S.vNoteDlg = null">
     <div class="dialog">
-      <h3><span>💬 {{ S.vNoteDlg.icon }} / {{ S.vNoteDlg.variant }}</span>
+      <h3><span>💬 feedback: {{ S.vNoteDlg.icon }} / {{ S.vNoteDlg.variant }}</span>
           <button class="subtle" @click="S.vNoteDlg = null">✕</button></h3>
       <p class="muted" style="margin:0 0 8px">Note for this specific variant — overrides the icon note.</p>
       <textarea v-model="S.vNoteDlg.text"></textarea>
@@ -396,9 +405,9 @@ footer { text-align:center; color:var(--muted); font-size:.75rem; padding:20px 0
 
   <div v-if="S.noteDlg" class="overlay" @click.self="S.noteDlg = null">
     <div class="dialog">
-      <h3><span>💬 {{ S.noteDlg.g.icon }} / {{ S.noteDlg.g.variant }}</span>
+      <h3><span>💬 feedback: {{ S.noteDlg.g.icon }}</span>
           <button class="subtle" @click="S.noteDlg = null">✕</button></h3>
-      <p class="muted" style="margin:0 0 8px">Persistent note for this icon — saved immediately, shown to the agent in every future round (on top of the pack note).</p>
+      <p class="muted" style="margin:0 0 8px">FEEDBACK to the agent — carried into every future draft until you clear it. Durable docs belong in the icon description (edit via ⓘ / brief dialog), not here.</p>
       <textarea v-model="S.noteDlg.text" placeholder="thinner roof, door on the right, less mass at the base…"></textarea>
       <div class="row" style="margin-top:8px">
         <button class="primary" @click="saveNote">Save note</button>
@@ -603,6 +612,7 @@ function batchReject(maxScore) {
   flash('batch: rejected ' + (maxScore === 0 ? 'unrated' : 'all rated ≤ ' + maxScore), true);
 }
 function isLocked(icon, variant) { return !!S.locked[icon + '/' + variant]; }
+function totalCost() { return S.history.reduce((a, h) => a + (h.cost_usd || 0), 0); }
 
 async function recraftDraft(icon, variant, n = 4) {
   const key = icon + '/' + variant;
@@ -719,6 +729,15 @@ async function saveBrief(g, brief) {
     S.msg = `brief saved (rev ${r.rev})`; S.msgClass = 'ok'; await load();
   } catch (e) { S.msg = e.d?.errors ? e.d.errors.join('\\n') : e.message; S.msgClass = 'err'; }
 }
+async function saveIconDesc(id, desc) {
+  const cur = S.pack.icons?.[id]?.description || '';
+  if (desc === cur) return;
+  try {
+    const r = await api('/api/icon', { method: 'PUT', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ icon: id, description: desc }) });
+    S.msg = `description saved (rev ${r.rev})`; S.msgClass = 'ok'; await load();
+  } catch (e) { S.msg = e.message; S.msgClass = 'err'; }
+}
 async function saveMainColor(g, color) {
   try {
     const r = await api('/api/icon', { method: 'PUT', headers: { 'Content-Type': 'application/json' },
@@ -773,6 +792,7 @@ function openSettings() {
   const sp = S.pack.spec || {};
   S.set = {
     version: S.pack.version || '',
+    description: S.pack.description || '',
     note: S.pack.note || '',
     rules: (S.pack.rules || []).join('\\n'),
     strokeWidth: sp.stroke?.width ?? 2,
@@ -791,6 +811,7 @@ async function saveSettings() {
     const r = await api('/api/pack', { method: 'PUT', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         version: S.set.version,
+        description: S.set.description.trim(),
         note: S.set.note.trim(),
         rules: S.set.rules.split('\\n').map(s => s.trim()).filter(Boolean),
         spec: { stroke: { width: +S.set.strokeWidth, linecap: S.set.linecap, linejoin: S.set.linejoin },
@@ -984,7 +1005,7 @@ const App = {
       variantGroups, packBriefIcon, mainColorIcon, saveMainColorIcon, rejectAllIcon,
       variantNote, openVariantNote, saveVariantNote, copyPath, togglePin, isPinned, undo,
       batchApprove, batchReject, toggleCompare,
-      isLocked, recraftDraft, recraftIcon, startRound,
+      isLocked, recraftDraft, recraftIcon, startRound, saveIconDesc, totalCost,
     };
   },
 };

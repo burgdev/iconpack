@@ -113,6 +113,10 @@
         "model"
       ],
       "additionalProperties": false
+    },
+    "description": {
+      "type": "string",
+      "description": "Durable human-facing docs: what this pack is for. NOT agent feedback."
     }
   },
   "$defs": {
@@ -216,6 +220,10 @@
         "note": {
           "type": "string",
           "description": "Persistent per-icon note for the agent."
+        },
+        "description": {
+          "type": "string",
+          "description": "Durable docs: what this icon depicts. Feedback for the agent goes in 'note'."
         }
       }
     },

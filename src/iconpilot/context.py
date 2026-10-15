@@ -63,6 +63,12 @@ def build_context(
     }
     if icon.get("main_color"):
         ctx["main_color"] = icon["main_color"]
+    # durable docs (what this is) — distinct from feedback below
+    if pack.get("description"):
+        ctx["pack_description"] = pack["description"]
+    if icon.get("description"):
+        ctx["icon_description"] = icon["description"]
+    # agent feedback (what to change) — carried every round until cleared
     if pack.get("note"):
         ctx["pack_note"] = pack["note"]
     if icon.get("note"):

@@ -26,7 +26,7 @@ from iconpilot.pack import load_pack, next_run_id, revalidate, write_pack_atomic
 from iconpilot.render.contact import contact_sheet
 from iconpilot.render.render import render_png_text
 
-EDITABLE_FIELDS = ("brief", "prompt", "main_color", "note")
+EDITABLE_FIELDS = ("brief", "prompt", "main_color", "note", "description")
 _HEX_RE = __import__("re").compile(r"^#[0-9a-fA-F]{6}$")
 
 
@@ -252,7 +252,21 @@ class ReviewHandler(BaseHTTPRequestHandler):
                 pack = {"icons": {}}
             if runs_dir.is_dir():
                 for run in sorted(p.name for p in runs_dir.glob("r*") if p.is_dir()):
-                    info = {"round": run, "decided": False, "icons": {}, "instructions": None}
+                    info = {
+                        "round": run,
+                        "decided": False,
+                        "icons": {},
+                        "instructions": None,
+                        "cost_usd": 0.0,
+                    }
+                    rj = runs_dir / run / "round.json"
+                    if rj.is_file():
+                        try:
+                            info["cost_usd"] = float(
+                                json.loads(rj.read_text()).get("estimated_cost_usd", 0)
+                            )
+                        except (ValueError, OSError):
+                            pass
                     dec = runs_dir / run / "decisions.json"
                     if dec.is_file():
                         try:
@@ -450,7 +464,10 @@ class ReviewHandler(BaseHTTPRequestHandler):
             rj.setdefault("models_used", {})["seeder"] = (
                 recraft_cfg.get("model") or rc.FALLBACK_MODEL
             )
-            rj["estimated_cost_usd"] = round(rj.get("estimated_cost_usd", 0) + 0.05 * len(wrote), 4)
+            model_used = style_id and rc.DEFAULT_MODEL or rc.FALLBACK_MODEL
+            rj["estimated_cost_usd"] = round(
+                rj.get("estimated_cost_usd", 0) + rc.price_per_image(model_used) * len(wrote), 4
+            )
             round_json.write_text(_json.dumps(rj, indent=2) + "\n")
         return {
             "round": run,
@@ -458,7 +475,11 @@ class ReviewHandler(BaseHTTPRequestHandler):
             "variant": variant,
             "wrote": wrote,
             "gate_passed": n_pass,
-            "cost_usd": round(0.05 * len(wrote), 2),
+            "cost_usd": round(
+                rc.price_per_image(style_id and rc.DEFAULT_MODEL or rc.FALLBACK_MODEL) * len(wrote),
+                2,
+            ),
+            "model": style_id and rc.DEFAULT_MODEL or rc.FALLBACK_MODEL,
         }
 
     def do_POST(self) -> None:
@@ -535,6 +556,8 @@ class ReviewHandler(BaseHTTPRequestHandler):
                         pack["version"] = data["version"]
                     if isinstance(data.get("note"), str):
                         pack["note"] = data["note"]
+                    if isinstance(data.get("description"), str):
+                        pack["description"] = data["description"]
                     if "rules" in data and isinstance(data["rules"], list):
                         pack["rules"] = [str(r) for r in data["rules"] if str(r).strip()]
                     spec_in = data.get("spec") or {}
