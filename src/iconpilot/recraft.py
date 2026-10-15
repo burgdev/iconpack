@@ -209,7 +209,8 @@ def create_style(token: str, svg_texts: list[str], match: str = "precise") -> di
         "/styles",
         {
             "image_urls": [_data_url(s) for s in svg_texts],
-            "model": "recraftv4_styles",
+            "model": "recraftv2_vector" if match == "regular" else "recraftv4_styles",
+            "style": "icon",  # tell Recraft this style is for icons
             "match": match,
         },
     )
@@ -258,7 +259,7 @@ def generate_refs_curated(
         "response_format": "b64_json",
         "style": CURATED_STYLE_MAP.get(style_id, "Icon"),
     }
-    out = _request(token, "POST", "/images/generations", payload)
+    out = _request(token, "POST", "/images/generations/vector", payload)
     import base64 as _b64
 
     svg = _b64.b64decode(out["data"][0]["b64_json"]).decode()
@@ -325,7 +326,96 @@ def _fit_grid(cells: int) -> int:
     return 4
 
 
+def _true_bbox(el) -> tuple[float, float, float, float] | None:
+    """Bezier-aware bbox using svgpathtools (same as the gate)."""
+    from svgpathtools import parse_path as _pp
+
+    tag = el.tag.split("}")[-1]
+    if tag == "path" and el.get("d"):
+        try:
+            p = _pp(el.get("d"))
+            xmin, xmax, ymin, ymax = p.bbox()
+            return (xmin, ymin, xmax, ymax)
+        except (ValueError, TypeError):
+            return None
+    if tag == "circle" and el.get("cx") is not None:
+        cx, cy, rr = float(el.get("cx", 0)), float(el.get("cy", 0)), float(el.get("r", 0))
+        return (cx - rr, cy - rr, cx + rr, cy + rr)
+    if tag == "rect" and el.get("x") is not None:
+        x, y = float(el.get("x", 0)), float(el.get("y", 0))
+        return (x, y, x + float(el.get("width", 0)), y + float(el.get("height", 0)))
+    if tag == "ellipse" and el.get("cx") is not None:
+        cx, cy = float(el.get("cx", 0)), float(el.get("cy", 0))
+        rx, ry = float(el.get("rx", 0)), float(el.get("ry", 0))
+        return (cx - rx, cy - ry, cx + rx, cy + ry)
+    # polyline/polygon: parse points
+    pts = el.get("points", "")
+    if pts:
+        nums = [float(n) for n in re.findall(r"-?\d+\.?\d*", pts)]
+        if len(nums) >= 4:
+            xs, ys = nums[0::2], nums[1::2]
+            return (min(xs), min(ys), max(xs), max(ys))
+    return None
+
+
 def split_sheet(svg: str, grid: int, target: float = 24.0) -> list[str]:
+    """Split a grid SVG into per-cell candidate SVGs using true vector bboxes.
+
+    Uses svgpathtools for bezier-aware bounding boxes (same as the gate),
+    clusters elements by bbox center into grid cells, then extracts each
+    cell as a separate SVG. Pure vector math — no rasterization.
+    """
+    from xml.etree import ElementTree as _ET
+
+    g = int(grid)
+    root = _ET.fromstring(strip_metadata(svg))
+    vb = re.search(r"viewBox=\"([0-9.eE+-]+)[ ,]+([0-9.eE+-]+)[ ,]+([0-9.eE+-]+)", svg)
+    if not vb:
+        raise RecraftError("sheet svg has no viewBox")
+    x0, y0, cw = float(vb.group(1)), float(vb.group(2)), float(vb.group(3))
+    cell = cw / g
+
+    # collect (element, bbox) pairs with true vector bboxes
+    items: list[tuple[_ET.Element, tuple[float, float, float, float]]] = []
+    for el in root.iter():
+        if el is root:
+            continue
+        bb = _true_bbox(el)
+        if bb is None:
+            continue
+        tag = el.tag.split("}")[-1]
+        if tag in ("defs", "linearGradient", "radialGradient", "stop", "g"):
+            continue
+        items.append((el, bb))
+
+    if not items:
+        return []
+
+    # cluster into cells by bbox center
+    cells: dict[tuple[int, int], list[tuple[_ET.Element, tuple]]] = {}
+    for el, bb in items:
+        cx, cy = (bb[0] + bb[2]) / 2, (bb[1] + bb[3]) / 2
+        gx = min(g - 1, max(0, int((cx - x0) // cell)))
+        gy = min(g - 1, max(0, int((cy - y0) // cell)))
+        cells.setdefault((gx, gy), []).append((el, bb))
+
+    # extract each cell
+    out = []
+    for gx, gy in sorted(cells):
+        entries = cells[(gx, gy)]
+        bbs = [bb for _, bb in entries]
+        ix0, iy0 = min(b[0] for b in bbs), min(b[1] for b in bbs)
+        ix1, iy1 = max(b[2] for b in bbs), max(b[3] for b in bbs)
+        w, h = max(ix1 - ix0, 1e-6), max(iy1 - iy0, 1e-6)
+        k = (target * 0.85) / max(w, h)
+        tx = (target - w * k) / 2 - ix0 * k
+        ty = (target - h * k) / 2 - iy0 * k
+        inner = _serialize([el for el, _ in entries])
+        out.append(
+            f'<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 {target:g} {target:g}">'
+            f'<g transform="translate({tx:.3f} {ty:.3f}) scale({k:.6f})">{inner}</g></svg>'
+        )
+    return out
     """Split a grid SVG into per-cell candidate SVGs.
 
     Prefers named groups when the model followed the prompt (<g id='iconN'>):
@@ -506,7 +596,7 @@ def generate(
         payload["style_reference_urls"] = reference_urls
     elif curated_style and model and "v4" not in model:
         payload["style"] = curated_style
-    out = _request(token, "POST", "/images/generations", payload)
+    out = _request(token, "POST", "/images/generations/vector", payload)
     svgs: list[str] = []
     for item in out.get("data", []):
         b64 = item.get("b64_json")
