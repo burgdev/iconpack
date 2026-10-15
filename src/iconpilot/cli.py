@@ -536,23 +536,56 @@ def draft(
     ) or recraft_cfg.get("style_id")
     if not style_id:
         typer.secho(
-            "warning: no recraft style_id in pack.json — using plain model "
-            f"({rc.FALLBACK_MODEL}); run `iconpilot recraft-style` for consistency",
+            "note: no recraft style_id — attaching approved/pinned SVGs as style "
+            "references (+$0.005); run `iconpilot recraft-style` for a reusable style",
             fg=typer.colors.YELLOW,
             err=True,
         )
 
-    # prompt: brief + style words + rules
-    parts = [icon.get("brief", icon_id), style.label, " ".join(style.style_words)]
-    if style.avoid:
-        parts.append("avoid: " + ", ".join(style.avoid))
-    parts += pack_data.get("rules", [])
+    pack_dir = resolve_pack_dir(pack)
+
+    # prompt: description (docs) over brief, + color world + style words + rules
+    full_prompt = rc.draft_prompt(icon, style, pack_data)
     if prompt:
-        parts.append(prompt)
-    full_prompt = ", ".join(p for p in parts if p)[:1000]
+        full_prompt = (full_prompt + ", " + prompt)[:1000]
+
+    # style references: pinned/approved SVGs on the same style, else the
+    # approved sibling of this icon (max 3)
+    refs: list[str] = []
+    if not style_id:
+        for iid, ic in pack_data["icons"].items():
+            for vid, vd in ic.get("variants", {}).items():
+                if len(refs) >= 3:
+                    break
+                if (
+                    vd.get("pinned")
+                    and vd.get("status") == "approved"
+                    and vd.get("style") == icon["variants"][variant]["style"]
+                ):
+                    f = pack_dir / "icons" / iid / f"{vid}.svg"
+                    if f.is_file():
+                        refs.append(f.read_text())
+        if not refs:
+            for vid, vd in icon.get("variants", {}).items():
+                if vid != variant and vd.get("status") == "approved":
+                    f = pack_dir / "icons" / icon_id / f"{vid}.svg"
+                    if f.is_file():
+                        refs = [f.read_text()]
+                        break
+    model = recraft_cfg.get("model") or (
+        rc.DEFAULT_MODEL if (style_id or refs) else rc.FALLBACK_MODEL
+    )
+    n_cfg = int(recraft_cfg.get("n", n))
 
     try:
-        raw_svgs = rc.generate(token, full_prompt, n=n, style_id=style_id)
+        raw_svgs = rc.generate(
+            token,
+            full_prompt,
+            n=n_cfg,
+            style_id=style_id,
+            model=model,
+            reference_urls=[rc._svg_data_url(s) for s in refs] or None,
+        )
     except rc.RecraftError as exc:
         typer.secho(str(exc), fg=typer.colors.RED, err=True)
         raise typer.Exit(code=1) from exc
@@ -587,9 +620,11 @@ def draft(
             pack_data.get("recraft", {}).get("model") or rc.FALLBACK_MODEL
         )
         rj["candidates_generated"] = rj.get("candidates_generated", 0) + len(wrote)
-        model_used = style_id and rc.DEFAULT_MODEL or rc.FALLBACK_MODEL
         rj["estimated_cost_usd"] = round(
-            rj.get("estimated_cost_usd", 0) + rc.price_per_image(model_used) * len(wrote), 4
+            rj.get("estimated_cost_usd", 0)
+            + rc.price_per_image(model) * len(wrote)
+            + (rc.STYLE_REF_PRICE if refs else 0),
+            4,
         )
         round_json.write_text(json.dumps(rj, indent=2) + "\n")
 

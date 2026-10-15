@@ -494,6 +494,12 @@ footer { text-align:center; color:var(--muted); font-size:.75rem; padding:20px 0
           <input v-model="S.set.csPalette" placeholder="palette hex csv (optional)" style="flex:1"></div>
           <button class="subtle" @click="addCustomStyle">define + add to every glyph</button>
         </div></div>
+      <div class="controls"><label>Recraft</label>
+        <div class="row">
+          <select v-model="S.set.rcModel"><option v-for="(pr, m) in S.recraftModels" :key="m" :value="m">{{ m }} (${{ pr }}/img)</option></select>
+          <input v-model="S.set.rcN" type="number" min="1" max="6" style="width:64px" title="images per request">
+          <button class="subtle" @click="saveRecraftDefaults(S.set.rcModel, +S.set.rcN)">save</button>
+        </div></div>
       <div class="controls"><label>stroke width</label>
         <input v-model="S.set.strokeWidth" type="number" step="0.5" min="0.5" style="width:90px"></div>
       <div class="controls"><label>caps/joins</label>
@@ -700,7 +706,8 @@ const S = reactive({
   decisionEdit: '', showGen: false, editingBrief: null,
   flash: '', flashOk: true, applying: false, instructions: '',
   kbFocus: 0, kbVariant: 0, kbCand: 0, kbUsed: false, compare: null, histView: null,
-  recraftReady: false, debug: new URLSearchParams(location.search).has('debug'), debugDlg: null, nextDlg: null, theme: 'light', iconHist: {}, svgFiles: {}, rejectArm: null,
+  recraftReady: false, debug: new URLSearchParams(location.search).has('debug'), debugDlg: null, nextDlg: null,
+  recraftModels: {}, theme: 'light', iconHist: {}, svgFiles: {}, rejectArm: null,
   history: [], showHistory: false,
   set: { version: '', rules: '', strokeWidth: 2, linecap: 'round', linejoin: 'round', padding: 2, precision: 0.5, palette: null, errors: '' },
   bgs: [
@@ -965,6 +972,7 @@ async function recraftDraft(icon, variant, n = 4) {
 async function recraftIcon(g) {
   const open = variantGroups(g).filter(vg => !isLocked(g.icon, vg.variant));
   if (!open.length) { flash('all variants locked — nothing to draft', false); return; }
+  if (S.debug && !S.recraftReady) { showDebug(g.icon, open[0].variant); return; }
   const cost = (open.length * 0.2).toFixed(2);
   if (!confirm(`Draft ${open.length} variant(s) of "${g.icon}" via Recraft? (~$${cost})`)) return;
   for (const vg of open) await recraftDraft(g.icon, vg.variant);
@@ -1155,7 +1163,7 @@ function toggleCompare(c) {
     flash('comparing ' + S.compare.map(cmpLabel).join(' vs '), true);
   }
 }
-function openSettings() {
+async function openSettings() {
   focusDialog();
   const sp = S.pack.spec || {};
   S.set = {
@@ -1170,8 +1178,14 @@ function openSettings() {
     precision: sp.precision ?? 0.5,
     palette: (S.pack.styles?.['lineal-color']?.palette) || null,
     addStyle: 'lineal-color', csId: '', csBase: 'filled', csSize: '', csPalette: '',
+    rcModel: '', rcN: 4,
     errors: '',
   };
+  S.set.rcModel = S.pack.recraft?.model || 'recraftv2_vector';
+  S.set.rcN = S.pack.recraft?.n || 4;
+  if (!Object.keys(S.recraftModels).length) {
+    try { S.recraftModels = await (await fetch('/api/recraft-models')).json(); } catch {}
+  }
   S.settingsDlg = true;
 }
 async function addVariantBulk() {
@@ -1197,6 +1211,7 @@ async function addCustomStyle() {
 }
 async function saveSettings() {
   S.set.errors = '';
+  if (S.set.rcModel && S.set.rcModel !== (S.pack.recraft?.model || '')) await saveRecraftDefaults(S.set.rcModel, +S.set.rcN || 4);
   try {
     const r = await api('/api/pack', { method: 'PUT', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
@@ -1407,7 +1422,7 @@ const App = {
       isLocked, recraftDraft, recraftIcon, startRound, saveIconDesc, totalCost,
       fbFor, fbNew, fbTitle, fbItems, fbChat, openFb, addFeedback, resolveFeedback, switchRound, isViewing,
       IC, relTime, isNew, copyPrompt, reopen, toggleTheme, cmpLabel, initTheme, loadIconHist, hasRating,
-      showDebug, openNextDlg, addVariantBulk, addCustomStyle,
+      showDebug, openNextDlg, addVariantBulk, addCustomStyle, saveRecraftDefaults,
 
     };
   },

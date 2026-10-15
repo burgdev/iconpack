@@ -129,7 +129,7 @@ def test_draft_writes_seeds_and_round_json(tmp_path: Path, monkeypatch: pytest.M
     d = _pack(tmp_path, with_style_id=True)
     monkeypatch.setattr(rc, "resolve_token", lambda models_file=None: "tok")
 
-    def fake_generate(token, prompt, n=4, style_id=None, model=None):
+    def fake_generate(token, prompt, n=4, style_id=None, model=None, reference_urls=None):
         assert style_id == "sid-1"
         assert "sun with rays" in prompt
         return [SRC] * n
@@ -259,7 +259,7 @@ def test_draft_picks_per_style_id(tmp_path: Path, monkeypatch: pytest.MonkeyPatc
 
     seen: dict = {}
 
-    def fake_generate(token, prompt, n=4, style_id=None, model=None):
+    def fake_generate(token, prompt, n=4, style_id=None, model=None, reference_urls=None):
         seen["style_id"] = style_id
         return [SRC]
 
@@ -365,7 +365,7 @@ def test_draft_without_style_uses_fallback_and_its_price(
 
     seen: dict = {}
 
-    def fake_generate(token, prompt, n=4, style_id=None, model=None):
+    def fake_generate(token, prompt, n=4, style_id=None, model=None, reference_urls=None):
         seen["model"] = model
         return [SRC]
 
@@ -504,3 +504,53 @@ def test_styles_extends_resolution() -> None:
 
     with _pytest.raises(ValueError, match="unknown extends"):
         resolve_styles({"bad": {"extends": "nope"}})
+
+
+def test_draft_prompt_uses_description_and_colors() -> None:
+    from iconpilot.recraft import draft_prompt
+    from iconpilot.styles import resolve_styles
+
+    icon = {
+        "brief": "peaks brief",
+        "description": "Two alpine peaks under a low sun",
+        "main_color": "#2b6cb0",
+    }
+    pack = {"rules": ["no chimneys"], "styles": {}}
+    import dataclasses
+
+    style = dataclasses.replace(
+        resolve_styles({})["flat-color"],
+        palette=("#2b6cb0", "#2f855a", "#c05621", "#4a5568"),
+    )
+    p = draft_prompt(icon, style, pack)
+    assert "Two alpine peaks under a low sun" in p
+    assert "peaks brief" not in p  # description wins over brief
+    assert "#2b6cb0" in p  # main color + palette
+    assert "no chimneys" in p
+
+
+def test_generate_rejects_non_vector_model() -> None:
+    with pytest.raises(rc.RecraftError, match="vector"):
+        rc.generate("t", "x", model="recraftv4_1")  # raster model
+
+
+def test_generate_reference_urls_in_payload(monkeypatch: pytest.MonkeyPatch) -> None:
+    captured = {}
+
+    def fake_request(token, method, path, payload=None):
+        captured["payload"] = payload
+        import base64
+
+        b64 = base64.b64encode(b"<svg/>").decode()
+        return {"data": [{"b64_json": b64}]}
+
+    monkeypatch.setattr(rc, "_request", fake_request)
+    rc.generate(
+        "t",
+        "x",
+        n=1,
+        model="recraftv4_styles_vector",
+        reference_urls=["data:image/svg+xml;base64,PHN2Zy8+"],
+    )
+    assert captured["payload"]["style_reference_urls"] == ["data:image/svg+xml;base64,PHN2Zy8+"]
+    assert "style_id" not in captured["payload"]

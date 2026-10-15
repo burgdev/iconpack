@@ -43,6 +43,41 @@ MODEL_PRICES: dict[str, float] = {
     "recraftv4_styles_pro_vector": 0.12,
 }
 STYLE_CREATE_PRICE = 0.005
+STYLE_REF_PRICE = 0.005  # per request attaching style_reference_urls instead of style_id
+
+# every API model that returns editable SVG (model param must be one of these)
+VECTOR_MODELS = (
+    "recraftv2_vector",
+    "recraftv3_vector",
+    "recraftv4_vector",
+    "recraftv4_1_vector",
+    "recraftv4_1_utility_vector",
+    "recraftv4_styles_vector",
+    "recraftv4_1_pro_vector",
+    "recraftv4_1_utility_pro_vector",
+    "recraftv4_styles_pro_vector",
+)
+
+
+def draft_prompt(icon: dict, style, pack: dict) -> str:
+    """Rich text-to-image prompt: durable description, color, style, rules.
+
+    Uses the icon DESCRIPTION (docs) over the brief when present; always names
+    the main color and palette so Recraft lands in the pack's color world.
+    """
+    parts = [
+        icon.get("description") or icon.get("brief") or "",
+        f"{style.label} style",
+        ", ".join(style.style_words[:4]),
+    ]
+    if icon.get("main_color"):
+        parts.append(f"dominant color {icon['main_color']}")
+    if style.palette:
+        parts.append("palette " + ", ".join(style.palette[:5]))
+    if style.avoid:
+        parts.append("avoid: " + ", ".join(style.avoid[:3]))
+    parts += pack.get("rules", [])[:3]
+    return ", ".join(p for p in parts if p)[:1000]
 
 
 def price_per_image(model: str) -> float:
@@ -119,17 +154,30 @@ def create_style(token: str, svg_texts: list[str], match: str = "precise") -> di
     return out
 
 
+def _svg_data_url(svg: str) -> str:
+    return "data:image/svg+xml;base64," + base64.b64encode(svg.encode()).decode()
+
+
 def generate(
     token: str,
     prompt: str,
     n: int = 4,
     style_id: str | None = None,
     model: str | None = None,
+    reference_urls: list[str] | None = None,
 ) -> list[str]:
-    """Generate n SVG candidates; returns raw SVG texts (native Recraft grid)."""
+    """Generate n SVG candidates; returns raw SVG texts (native Recraft grid).
+
+    reference_urls: style references attached directly to the request
+    (data URLs ok; +$0.005/request instead of a style_id).
+    """
     if not 1 <= n <= 6:
         raise RecraftError(f"n must be 1-6, got {n}")
-    model = model or (DEFAULT_MODEL if style_id else FALLBACK_MODEL)
+    if reference_urls and style_id:
+        raise RecraftError("pass style_id OR reference_urls, not both")
+    model = model or (DEFAULT_MODEL if (style_id or reference_urls) else FALLBACK_MODEL)
+    if model not in VECTOR_MODELS:
+        raise RecraftError(f"model must be a vector model, got '{model}'")
     payload: dict = {
         "prompt": prompt,
         "model": model,
@@ -140,6 +188,8 @@ def generate(
     if style_id:
         payload["style_id"] = style_id
         payload["style_match"] = "precise"
+    if reference_urls:
+        payload["style_reference_urls"] = reference_urls
     out = _request(token, "POST", "/images/generations", payload)
     svgs: list[str] = []
     for item in out.get("data", []):

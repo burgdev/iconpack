@@ -241,9 +241,17 @@ color comes from three places, in order of strength:
 3. Auto-brief siblings — approving one variant makes it the reference_source for
    its siblings, so mono informs color and vice versa (same silhouette).
 
+## Summaries always carry the review URL
+
+End every round summary with the live review page URL (host:port) so the user
+can jump straight in, e.g. `http://home:8768`. Same for handoffs.
+
 ## Recraft seeding (optional quality floor)
 
-For filled/color variants, Recraft can seed shape language before you redraw:
+For filled/color variants, Recraft can seed shape language before you redraw.
+Model + images-per-request live in `pack.recraft` (`model` must end `_vector`,
+`n` 1-6); the user can change both on the page (?debug previews the exact
+request JSON):
 
     iconpilot recraft-style <pack>     # once: custom style from approved/pinned icons ($0.005)
     iconpilot draft <pack> <icon> --n 4  # seeds r*.svg into the current run (~$0.05/img)

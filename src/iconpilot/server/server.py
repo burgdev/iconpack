@@ -200,6 +200,11 @@ class ReviewHandler(BaseHTTPRequestHandler):
             self.wfile.write(body)
             return
 
+        if url.path == "/api/recraft-models":
+            import iconpilot.recraft as _rc
+
+            self._json(200, dict(_rc.MODEL_PRICES))
+            return
         if url.path == "/api/recraft-request":
             icon_id = (q.get("icon") or [""])[0]
             variant = (q.get("variant") or [""])[0]
@@ -219,31 +224,45 @@ class ReviewHandler(BaseHTTPRequestHandler):
             import iconpilot.recraft as rc
             from iconpilot.context import build_prompt
 
-            style = styles[icon["variants"][variant]["style"]]
-            recraft_cfg = pack.get("recraft", {})
-            style_id = recraft_cfg.get("style_ids", {}).get(
-                icon["variants"][variant]["style"]
-            ) or recraft_cfg.get("style_id")
-            parts = [icon.get("brief", icon_id), style.label, " ".join(style.style_words)]
-            if style.avoid:
-                parts.append("avoid: " + ", ".join(style.avoid))
-            parts += pack.get("rules", [])
-            prompt = ", ".join(p for p in parts if p)[:1000]
-            model = style_id and rc.DEFAULT_MODEL or rc.FALLBACK_MODEL
+            plan = self._recraft_plan(icon_id, variant, n_in=n)
+            model_override = (q.get("model") or [None])[0]
+            if model_override:
+                import iconpilot.recraft as _rc2
+
+                if model_override not in _rc2.VECTOR_MODELS:
+                    self._json(400, {"error": f"not a vector model: {model_override}"})
+                    return
+                plan["model"] = model_override
+                import iconpilot.recraft as _rc3
+
+                plan["cost"] = round(
+                    _rc3.price_per_image(model_override) * plan["n"]
+                    + (_rc3.STYLE_REF_PRICE if plan["refs"] else 0),
+                    4,
+                )
+            req = {
+                "model": plan["model"],
+                "prompt": plan["prompt"],
+                "n": plan["n"],
+                "size": "1:1",
+                "response_format": "b64_json",
+            }
+            if plan["style_id"]:
+                req["style_id"] = plan["style_id"]
+                req["style_match"] = "precise"
+            elif plan["refs"]:
+                req["style_reference_urls"] = [rc._svg_data_url(s)[:60] + "…" for s in plan["refs"]]
             self._json(
                 200,
                 {
                     "endpoint": rc.API_BASE + "/images/generations",
-                    "request": {
-                        "model": model,
-                        "prompt": prompt,
-                        "n": n,
-                        "size": "1:1",
-                        "response_format": "b64_json",
-                        **({"style_id": style_id, "style_match": "precise"} if style_id else {}),
-                    },
-                    "full_prompt": build_prompt(self.pack_dir, pack, styles, icon_id, variant, n=n),
-                    "est_cost_usd": round(rc.price_per_image(model) * n, 3),
+                    "request": req,
+                    "style_refs_attached": len(plan["refs"]),
+                    "full_prompt": build_prompt(
+                        self.pack_dir, plan["pack"], plan["styles"], icon_id, variant, n=plan["n"]
+                    ),
+                    "est_cost_usd": plan["cost"],
+                    "models": list(rc.VECTOR_MODELS),
                 },
             )
             return
@@ -540,6 +559,67 @@ class ReviewHandler(BaseHTTPRequestHandler):
         )
         return {"round": run, "open": open_, "feedback_carried": carried}
 
+    def _recraft_plan(self, icon_id: str, variant: str, n_in: int | None = None) -> dict:
+        """Everything a Recraft call needs: prompt, style target, model, n, cost.
+
+        Style targeting, in order: pack style_id (custom style) → reference
+        SVGs attached as style_reference_urls (data URLs) → plain model.
+        """
+        import iconpilot.recraft as rc
+
+        pack, styles = load_pack(self.pack_dir / "pack.json")
+        icon = pack["icons"][icon_id]
+        v = icon["variants"][variant]
+        style = styles[v["style"]]
+        cfg = pack.get("recraft", {})
+
+        n = n_in or cfg.get("n") or 4
+        n = max(1, min(int(n), 6))
+
+        prompt = rc.draft_prompt(icon, style, pack)
+        style_id = cfg.get("style_ids", {}).get(v["style"]) or cfg.get("style_id")
+
+        refs: list[str] = []
+        if not style_id:
+            # attach the look: pinned/approved SVGs on the same style first,
+            # then the approved sibling of this icon (max 3)
+            for iid, ic in pack["icons"].items():
+                for vid, vd in ic.get("variants", {}).items():
+                    if len(refs) >= 3:
+                        break
+                    if (
+                        vd.get("pinned")
+                        and vd.get("status") == "approved"
+                        and vd.get("style") == v["style"]
+                    ):
+                        f = self.pack_dir / "icons" / iid / f"{vid}.svg"
+                        if f.is_file():
+                            refs.append(f.read_text())
+            if not refs:
+                for vid, vd in icon.get("variants", {}).items():
+                    if vid != variant and vd.get("status") == "approved":
+                        f = self.pack_dir / "icons" / icon_id / f"{vid}.svg"
+                        if f.is_file():
+                            refs = [f.read_text()]
+                            break
+
+        model = cfg.get("model") or (rc.DEFAULT_MODEL if (style_id or refs) else rc.FALLBACK_MODEL)
+        if model not in rc.VECTOR_MODELS:
+            raise ValueError(f"model must be a vector model, got '{model}'")
+
+        cost = rc.price_per_image(model) * n + (rc.STYLE_REF_PRICE if refs else 0)
+        return {
+            "prompt": prompt,
+            "style_id": style_id,
+            "refs": refs,
+            "model": model,
+            "n": n,
+            "cost": round(cost, 4),
+            "pack": pack,
+            "styles": styles,
+            "style": style,
+        }
+
     def _recraft_draft(self, data: dict) -> dict:
         """Seed Recraft candidates for one icon (+optional variant) into the latest run."""
         import iconpilot.recraft as rc
@@ -548,13 +628,13 @@ class ReviewHandler(BaseHTTPRequestHandler):
         icon_id = data.get("icon") or ""
         variant = data.get("variant")
         try:
-            n = int(data.get("n") or 4)
+            n = int(data.get("n") or 0) or None
         except (TypeError, ValueError) as exc:
             raise ValueError("n must be an integer 1-6") from exc
-        if not 1 <= n <= 6:
+        if n is not None and not 1 <= n <= 6:
             raise ValueError("n must be 1-6")
         with pack_lock(self.pack_dir):
-            pack, styles = load_pack(self.pack_dir / "pack.json")
+            pack, _styles = load_pack(self.pack_dir / "pack.json")
         icon = pack["icons"].get(icon_id)
         if icon is None:
             raise ValueError(f"unknown icon '{icon_id}'")
@@ -572,21 +652,22 @@ class ReviewHandler(BaseHTTPRequestHandler):
         if not token:
             raise ValueError("no Recraft token on the server — set RECRAFT_API_TOKEN")
 
-        style = styles[icon["variants"][variant]["style"]]
-        recraft_cfg = pack.get("recraft", {})
-        style_id = recraft_cfg.get("style_ids", {}).get(
-            icon["variants"][variant]["style"]
-        ) or recraft_cfg.get("style_id")
-
-        parts = [icon.get("brief", icon_id), style.label, " ".join(style.style_words)]
-        if style.avoid:
-            parts.append("avoid: " + ", ".join(style.avoid))
-        parts += pack.get("rules", [])
+        plan = self._recraft_plan(icon_id, variant, n_in=n)
         if data.get("prompt"):
-            parts.append(str(data["prompt"]))
-        prompt = ", ".join(p for p in parts if p)[:1000]
+            plan["prompt"] = (plan["prompt"] + ", " + str(data["prompt"]))[:1000]
+        style = plan["style"]
+        style_id = plan["style_id"]
 
-        svgs = rc.generate(token, prompt, n=n, style_id=style_id)
+        ref_urls = [rc._svg_data_url(s) for s in plan["refs"]] or None
+        svgs = rc.generate(
+            token,
+            plan["prompt"],
+            n=plan["n"],
+            style_id=style_id,
+            model=plan["model"],
+            reference_urls=ref_urls,
+        )
+        n = plan["n"]
 
         runs_dir = self.pack_dir / ".runs"
         runs = sorted(p.name for p in runs_dir.glob("r*")) if runs_dir.is_dir() else []
@@ -616,13 +697,8 @@ class ReviewHandler(BaseHTTPRequestHandler):
                 rj = _json.loads(round_json.read_text()) if round_json.is_file() else {}
             except ValueError:
                 rj = {}
-            rj.setdefault("models_used", {})["seeder"] = (
-                recraft_cfg.get("model") or rc.FALLBACK_MODEL
-            )
-            model_used = style_id and rc.DEFAULT_MODEL or rc.FALLBACK_MODEL
-            rj["estimated_cost_usd"] = round(
-                rj.get("estimated_cost_usd", 0) + rc.price_per_image(model_used) * len(wrote), 4
-            )
+            rj.setdefault("models_used", {})["seeder"] = plan["model"]
+            rj["estimated_cost_usd"] = round(rj.get("estimated_cost_usd", 0) + plan["cost"], 4)
             round_json.write_text(_json.dumps(rj, indent=2) + "\n")
         return {
             "round": run,
@@ -864,6 +940,20 @@ class ReviewHandler(BaseHTTPRequestHandler):
                         pack["note"] = data["note"]
                     if isinstance(data.get("description"), str):
                         pack["description"] = data["description"]
+                    rc_in = data.get("recraft") or {}
+                    if isinstance(rc_in, dict) and ("model" in rc_in or "n" in rc_in):
+                        import iconpilot.recraft as _rc4
+
+                        cfg = pack.setdefault("recraft", {})
+                        if "model" in rc_in:
+                            if rc_in["model"] not in _rc4.VECTOR_MODELS:
+                                raise ValueError("recraft model must be a vector model")
+                            cfg["model"] = rc_in["model"]
+                        if "n" in rc_in:
+                            n_val = int(rc_in["n"])
+                            if not 1 <= n_val <= 6:
+                                raise ValueError("recraft n must be 1-6")
+                            cfg["n"] = n_val
                     if "rules" in data and isinstance(data["rules"], list):
                         pack["rules"] = [str(r) for r in data["rules"] if str(r).strip()]
                     spec_in = data.get("spec") or {}
