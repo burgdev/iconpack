@@ -93,8 +93,10 @@ header .meta { color:var(--muted); font-size:.8rem; }
 .stylestrip summary:hover { color:var(--ink); border-color:var(--accent); }
 .tabs { display:flex; gap:4px; margin: 0 0 14px; border-bottom:1px solid var(--line); }
 .tabs button { border:none; border-bottom:2px solid transparent; border-radius:8px 8px 0 0; background:none;
-               color:var(--muted); padding:8px 14px; font-weight:600; }
+               color:var(--muted); padding:8px 14px; font-weight:600; display:inline-flex; gap:6px; align-items:center; }
 .tabs button.on { color:var(--accent); border-bottom-color:var(--accent); }
+.tabs .tab-label { display:inline; }
+@media (max-width: 640px) { .tabs .tab-label { display:none; } .tabs button { padding:10px 12px; } }
 .refcell { margin:0; width:56px; display:inline-flex; flex-direction:column; align-items:center; gap:2px; position:relative; }
 .refcell img { border-radius:8px; background:#fff; display:block; }
 .stylepick { width:92px; flex-direction:column; display:inline-flex; align-items:center; gap:4px; padding:8px 6px; }
@@ -285,7 +287,6 @@ footer { text-align:center; color:var(--muted); font-size:.75rem; padding:20px 0
       <span class="ic" v-html="IC.plus"></span> next round</button>
     <span class="spacer"></span>
     <span class="meta">{{ S.candidates.length }} candidates</span>
-    <button class="subtle" @click="setTab('settings')" title="settings" aria-label="settings"><span class="ic" v-html="IC.gear"></span></button>
     <button class="subtle" @click="load(true)">refresh</button>
     <div v-if="S.ai.text" class="banner" :class="S.ai.active ? 'working' : 'ready'">
       <span class="dot"></span>{{ S.ai.text }}
@@ -294,10 +295,10 @@ footer { text-align:center; color:var(--muted); font-size:.75rem; padding:20px 0
 
   <main>
 <nav class="tabs" role="tablist">
-  <button :class="{ on: S.tab === 'round' }" @click="setTab('round')" role="tab">current round</button>
-  <button :class="{ on: S.tab === 'styles' }" @click="setTab('styles')" role="tab">styles</button>
-  <button :class="{ on: S.tab === 'pack' }" @click="setTab('pack')" role="tab">icon pack</button>
-  <button :class="{ on: S.tab === 'settings' }" @click="setTab('settings')" role="tab">settings</button>
+  <button :class="{ on: S.tab === 'round' }" @click="setTab('round')" role="tab" aria-label="current round"><span class="ic" v-html="IC.star"></span><span class="tab-label">current round</span></button>
+  <button :class="{ on: S.tab === 'styles' }" @click="setTab('styles')" role="tab" aria-label="styles"><span class="ic" v-html="IC.palette"></span><span class="tab-label">styles</span></button>
+  <button :class="{ on: S.tab === 'pack' }" @click="setTab('pack')" role="tab" aria-label="icon pack"><span class="ic" v-html="IC.grid"></span><span class="tab-label">icon pack</span></button>
+  <button :class="{ on: S.tab === 'settings' }" @click="setTab('settings')" role="tab" aria-label="settings"><span class="ic" v-html="IC.gear"></span><span class="tab-label">settings</span></button>
 </nav>
 <div v-show="S.tab === 'round'">
     <div v-if="S.msg" :class="S.msgClass">{{ S.msg }}</div>
@@ -589,36 +590,9 @@ footer { text-align:center; color:var(--muted); font-size:.75rem; padding:20px 0
 
 <div v-show="S.tab === 'settings'">
   <section>
-    <h2>Settings</h2>
-    <div class="group" id="settings-panel"></div>
-  </section>
-</div>
-
-<footer>iconpilot review v{{ S.version }} · flock-serialized writes · approval is always yours</footer>
-  </main>
-
-  <div class="actionbar" v-show="S.tab === 'round'" :class="{ ready: S.actionBar.ready }">
-    <span class="ab-status" :class="{ 'flash-ok': S.flash && S.flashOk, 'flash-err': S.flash && !S.flashOk }">
-      <template v-if="S.flash">{{ S.flash }}</template>
-      <template v-else>
-        <span v-if="S.actionBar.working" class="dot amber"></span>
-        <span v-else-if="S.actionBar.ready" class="dot green"></span>
-        <span v-else class="dot gray"></span>
-        {{ S.actionBar.text }}
-      </template>
-    </span>
-    <button class="subtle" @click="undo" title="undo last apply" aria-label="undo"><span class="ic" v-html="IC.undo"></span></button>
-    <button class="primary ab-apply" @click="applyAndNext()"
-            :disabled="!S.decisionEdit.trim() || S.applying">apply ▸ next pass</button>
-        <button class="subtle" @click="apply()" v-if="S.decisionEdit.trim() && !S.applying"
-                title="record decisions without starting the next pass">apply only</button>
-  </div>
-
-  <div v-if="S.settingsDlg" class="overlay" @click.self="S.settingsDlg = false">
-    <div class="dialog">
-      <h3><span><span class="ic-lg" v-html="IC.gear"></span> {{ S.pack.name }} settings</span>
-          <button class="subtle" @click="S.settingsDlg = false">✕</button></h3>
-      <div class="controls"><label>version</label>
+    <h2>Settings — {{ S.pack.name }}</h2>
+    <div class="group">
+<div class="controls"><label>version</label>
         <input v-model="S.set.version"></div>
       <div class="controls" style="align-items:flex-start"><label>description</label>
         <textarea v-model="S.set.description" placeholder="durable docs: what this collection is for — shown to humans, exports, READMEs"></textarea></div>
@@ -672,7 +646,29 @@ footer { text-align:center; color:var(--muted); font-size:.75rem; padding:20px 0
       </div>
       <div v-if="S.set.errors" class="err">{{ S.set.errors }}</div>
     </div>
+  </section>
+</div>
+
+<footer>iconpilot review v{{ S.version }} · flock-serialized writes · approval is always yours</footer>
+  </main>
+
+  <div class="actionbar" v-show="S.tab === 'round'" :class="{ ready: S.actionBar.ready }">
+    <span class="ab-status" :class="{ 'flash-ok': S.flash && S.flashOk, 'flash-err': S.flash && !S.flashOk }">
+      <template v-if="S.flash">{{ S.flash }}</template>
+      <template v-else>
+        <span v-if="S.actionBar.working" class="dot amber"></span>
+        <span v-else-if="S.actionBar.ready" class="dot green"></span>
+        <span v-else class="dot gray"></span>
+        {{ S.actionBar.text }}
+      </template>
+    </span>
+    <button class="subtle" @click="undo" title="undo last apply" aria-label="undo"><span class="ic" v-html="IC.undo"></span></button>
+    <button class="primary ab-apply" @click="applyAndNext()"
+            :disabled="!S.decisionEdit.trim() || S.applying">apply ▸ next pass</button>
+        <button class="subtle" @click="apply()" v-if="S.decisionEdit.trim() && !S.applying"
+                title="record decisions without starting the next pass">apply only</button>
   </div>
+
 
   <div v-if="S.fbDlg" class="overlay" @click.self="S.fbDlg = null">
     <div class="dialog">
@@ -919,6 +915,9 @@ const IC = {
   history: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/><path d="M12 7v5l4 2"/></svg>',
   spark: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v2m0 14v2M3 12h2m14 0h2M5.6 5.6l1.4 1.4m10 10 1.4 1.4m0-12.8-1.4 1.4m-10 10-1.4 1.4"/><path d="M12 8.5 13.5 12 12 15.5 10.5 12z"/></svg>',
   gear: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09a1.65 1.65 0 0 0-1-1.51 1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09a1.65 1.65 0 0 0 1.51-1 1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33h0a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51h0a1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82v0a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>',
+  star: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l2.7 5.6 6.3.9-4.5 4.3 1 6.2-5.5-3-5.5 3 1-6.2L3 9.5l6.3-.9z"/></svg>',
+  palette: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="13.5" cy="6.5" r="1.2"/><circle cx="17.5" cy="10.5" r="1.2"/><circle cx="8.5" cy="7.5" r="1.2"/><circle cx="6.5" cy="12.5" r="1.2"/><path d="M12 2a10 10 0 0 0 0 20c1.1 0 2-.9 2-2 0-.5-.2-1-.5-1.3-.3-.4-.5-.8-.5-1.3 0-1.1.9-2 2-2h2.5A4.5 4.5 0 0 0 22 11c0-5-4.5-9-10-9z"/></svg>',
+  grid: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg>',
 };
 function relTime(iso) {
   if (!iso) return '';
@@ -968,6 +967,7 @@ function toggleTheme() { applyTheme(S.theme === 'dark' ? 'light' : 'dark'); }
 function setTab(tb) {
   S.tab = tb;
   history.replaceState(null, '', '#' + tb);
+  if (tb === 'settings') loadSettings();
 }
 function markSeen() { try { localStorage.setItem(seenKey(), new Date().toISOString()); } catch {} }
 function seenTs() { try { return localStorage.getItem(seenKey()) || ''; } catch { return ''; } }
@@ -1555,7 +1555,7 @@ function toggleCompare(c) {
     flash('comparing ' + S.compare.map(cmpLabel).join(' vs '), true);
   }
 }
-async function openSettings() {
+async function loadSettings() {
   focusDialog();
   const sp = S.pack.spec || {};
   S.set = {
@@ -1578,7 +1578,6 @@ async function openSettings() {
   if (!Object.keys(S.recraftModels).length) {
     try { S.recraftModels = await (await fetch('/api/recraft-models')).json(); } catch {}
   }
-  S.settingsDlg = true;
 }
 async function addVariantBulk() {
   try {
@@ -1760,6 +1759,7 @@ const App = {
   setup() {
     onMounted(() => {
       initTheme();
+      if (S.tab === 'settings') loadSettings();
       load().catch(e => { S.msg = e.message; S.msgClass = 'err'; });
       setInterval(async () => {
         try {
@@ -1771,8 +1771,8 @@ const App = {
 
     // keyboard shortcuts
     const onKey = (e) => {
-      if (S.dlg || S.sheet || S.fbDlg || S.settingsDlg || S.compare) {
-        if (e.key === 'Escape') { S.dlg = null; S.sheet = null; S.fbDlg = null; S.settingsDlg = false; S.compare = null; restoreFocus(); }
+      if (S.dlg || S.sheet || S.fbDlg || S.compare) {
+        if (e.key === 'Escape') { S.dlg = null; S.sheet = null; S.fbDlg = null; S.compare = null; restoreFocus(); }
         return;
       }
       if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA' || e.target.tagName === 'SELECT') return;
@@ -1820,7 +1820,7 @@ const App = {
       styleLabel, open, openIcon, openSheet, switchStyle, startManual,
       apply, copy, saveIcon, edited, load, chosenCand, variantStatus,
       mainColor, packBrief, saveBrief, saveMainColor, hasNote,
-      openSettings, saveSettings, markDirty,
+      saveSettings, loadSettings, markDirty,
       variantGroups, packBriefIcon, mainColorIcon, saveMainColorIcon, rejectAllIcon,
        copyPath, togglePin, isPinned, undo,
       batchApprove, batchReject, toggleCompare,
