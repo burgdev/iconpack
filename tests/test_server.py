@@ -430,7 +430,9 @@ def test_recraft_endpoint_drafts(server: _Server, srvpack: Path, monkeypatch) ->
 
     monkeypatch.setattr(rc, "resolve_token", lambda models_file=None: "tok")
 
-    def fake_generate(token, prompt, n=4, style_id=None, model=None, reference_urls=None):
+    def fake_generate(
+        token, prompt, n=4, style_id=None, model=None, reference_urls=None, curated_style=None
+    ):
         svg = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024"><path d="M0 0h1024v1024H0z"/></svg>'
         return [svg] * n
 

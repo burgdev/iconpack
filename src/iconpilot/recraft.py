@@ -130,6 +130,7 @@ def draft_prompt(icon: dict, style, pack: dict, model: str | None = None) -> str
     if style.avoid:
         parts.append("avoid: " + ", ".join(style.avoid[:3]))
     parts += pack.get("rules", [])[:3]
+    parts.append("no background, transparent background, isolated icon on plain white")
     return ", ".join(p for p in parts if p)[:limit]
 
 
@@ -540,6 +541,16 @@ def strip_metadata(svg: str) -> str:
     svg = _re.sub(r"<!--[\s\S]*?-->", "", svg)
     # strip processing instructions
     svg = _re.sub(r"<\?[^>]*\?>", "", svg)
+    # strip full-canvas background rects (Recraft sometimes adds these)
+    svg = _re.sub(
+        r'<rect[^>]*width="(?:1024|1000|\d{3,})"[^>]*height="(?:1024|1000|\d{3,})"[^>]*/>', "", svg
+    )
+    # strip large filled rects that cover the whole viewBox
+    svg = _re.sub(
+        r'<rect[^>]*fill="(?:#(?:fff|f00|000|ffffff|000000)[^"]*)"[^>]*width="\d{2,}"[^>]*/>',
+        "",
+        svg,
+    )
     return svg.strip()
 
 

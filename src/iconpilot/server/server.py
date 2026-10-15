@@ -725,18 +725,23 @@ class ReviewHandler(BaseHTTPRequestHandler):
         cfg = pack.get("recraft", {})
 
         n = n_in or cfg.get("n") or 4
-        n = max(1, min(int(n), 6))
+        n = max(1, min(int(n), 16))  # sheet mode allows up to grid² = 16
 
         prompt = rc.draft_prompt(icon, style, pack)
         style_id = cfg.get("style_ids", {}).get(v["style"]) or cfg.get("style_id")
 
         refs: list[str] = []
         if not style_id:
-            # attach the look: pinned/approved SVGs on the same style first,
-            # then the approved sibling of this icon (max 3)
+            # ALL style refs (own uploads + bundled) as the look, then
+            # pinned/approved pack icons on the same style
+            from iconpilot.styles import style_refs as _sr
+
+            for f in _sr(self.pack_dir, v["style"]):
+                refs.append(f.read_text())
+            # add pinned/approved pack icons (up to Recraft's 10-image limit total)
             for iid, ic in pack["icons"].items():
                 for vid, vd in ic.get("variants", {}).items():
-                    if len(refs) >= 3:
+                    if len(refs) >= 10:
                         break
                     if (
                         vd.get("pinned")
