@@ -244,6 +244,11 @@ def resolve_styles(pack_local: dict | None = None) -> dict[str, Style]:
             registry[style_id] = _style_from_dict(style_id, d, registry.get(style_id))
 
     for style_id, d in (pack_local or {}).items():
-        registry[style_id] = _style_from_dict(style_id, d, registry.get(style_id))
+        d = dict(d)
+        extends = d.pop("extends", None)
+        base = registry.get(extends) if extends else registry.get(style_id)
+        if extends and base is None:
+            raise ValueError(f"style '{style_id}': unknown extends '{extends}'")
+        registry[style_id] = _style_from_dict(style_id, d, base)
 
     return registry

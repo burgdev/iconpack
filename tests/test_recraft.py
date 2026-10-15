@@ -489,3 +489,18 @@ def test_context_archived_feedback_scope_filtered(tmp_path: Path) -> None:
     assert "sun fb" not in texts  # no cross-icon bleed
     md = render_markdown(ctx)
     assert "[user] pack fb" in md
+
+
+def test_styles_extends_resolution() -> None:
+    from iconpilot.styles import resolve_styles
+
+    styles = resolve_styles(
+        {"outline-color": {"extends": "filled", "size": 48, "palette": ["#123456"]}}
+    )
+    st = styles["outline-color"]
+    assert st.size == 48
+    assert st.construction == "solid"  # inherited from filled
+    import pytest as _pytest
+
+    with _pytest.raises(ValueError, match="unknown extends"):
+        resolve_styles({"bad": {"extends": "nope"}})

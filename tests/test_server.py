@@ -613,3 +613,56 @@ def test_prompt_endpoint(server: _Server, srvpack: Path) -> None:
     # unknown variant
     code, body = server.get("/api/prompt?icon=hut&variant=nope")
     assert code == 404
+
+
+def test_round_new_focus_only(server: _Server, srvpack: Path) -> None:
+    pj = srvpack / "pack.json"
+    pack = json.loads(pj.read_text())
+    pack["icons"]["hut"]["variants"]["mono"]["status"] = "todo"  # make it open
+    pj.write_text(json.dumps(pack))
+    code, data = server.req("POST", "/api/round/new", {"only": ["hut#mono"]})
+    assert code == 200, data
+    assert data["open"] == ["hut#mono"]
+    rj = json.loads((srvpack / ".runs" / data["round"] / "round.json").read_text())
+    assert rj["open"] == ["hut#mono"]
+    # locked variant rejected in only
+    code, data = server.req("POST", "/api/round/new", {"only": ["hut#mono", "nope#mono"]})
+    assert code == 400
+
+
+def test_pack_style_custom_extends(server: _Server, srvpack: Path) -> None:
+    code, data = server.req(
+        "POST",
+        "/api/pack-style",
+        {"id": "outline-color", "def": {"extends": "filled", "size": 48}},
+    )
+    assert code == 200, data
+    pack = json.loads((srvpack / "pack.json").read_text())
+    assert pack["styles"]["outline-color"]["extends"] == "filled"
+    code, data = server.req(
+        "POST",
+        "/api/pack-style",
+        {"id": "bad", "def": {"extends": "does-not-exist"}},
+    )
+    assert code == 400
+
+
+def test_pack_variant_bulk(server: _Server, srvpack: Path) -> None:
+    code, data = server.req("POST", "/api/pack-variant-bulk", {"style": "duotone"})
+    assert code == 200, data
+    assert data["added"] >= 1
+    pack = json.loads((srvpack / "pack.json").read_text())
+    assert pack["icons"]["hut"]["variants"]["duotone"]["status"] == "todo"
+    # idempotent
+    code, data = server.req("POST", "/api/pack-variant-bulk", {"style": "duotone"})
+    assert code == 200 and data["added"] == 0
+
+
+def test_recraft_request_preview_no_token(server: _Server, srvpack: Path) -> None:
+    code, body = server.get("/api/recraft-request?icon=hut&variant=mono&n=2")
+    assert code == 200
+    data = json.loads(body)
+    assert data["endpoint"].endswith("/images/generations")
+    req = data["request"]
+    assert req["n"] == 2 and req["size"] == "1:1" and "prompt" in req
+    assert "model" in req

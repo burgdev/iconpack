@@ -206,7 +206,9 @@ footer { text-align:center; color:var(--muted); font-size:.75rem; padding:20px 0
 .histstrip summary:hover { background:var(--chip); color:var(--ink); }
 .histgrid { display:flex; flex-wrap:wrap; gap:10px; padding:8px 0 4px; }
 .histcell { margin:0; text-align:center; }
-.histcell img { display:block; margin:0 auto 3px; border-radius:6px; }
+.histcell img { display:block; margin:0 auto; border-radius:6px; }
+.histhumb { padding:0; border:1px solid var(--line); border-radius:8px; background:var(--card); cursor:zoom-in; }
+.histhumb:hover { border-color:var(--accent); }
 .histcell figcaption { font-size:.68rem; }
 .thumb.missing { width:64px; height:64px; display:flex; align-items:center; justify-content:center;
                  color:var(--muted); border:1px dashed var(--line); border-radius:8px; }
@@ -246,7 +248,7 @@ footer { text-align:center; color:var(--muted); font-size:.75rem; padding:20px 0
       <span class="ic" v-html="IC.comment"></span> {{ fbFor('pack').length || '' }}
       <span v-if="fbNew('pack')" class="chip new">{{ fbNew('pack') }} new</span>
     </button>
-    <button class="subtle" @click="startRound()"
+    <button class="subtle" @click="openNextDlg()"
             title="apply first, then start the next pass — history is kept">
       <span class="ic" v-html="IC.plus"></span> next round</button>
     <span class="spacer"></span>
@@ -273,7 +275,7 @@ footer { text-align:center; color:var(--muted); font-size:.75rem; padding:20px 0
           <b>{{ g.icon }}</b>
           <span class="muted">{{ g.cands.length }} candidates across variants</span>
           <span class="spacer"></span>
-          <button class="subtle" :class="{ busy: S.drafting.startsWith(g.icon + '/') }"
+          <button v-if="S.recraftReady || S.debug" class="subtle" :class="{ busy: S.drafting.startsWith(g.icon + '/') }"
                   title="Recraft: seed 4 drafts for every open variant of this icon"
                   @click="recraftIcon(g)"><span class="ic" v-html="IC.bolt"></span> draft</button>
           <button class="subtle" :class="{ 'armed-x': S.rejectArm === g.icon }" @click="rejectAllIcon(g)"
@@ -293,8 +295,10 @@ footer { text-align:center; color:var(--muted); font-size:.75rem; padding:20px 0
           <summary><span class="ic" v-html="IC.history"></span> earlier passes</summary>
           <div v-if="(S.iconHist[g.icon] || []).length" class="histgrid">
             <figure v-for="hc in S.iconHist[g.icon]" :key="hc.round + hc.variant + hc.cand" class="histcell">
-              <img loading="lazy" width="40" height="40"
-                   :src="render(hc.path, 40, '#f6f9f7', mainColorIcon(g))">
+              <button class="histhumb" @click="S.histView = hc" :title="'view ' + hc.round + ' ' + hc.variant + '/' + hc.cand">
+                <img loading="lazy" width="40" height="40"
+                     :src="render(hc.path, 40, '#f6f9f7', mainColorIcon(g))">
+              </button>
               <figcaption class="muted">{{ hc.round }} · {{ hc.variant }}/{{ hc.cand }}</figcaption>
             </figure>
           </div>
@@ -315,13 +319,13 @@ footer { text-align:center; color:var(--muted); font-size:.75rem; padding:20px 0
               </button>
               <button class="iconbtn" title="copy a complete LLM hint for this variant — paste into any model, bring SVGs back"
                       @click="copyPrompt(g.icon, vg.variant)"><span class="ic" v-html="IC.copy"></span></button>
-              <button class="iconbtn" :class="{ on: S.drafting === g.icon + '/' + vg.variant }"
-                      title="Recraft: seed 4 drafts for this variant (~$0.18-0.20)" aria-label="Recraft draft"
-                      @click="recraftDraft(g.icon, vg.variant)"><span class="ic" v-html="IC.bolt"></span></button>
+              <button v-if="S.recraftReady || S.debug" class="iconbtn" :class="{ on: S.drafting === g.icon + '/' + vg.variant }"
+                      :title="S.debug && !S.recraftReady ? 'preview the Recraft request (no call)' : 'Recraft: seed 4 drafts for this variant (~$0.18-0.20)'" aria-label="Recraft draft"
+                      @click="S.debug && !S.recraftReady ? showDebug(g.icon, vg.variant) : recraftDraft(g.icon, vg.variant)"><span class="ic" v-html="IC.bolt"></span></button>
             </div>
             <div class="grid">
               <div class="card" v-for="(c, ci) in vg.cands" :key="c.cand"
-                   :class="{ kbactive: gi === S.kbFocus && vi === S.kbVariant && ci === S.kbCand && !isViewing() }">
+                   :class="{ kbactive: S.kbUsed && gi === S.kbFocus && vi === S.kbVariant && ci === S.kbCand && !isViewing() }">
                 <img class="thumb" loading="lazy" width="64" height="64"
                      :src="render(c.path, 64, '#f6f9f7', mainColorIcon(g))" @click="open(c)">
             <div class="name">{{ c.cand }}
@@ -337,9 +341,7 @@ footer { text-align:center; color:var(--muted); font-size:.75rem; padding:20px 0
               <button :class="{ armed: item(c)?.t === c.cand + ' ok' }"
                       title="approve — final" @click="approve(c)">✓</button>
             </div>
-            <button class="subtle" :class="{ armed: item(c)?.t === c.cand + ' keep' }"
-                    @click="keep(c)">keep (refine)</button>
-            <button class="iconbtn" title="compare" @click="toggleCompare(c)">⇄</button>
+            <button class="iconbtn" title="compare" aria-label="compare" @click="toggleCompare(c)">⇄</button>
           </div>
             </div>
           </div>
@@ -355,7 +357,7 @@ footer { text-align:center; color:var(--muted); font-size:.75rem; padding:20px 0
       <details>
         <summary>Decision text · {{ S.lines.length }} lines</summary>
         <p class="muted" style="margin:6px 0">
-          ok = <b>approve final</b> · keep = <b>refine</b> · rate 0 = drop.
+          ok = <b>approve final</b> · rate 1–9 = refine · rate 0 / ✕ = drop. Unrated candidates carry over implicitly.
           Free-text editable; the generated line list stays underneath.
         </p>
         <textarea v-model="S.decisionEdit" @input="markDirty"
@@ -368,7 +370,7 @@ footer { text-align:center; color:var(--muted); font-size:.75rem; padding:20px 0
           <button @click="copy">copy JSON</button>
         </div>
         <div class="row" style="margin-top:6px">
-          <span class="muted">keys: ←→ move · [ ] group · 1 ok · 2 keep · 3 drop · 0 rate · esc close</span>
+          <span class="muted">keys: ←→ move · [ ] group · 1 ok · 2 drop · 0 rate · esc close</span>
         </div>
         <div class="row" style="margin-top:6px">
           <span class="muted">batch:</span>
@@ -474,6 +476,19 @@ footer { text-align:center; color:var(--muted); font-size:.75rem; padding:20px 0
         <textarea v-model="S.set.note" placeholder="FEEDBACK to the agent, every draft — e.g. 'no chimneys anywhere'. Clear when resolved."></textarea></div>
       <div class="controls" style="align-items:flex-start"><label>rules</label>
         <textarea v-model="S.set.rules" placeholder="one rule per line — injected into every drafting context"></textarea></div>
+      <div class="controls" style="align-items:flex-start"><label>add variant</label>
+        <div class="row">
+          <select v-model="S.set.addStyle"><option v-for="(st, sid) in S.styles" :key="sid" :value="sid">{{ sid }}</option></select>
+          <button class="subtle" @click="addVariantBulk">add to every glyph</button>
+        </div></div>
+      <div class="controls" style="align-items:flex-start"><label>custom style</label>
+        <div class="row" style="flex-direction:column; align-items:stretch; gap:4px">
+          <div class="row"><input v-model="S.set.csId" placeholder="style id (e.g. outline-color)" style="flex:1">
+          <select v-model="S.set.csBase"><option v-for="(st, sid) in S.styles" :key="sid" :value="sid">extends {{ sid }}</option></select></div>
+          <div class="row"><input v-model="S.set.csSize" type="number" placeholder="grid px (blank = inherit)" style="width:130px">
+          <input v-model="S.set.csPalette" placeholder="palette hex csv (optional)" style="flex:1"></div>
+          <button class="subtle" @click="addCustomStyle">define + add to every glyph</button>
+        </div></div>
       <div class="controls"><label>stroke width</label>
         <input v-model="S.set.strokeWidth" type="number" step="0.5" min="0.5" style="width:90px"></div>
       <div class="controls"><label>caps/joins</label>
@@ -520,13 +535,60 @@ footer { text-align:center; color:var(--muted); font-size:.75rem; padding:20px 0
     </div>
   </div>
 
+  <div v-if="S.nextDlg" class="overlay" @click.self="S.nextDlg = null">
+    <div class="dialog">
+      <h3><span>Focus for the next pass</span><button class="subtle" @click="S.nextDlg = null" aria-label="Close">✕</button></h3>
+      <p class="muted" style="margin:0 0 8px">Pick what to draft next — e.g. color first, mono later. Everything stays open; this only sets the focus.</p>
+      <div style="max-height:300px; overflow-y:auto">
+        <label v-for="v in S.nextDlg.all" :key="v.key" style="display:flex; gap:8px; align-items:center; padding:3px 0">
+          <input type="checkbox" v-model="S.nextDlg.sel[v.key]"> {{ v.label }}
+        </label>
+      </div>
+      <div class="row" style="margin-top:10px">
+        <button class="primary" @click="startRound(Object.entries(S.nextDlg.sel).filter(([,on]) => on).map(([k]) => k))">start pass</button>
+        <button class="subtle" @click="startRound()">all open</button>
+        <button class="subtle" @click="S.nextDlg = null" aria-label="Close">✕</button>
+      </div>
+    </div>
+  </div>
+
+  <div v-if="S.debugDlg" class="overlay" @click.self="S.debugDlg = null">
+    <div class="dialog">
+      <h3><span><span class="ic-lg" v-html="IC.bolt"></span> Recraft request · {{ S.debugDlg.icon }}#{{ S.debugDlg.variant }} (≈ ${{ S.debugDlg.cost }})</span>
+          <button class="subtle" @click="S.debugDlg = null" aria-label="Close">✕</button></h3>
+      <p class="muted" style="margin:0 0 8px">{{ S.debugDlg.endpoint }}</p>
+      <textarea :value="S.debugDlg.request" readonly rows="8"></textarea>
+      <div class="row" style="margin-top:8px">
+        <button class="primary" @click="copyText(S.debugDlg.request, 'request JSON copied')">copy request JSON</button>
+        <button class="subtle" @click="copyText(S.debugDlg.full, 'full hint copied')">copy full hint</button>
+        <button class="subtle" @click="S.debugDlg = null" aria-label="Close">✕</button>
+      </div>
+    </div>
+  </div>
+
+  <div v-if="S.histView" class="overlay" @click.self="S.histView = null">
+    <div class="dialog">
+      <h3><span>{{ S.histView.icon }} / {{ S.histView.variant }} · {{ S.histView.cand }} <span class="chip">{{ S.histView.round }}</span></span>
+          <button class="subtle" @click="S.histView = null" aria-label="Close">✕</button></h3>
+      <div class="sheetstage">
+        <img width="96" height="96" :src="render(S.histView.path, 96, '#f6f9f7', mainColorIcon({icon: S.histView.icon}))">
+        <img width="48" height="48" :src="render(S.histView.path, 48, '#22292e', '#f2f7f4')">
+        <img width="24" height="24" :src="render(S.histView.path, 24, '#f6f9f7', mainColorIcon({icon: S.histView.icon}))">
+      </div>
+      <div class="row">
+        <button class="subtle" @click="copyPath(S.histView.icon, S.histView.variant, S.histView.cand)"><span class="ic" v-html="IC.copy"></span> path</button>
+        <button class="subtle" @click="toggleCompare({...S.histView, hist: true}); S.histView = null">⇄ compare</button>
+      </div>
+    </div>
+  </div>
+
   <div v-if="S.compare && S.compare.length === 2" class="overlay" @click.self="S.compare = null">
     <div class="dialog" style="max-width:700px">
       <h3><span>Compare: {{ S.compare[0].cand }} vs {{ S.compare[1].cand }}</span>
           <button class="subtle" @click="S.compare = null">✕</button></h3>
       <div class="compare-grid">
-        <div v-for="c in S.compare" :key="c.icon + '/' + c.variant + '/' + c.cand" class="compare-col">
-          <div class="compare-label">{{ c.icon }} / {{ c.variant }} · {{ c.cand }}</div>
+        <div v-for="c in S.compare" :key="(c.round || '') + c.icon + '/' + c.variant + '/' + c.cand" class="compare-col">
+          <div class="compare-label">{{ c.icon }} / {{ cmpLabel(c) }}{{ c.hist ? ' (history)' : '' }}</div>
           <div class="stage" style="background:#f6f9f7">
             <img :width="96" :height="96" :src="render(c.path, 96, '#f6f9f7')">
           </div>
@@ -538,7 +600,7 @@ footer { text-align:center; color:var(--muted); font-size:.75rem; padding:20px 0
             <img :width="24" :height="24" :src="render(c.path, 24, '#f6f9f7')">
             <img :width="16" :height="16" :src="render(c.path, 16, '#f6f9f7')">
           </div>
-          <div class="rating" style="margin-top:6px">
+          <div class="rating" style="margin-top:6px" v-if="!c.hist">
             <button :class="{ armed: item(c)?.t === c.cand + ' ok' }" @click="approve(c)">✓</button>
             <button class="ratebtn" @click="openSheet(c)"><template v-if="hasRating(c)">★ {{ rating(c) }}</template><template v-else>rate</template></button>
             <button :class="{ 'armed-x': item(c)?.t?.startsWith(c.cand + ' no') }" @click="drop(c)">✕</button>
@@ -632,7 +694,8 @@ const S = reactive({
   dlg: null, sheet: null, fbDlg: null, settingsDlg: false,
   decisionEdit: '', showGen: false, editingBrief: null,
   flash: '', flashOk: true, applying: false, instructions: '',
-  kbFocus: 0, kbVariant: 0, kbCand: 0, compare: null, theme: 'light', iconHist: {}, svgFiles: {}, rejectArm: null,
+  kbFocus: 0, kbVariant: 0, kbCand: 0, kbUsed: false, compare: null, histView: null,
+  recraftReady: false, debug: new URLSearchParams(location.search).has('debug'), debugDlg: null, nextDlg: null, theme: 'light', iconHist: {}, svgFiles: {}, rejectArm: null,
   history: [], showHistory: false,
   set: { version: '', rules: '', strokeWidth: 2, linecap: 'round', linejoin: 'round', padding: 2, precision: 0.5, palette: null, errors: '' },
   bgs: [
@@ -861,6 +924,14 @@ async function switchRound(r) {
 }
 function totalCost() { return S.history.reduce((a, h) => a + (h.cost_usd || 0), 0); }
 
+async function showDebug(icon, variant) {
+  try {
+    const r = await api('/api/recraft-request?icon=' + encodeURIComponent(icon) + '&variant=' + encodeURIComponent(variant));
+    r.request.prompt = r.request.prompt.slice(0, 160) + '… (full hint below)';
+    S.debugDlg = { icon, variant, endpoint: r.endpoint, request: JSON.stringify(r.request, null, 2), full: r.full_prompt, cost: r.est_cost_usd };
+    focusDialog();
+  } catch (e) { flash('preview: ' + e.message, false); }
+}
 async function recraftDraft(icon, variant, n = 4) {
   const key = icon + '/' + variant;
   S.drafting = key;
@@ -882,14 +953,27 @@ async function recraftIcon(g) {
   for (const vg of open) await recraftDraft(g.icon, vg.variant);
 }
 
-async function startRound() {
+function openVariantsLive() {
+  const out = [];
+  for (const [iid, icon] of Object.entries(S.pack.icons || {}))
+    for (const [vid, v] of Object.entries(icon.variants || {}))
+      if (!v.link && !S.locked[iid + '/' + vid]) out.push({ key: iid + '#' + vid, label: iid + '#' + vid + ' (' + v.style + ')' });
+  return out;
+}
+function openNextDlg() {
   const pending = Object.values(S.decisions).some(e => e.items?.length);
-  if (pending && !confirm('There are unapplied ratings. Start a new round anyway? ' + String.fromCharCode(10) + '(The LLM will not see them — apply first if you want them recorded.)')) return;
+  if (pending && !confirm('There are unapplied ratings. Start a new pass anyway? ' + String.fromCharCode(10) + '(The LLM will not see them — apply first if you want them recorded.)')) return;
+  S.nextDlg = { sel: {}, all: openVariantsLive() };
+  S.nextDlg.sel = Object.fromEntries(S.nextDlg.all.map(v => [v.key, true]));
+  focusDialog();
+}
+async function startRound(only) {
   try {
-    const r = await api('/api/round/new', { method: 'POST' });
-    S.decisions = {}; editDirty = false; S.decisionEdit = ''; S.instructions = '';
+    const r = await api('/api/round/new', { method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(only ? { only } : {}) });
+    S.decisions = {}; editDirty = false; S.decisionEdit = ''; S.instructions = ''; S.nextDlg = null;
     await load();
-    flash(`round ${r.round} started — ${r.open.length} open (history kept)`, true);
+    flash(`pass ${r.round} started — ${r.open.length} open${only ? ' (focused)' : ''} (history kept)`, true);
   } catch (e) { flash('round: ' + e.message, false); }
 }
 
@@ -1022,7 +1106,7 @@ function styleLabel(sid) {
 }
 function openSheet(c) {
   focusDialog(); S.sheet = { c }; }
-function cmpLabel(c) { return c.variant + '/' + c.cand; }
+function cmpLabel(c) { return (c.round ? c.round + ' ' : '') + c.variant + '/' + c.cand; }
 let _lastFocus = null;
 function focusDialog() {
   _lastFocus = document.activeElement;
@@ -1035,6 +1119,7 @@ function restoreFocus() {
   _lastFocus?.focus?.();
   _lastFocus = null;
 }
+function kbUsedNow() { S.kbUsed = true; }
 function kbScroll() {
   requestAnimationFrame(() => {
     document.querySelector('.card.kbactive')?.scrollIntoView({ block: 'nearest' });
@@ -1067,9 +1152,31 @@ function openSettings() {
     padding: sp.live_area?.padding ?? 2,
     precision: sp.precision ?? 0.5,
     palette: (S.pack.styles?.['lineal-color']?.palette) || null,
+    addStyle: 'lineal-color', csId: '', csBase: 'filled', csSize: '', csPalette: '',
     errors: '',
   };
   S.settingsDlg = true;
+}
+async function addVariantBulk() {
+  try {
+    const r = await api('/api/pack-variant-bulk', { method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ style: S.set.addStyle }) });
+    S.msg = `variant '${S.set.addStyle}' added to ${r.added} glyph(s) (rev ${r.rev})`; S.msgClass = 'ok';
+    await load();
+  } catch (e) { flash('add variant: ' + (e.d?.error || e.message), false); }
+}
+async function addCustomStyle() {
+  const sdef = { extends: S.set.csBase };
+  if (S.set.csSize) sdef.size = +S.set.csSize;
+  if (S.set.csPalette) sdef.palette = S.set.csPalette.split(',').map(s => s.trim()).filter(Boolean);
+  try {
+    await api('/api/pack-style', { method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ id: S.set.csId, def: sdef }) });
+    await api('/api/pack-variant-bulk', { method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ style: S.set.csId }) });
+    flash('custom style defined + added to every glyph', true);
+    await load();
+  } catch (e) { flash('custom style: ' + (e.d?.error || e.message), false); }
 }
 async function saveSettings() {
   S.set.errors = '';
@@ -1197,6 +1304,7 @@ async function load(manual) {
     api('/api/pack'), api(runUrl), api('/api/styles'), api('/api/ai-status'), api('/api/history'),
   ]);
   S.pack = p.pack; S.rev = p.rev; S.svgFiles = p.svg_files || {};
+  S.recraftReady = !!p.recraft_ready;
   S.round = run.round; S.latest = run.latest;
   S.locked = run.locked || {};
   S.rounds = (S.history || []).map(h => h.round).reverse();  // newest first
@@ -1245,10 +1353,10 @@ const App = {
       const ci = S.kbCand ?? 0;
       const c = vg.cands[Math.min(ci, vg.cands.length - 1)];
       if (e.key === '1') { approve(c); e.preventDefault(); }
-      else if (e.key === '2') { keep(c); e.preventDefault(); }
+      else if (e.key === '2') { drop(c); e.preventDefault(); }
       else if (e.key === '3') { drop(c); e.preventDefault(); }
-      else if (e.key === '[') { S.kbFocus = Math.max(0, gi - 1); S.kbVariant = 0; S.kbCand = 0; e.preventDefault(); kbScroll(); }
-      else if (e.key === ']') { S.kbFocus = Math.min(groups.length - 1, gi + 1); S.kbVariant = 0; S.kbCand = 0; e.preventDefault(); kbScroll(); }
+      else if (e.key === '[') { kbUsedNow(); S.kbFocus = Math.max(0, gi - 1); S.kbVariant = 0; S.kbCand = 0; e.preventDefault(); kbScroll(); }
+      else if (e.key === ']') { kbUsedNow(); S.kbFocus = Math.min(groups.length - 1, gi + 1); S.kbVariant = 0; S.kbCand = 0; e.preventDefault(); kbScroll(); }
       else if (e.key === 'ArrowRight' || e.key === 'ArrowDown') {
         const next = ci + 1;
         if (next < vg.cands.length) S.kbCand = next;
@@ -1282,6 +1390,7 @@ const App = {
       isLocked, recraftDraft, recraftIcon, startRound, saveIconDesc, totalCost,
       fbFor, fbNew, fbTitle, fbItems, fbChat, openFb, addFeedback, resolveFeedback, switchRound, isViewing,
       IC, relTime, isNew, copyPrompt, reopen, toggleTheme, cmpLabel, initTheme, loadIconHist, hasRating,
+      showDebug, openNextDlg, addVariantBulk, addCustomStyle,
 
     };
   },

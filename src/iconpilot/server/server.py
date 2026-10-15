@@ -118,6 +118,8 @@ class ReviewHandler(BaseHTTPRequestHandler):
                     for iid, ic in pack.get("icons", {}).items()
                     for vid, vd in ic.get("variants", {}).items()
                 }
+                import iconpilot.recraft as _rc
+
                 self._json(
                     200,
                     {
@@ -125,6 +127,7 @@ class ReviewHandler(BaseHTTPRequestHandler):
                         "version": __version__,
                         "pack": pack,
                         "svg_files": files,
+                        "recraft_ready": _rc.resolve_token() is not None,
                     },
                 )
             except Exception as exc:
@@ -195,6 +198,54 @@ class ReviewHandler(BaseHTTPRequestHandler):
             self.send_header("Content-Length", str(len(body)))
             self.end_headers()
             self.wfile.write(body)
+            return
+
+        if url.path == "/api/recraft-request":
+            icon_id = (q.get("icon") or [""])[0]
+            variant = (q.get("variant") or [""])[0]
+            try:
+                n = max(1, min(int((q.get("n") or ["4"])[0]), 6))
+            except ValueError:
+                n = 4
+            try:
+                pack, styles = load_pack(self.pack_dir / "pack.json")
+            except Exception as exc:
+                self._json(500, {"error": str(exc)})
+                return
+            icon = pack["icons"].get(icon_id)
+            if icon is None or "style" not in icon.get("variants", {}).get(variant, {}):
+                self._json(404, {"error": f"no authored variant {icon_id}#{variant}"})
+                return
+            import iconpilot.recraft as rc
+            from iconpilot.context import build_prompt
+
+            style = styles[icon["variants"][variant]["style"]]
+            recraft_cfg = pack.get("recraft", {})
+            style_id = recraft_cfg.get("style_ids", {}).get(
+                icon["variants"][variant]["style"]
+            ) or recraft_cfg.get("style_id")
+            parts = [icon.get("brief", icon_id), style.label, " ".join(style.style_words)]
+            if style.avoid:
+                parts.append("avoid: " + ", ".join(style.avoid))
+            parts += pack.get("rules", [])
+            prompt = ", ".join(p for p in parts if p)[:1000]
+            model = style_id and rc.DEFAULT_MODEL or rc.FALLBACK_MODEL
+            self._json(
+                200,
+                {
+                    "endpoint": rc.API_BASE + "/images/generations",
+                    "request": {
+                        "model": model,
+                        "prompt": prompt,
+                        "n": n,
+                        "size": "1:1",
+                        "response_format": "b64_json",
+                        **({"style_id": style_id, "style_match": "precise"} if style_id else {}),
+                    },
+                    "full_prompt": build_prompt(self.pack_dir, pack, styles, icon_id, variant, n=n),
+                    "est_cost_usd": round(rc.price_per_image(model) * n, 3),
+                },
+            )
             return
 
         if url.path == "/api/icon-runs":
@@ -452,8 +503,11 @@ class ReviewHandler(BaseHTTPRequestHandler):
 
         self._json(404, {"error": "no such route"})
 
-    def _start_round(self) -> dict:
-        """Create the next run dir; archive live feedback into it (history)."""
+    def _start_round(self, only: list[str] | None = None) -> dict:
+        """Create the next run dir; archive live feedback into it (history).
+
+        `only` restricts the round to selected `icon#variant` keys (focus mode).
+        """
         import json as _json
 
         runs_dir = self.pack_dir / ".runs"
@@ -471,6 +525,14 @@ class ReviewHandler(BaseHTTPRequestHandler):
                 for vid, var in icon.get("variants", {}).items()
                 if "style" in var and "link" not in var and var.get("status") != "approved"
             ]
+            if only is not None:
+                wanted = set(only)
+                unknown = wanted - set(open_)
+                if unknown:
+                    raise ValueError(f"not open (or locked): {sorted(unknown)}")
+                open_ = [k for k in open_ if k in wanted]
+        except ValueError:
+            raise
         except Exception:
             open_ = []
         (runs_dir / run / "round.json").write_text(
@@ -677,8 +739,58 @@ class ReviewHandler(BaseHTTPRequestHandler):
                 self._json(500, {"error": str(exc)})
             return
         if url.path == "/api/round/new":
+            data = self._body()
             try:
-                self._json(200, self._start_round())
+                self._json(200, self._start_round(only=data.get("only")))
+            except ValueError as exc:
+                self._json(400, {"error": str(exc)})
+            except Exception as exc:
+                self._json(500, {"error": str(exc)})
+            return
+        if url.path == "/api/pack-style":
+            data = self._body()
+            try:
+                sid = str(data.get("id") or "").strip()
+                sdef = data.get("def") or {}
+                if not sid or not sid.replace("-", "").replace("_", "").isalnum():
+                    raise ValueError("style id required (letters/digits/-/_)")
+                with pack_lock(self.pack_dir):
+                    pack, _ = load_pack(self.pack_dir / "pack.json")
+                    pack.setdefault("styles", {})[sid] = sdef
+                    _, errors = revalidate(pack)
+                    if errors:
+                        raise ValueError("; ".join(errors[:3]))
+                    write_pack_atomic(self.pack_dir, pack)
+                self._json(200, {"rev": pack.get("rev", 0), "style": sid})
+            except ValueError as exc:
+                self._json(400, {"error": str(exc)})
+            except Exception as exc:
+                self._json(500, {"error": str(exc)})
+            return
+        if url.path == "/api/pack-variant-bulk":
+            data = self._body()
+            try:
+                style_id = str(data.get("style") or "").strip()
+                with pack_lock(self.pack_dir):
+                    pack, styles = load_pack(self.pack_dir / "pack.json")
+                    if style_id not in styles:
+                        raise ValueError(f"unknown style '{style_id}'")
+                    added = 0
+                    for icon in pack["icons"].values():
+                        has = any(
+                            v.get("style") == style_id for v in icon.get("variants", {}).values()
+                        )
+                        if has or style_id in icon.get("variants", {}):
+                            continue
+                        icon["variants"][style_id] = {"style": style_id, "status": "todo"}
+                        added += 1
+                    _, errors = revalidate(pack)
+                    if errors:
+                        raise ValueError("; ".join(errors[:3]))
+                    write_pack_atomic(self.pack_dir, pack)
+                self._json(200, {"rev": pack.get("rev", 0), "added": added})
+            except ValueError as exc:
+                self._json(400, {"error": str(exc)})
             except Exception as exc:
                 self._json(500, {"error": str(exc)})
             return

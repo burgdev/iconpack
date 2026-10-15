@@ -222,7 +222,12 @@ def open_variants(pack_data: dict) -> list[tuple[str, str, str]]:
 
 
 @app.command(name="next")
-def next_round(pack: str) -> None:
+def next_round(
+    pack: str,
+    only: str = typer.Option(
+        None, "--only", help="Focus mode: comma list of icon#variant keys to draft."
+    ),
+) -> None:
     """Start the next round: fresh run dir, printed open work, history untouched.
 
     Tooling defines what is open: approved/locked variants are excluded, and
@@ -254,11 +259,20 @@ def next_round(pack: str) -> None:
         carried = advance_feedback(pack_data, runs_dir / run)
         write_pack_atomic(pack_dir, pack_data)
     open_ = open_variants(pack_data)
+    open_keys = [f"{i}#{v}" for i, v, _ in open_]
+    if only is not None:
+        wanted = {k.strip() for k in only.split(",") if k.strip()}
+        unknown = wanted - set(open_keys)
+        if unknown:
+            typer.secho(f"not open (or locked): {sorted(unknown)}", fg=typer.colors.RED, err=True)
+            raise typer.Exit(code=2)
+        open_ = [(i, v, s) for i, v, s in open_ if f"{i}#{v}" in wanted]
+        open_keys = [f"{i}#{v}" for i, v, _ in open_]
     (runs_dir / run / "round.json").write_text(
         json.dumps(
             {
                 "round": run,
-                "open": [f"{i}#{v}" for i, v, _ in open_],
+                "open": open_keys,
                 "locked_count": sum(
                     1
                     for icon in pack_data["icons"].values()

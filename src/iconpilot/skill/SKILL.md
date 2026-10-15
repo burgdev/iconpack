@@ -209,6 +209,15 @@ outline, filled, stroke weight, line style) or naming a *style* applies to the
 style, not the glyph. Feedback about a *shape* (roof too heavy, door missing)
 applies to the glyph.
 
+## Round focus — draft only what was chosen
+
+The user may start a round FOCUSED (e.g. all color variants first, mono later).
+The focus lives in `.runs/<round>/round.json` → `open`. Draft exactly that list,
+nothing else — the other variants stay open for later rounds.
+
+After applying a focused round, ASK the user what to focus next, then start it:
+`iconpilot next <pack> --only "icon#variant,icon#variant"` (omit --only for all).
+
 ## Round flow — what is open
 
 `iconpilot next <pack>` is the ONLY source of truth for open work. It creates
