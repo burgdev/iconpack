@@ -212,6 +212,41 @@ class ReviewHandler(BaseHTTPRequestHandler):
             self.wfile.write(body)
             return
 
+        if url.path == "/api/style-detail":
+            sid = (q.get("style") or [""])[0]
+            try:
+                pack, all_styles = load_pack(self.pack_dir / "pack.json")
+            except Exception as exc:
+                self._json(500, {"error": str(exc)})
+                return
+            if sid not in all_styles:
+                self._json(404, {"error": f"unknown style '{sid}'"})
+                return
+            from iconpilot.styles import style_refs
+
+            refs = [
+                {"name": f.stem, "own": str(f).startswith(str(self.pack_dir))}
+                for f in style_refs(self.pack_dir, sid)
+            ]
+            pinned = [
+                {"icon": iid, "variant": vid}
+                for iid, icon in pack.get("icons", {}).items()
+                for vid, vd in icon.get("variants", {}).items()
+                if vd.get("pinned") and vd.get("status") == "approved" and vd.get("style") == sid
+            ]
+            self._json(
+                200,
+                {
+                    "def": all_styles[sid].as_dict(),
+                    "snapshot": (pack.get("styles", {})).get(sid),
+                    "refs": refs,
+                    "pinned": pinned,
+                    "recraft_style_id": (pack.get("recraft", {}).get("style_ids", {}) or {}).get(
+                        sid
+                    ),
+                },
+            )
+            return
         if url.path == "/api/style-refs":
             from iconpilot.styles import style_refs
 
@@ -1094,6 +1129,69 @@ class ReviewHandler(BaseHTTPRequestHandler):
             except Exception as exc:
                 self._json(500, {"error": str(exc)})
             return
+        if url.path == "/api/style-ref-upload":
+            data = self._body()
+            try:
+                sid = str(data.get("style") or "")
+                name = str(data.get("name") or "").strip()
+                svg = str(data.get("svg") or "")
+                if not sid or not svg.startswith("<svg") or not name:
+                    raise ValueError("need style, name and svg text")
+                name = (
+                    "".join(c for c in name.replace(".svg", "") if c.isalnum() or c in "-_")
+                    or "ref"
+                )
+                d = self.pack_dir / ".style-refs" / sid
+                d.mkdir(parents=True, exist_ok=True)
+                (d / f"{name}.svg").write_text(svg)
+                self._json(200, {"added": f"{name}.svg", "style": sid})
+            except ValueError as exc:
+                self._json(400, {"error": str(exc)})
+            except Exception as exc:
+                self._json(500, {"error": str(exc)})
+            return
+        if url.path == "/api/style-ref-remove":
+            data = self._body()
+            try:
+                sid = str(data.get("style") or "")
+                name = str(data.get("name") or "")
+                f = self.pack_dir / ".style-refs" / sid / f"{name}.svg"
+                if "/" in sid or "/" in name or ".." in name or not f.is_file():
+                    raise ValueError("no such own reference")
+                f.unlink()
+                self._json(200, {"removed": name})
+            except ValueError as exc:
+                self._json(400, {"error": str(exc)})
+            except Exception as exc:
+                self._json(500, {"error": str(exc)})
+            return
+        if url.path == "/api/pack-style-remove":
+            data = self._body()
+            try:
+                sid = str(data.get("id") or "")
+                with pack_lock(self.pack_dir):
+                    pack, _ = load_pack(self.pack_dir / "pack.json")
+                    removed = 0
+                    for icon in pack["icons"].values():
+                        vd = icon.get("variants", {}).get(sid)
+                        if vd is None:
+                            continue
+                        if vd.get("status") == "approved":
+                            raise ValueError(f"{icon}#{sid} is approved — unlock first")
+                        del icon["variants"][sid]
+                        removed += 1
+                    pack.get("styles", {}).pop(sid, None)
+                    (pack.get("recraft", {}).get("style_ids", {}) or {}).pop(sid, None)
+                    _, errors = revalidate(pack)
+                    if errors:
+                        raise ValueError("; ".join(errors[:3]))
+                    write_pack_atomic(self.pack_dir, pack)
+                self._json(200, {"removed_variants": removed, "style": sid})
+            except ValueError as exc:
+                self._json(400, {"error": str(exc)})
+            except Exception as exc:
+                self._json(500, {"error": str(exc)})
+            return
         if url.path == "/api/pack-style":
             data = self._body()
             try:
@@ -1102,8 +1200,13 @@ class ReviewHandler(BaseHTTPRequestHandler):
                 if not sid or not sid.replace("-", "").replace("_", "").isalnum():
                     raise ValueError("style id required (letters/digits/-/_)")
                 with pack_lock(self.pack_dir):
-                    pack, _ = load_pack(self.pack_dir / "pack.json")
-                    pack.setdefault("styles", {})[sid] = sdef
+                    pack, styles = load_pack(self.pack_dir / "pack.json")
+                    existing = pack.setdefault("styles", {}).get(sid)
+                    if existing and "extends" in existing and "extends" not in sdef:
+                        sdef = {**sdef, "extends": existing["extends"]}
+                    elif not existing and sid in styles:
+                        sdef = {**sdef, "extends": sid}  # lineage to the registry style
+                    pack["styles"][sid] = sdef
                     _, errors = revalidate(pack)
                     if errors:
                         raise ValueError("; ".join(errors[:3]))

@@ -702,3 +702,47 @@ def test_style_refs_endpoint(server: _Server) -> None:
     data = json.loads(body)
     assert "mono-line" in data and data["mono-line"]["source"] == "bundled"
     assert len(data["mono-line"]["icons"]) == 3
+
+
+def test_style_detail_and_ref_crud(server: _Server, srvpack: Path) -> None:
+    code, body = server.get("/api/style-detail?style=mono-line")
+    assert code == 200
+    d = json.loads(body)
+    assert d["def"]["construction"] == "outline"
+    assert len(d["refs"]) == 3 and d["refs"][0]["own"] is False
+    # upload an own ref
+    code, _data = server.req(
+        "POST",
+        "/api/style-ref-upload",
+        {"style": "mono-line", "name": "my-ref.svg", "svg": "<svg><path/></svg>"},
+    )
+    assert code == 200
+    assert (srvpack / ".style-refs" / "mono-line" / "my-ref.svg").is_file()
+    # own refs beat bundled
+    code, body = server.get("/api/style-detail?style=mono-line")
+    assert json.loads(body)["refs"][0]["own"] is True
+    # remove it
+    code, _ = server.req("POST", "/api/style-ref-remove", {"style": "mono-line", "name": "my-ref"})
+    assert code == 200
+    assert not (srvpack / ".style-refs" / "mono-line" / "my-ref.svg").exists()
+    # removing a nonexistent ref fails
+    code, _ = server.req("POST", "/api/style-ref-remove", {"style": "mono-line", "name": "ghost"})
+    assert code == 400
+
+
+def test_style_rules_edit_and_remove(server: _Server, srvpack: Path) -> None:
+    code, _ = server.req(
+        "POST",
+        "/api/pack-style",
+        {"id": "mono-line", "def": {"min_gap": 2.5, "label": "Custom line"}},
+    )
+    assert code == 200
+    pack = json.loads((srvpack / "pack.json").read_text())
+    snap = pack["styles"]["mono-line"]
+    assert snap["min_gap"] == 2.5 and snap.get("extends") == "mono-line"
+    # remove the style variant from all icons
+    code, data = server.req("POST", "/api/pack-style-remove", {"id": "mono-line"})
+    assert code == 200, data
+    pack = json.loads((srvpack / "pack.json").read_text())
+    assert "mono-line" not in pack["styles"]
+    assert "mono" not in pack["icons"]["hut"]["variants"]

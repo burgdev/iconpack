@@ -90,6 +90,13 @@ header .meta { color:var(--muted); font-size:.8rem; }
                       border-radius:10px; background:var(--card); display:inline-flex; gap:8px; align-items:center;
                       user-select:none; }
 .stylestrip summary:hover { color:var(--ink); border-color:var(--accent); }
+.tabs { display:flex; gap:4px; margin: 0 0 14px; border-bottom:1px solid var(--line); }
+.tabs button { border:none; border-bottom:2px solid transparent; border-radius:8px 8px 0 0; background:none;
+               color:var(--muted); padding:8px 14px; font-weight:600; }
+.tabs button.on { color:var(--accent); border-bottom-color:var(--accent); }
+.refcell { margin:0; text-align:center; position:relative; }
+.refcell img { border-radius:8px; background:#fff; display:block; }
+.refcell .armed-x { position:absolute; top:-6px; right:-6px; padding:0 5px; }
 .chat { max-height:300px; overflow-y:auto; border:1px solid var(--line); border-radius:10px; padding:10px; margin-bottom:10px;
        background:color-mix(in oklab, var(--bg) 60%, var(--card)); display:flex; flex-direction:column; gap:6px; }
 .chat-head { font-size:.68rem; text-transform:uppercase; letter-spacing:.08em; color:var(--muted); text-align:center; margin:6px 0 2px; }
@@ -275,6 +282,13 @@ footer { text-align:center; color:var(--muted); font-size:.75rem; padding:20px 0
   </header>
 
   <main>
+<nav class="tabs" role="tablist">
+  <button :class="{ on: S.tab === 'round' }" @click="setTab('round')" role="tab">current round</button>
+  <button :class="{ on: S.tab === 'styles' }" @click="setTab('styles')" role="tab">styles</button>
+  <button :class="{ on: S.tab === 'pack' }" @click="setTab('pack')" role="tab">icon pack</button>
+  <button :class="{ on: S.tab === 'settings' }" @click="setTab('settings')" role="tab">settings</button>
+</nav>
+<div v-show="S.tab === 'round'">
     <div v-if="S.msg" :class="S.msgClass">{{ S.msg }}</div>
 
     <section v-if="S.appliedRound === S.round && !isViewing()">
@@ -334,9 +348,6 @@ footer { text-align:center; color:var(--muted); font-size:.75rem; padding:20px 0
                       :title="isPostponed(g.icon, vg.variant) ? 'resume — include in future passes' : 'postpone — keep open but skip future passes'"
                       aria-label="postpone" @click="togglePostpone(g.icon, vg.variant)"><span class="ic" v-html="IC.pause"></span></button>
               <span v-if="isPostponed(g.icon, vg.variant)" class="chip">postponed</span>
-              <select :value="vg.style" @change="switchStyle(g.icon, vg.variant, $event.target.value)" class="varstyle" title="style">
-                <option v-for="(st, sid) in S.styles" :key="sid" :value="sid">{{ sid }}</option>
-              </select>
               <button class="iconbtn" :class="{ on: fbFor('variant', g.icon, vg.variant).length }"
                       title="feedback for this variant" aria-label="feedback for this variant" @click="openFb('variant', g.icon, vg.variant)">
                 <span class="ic" v-html="IC.comment"></span><span v-if="fbNew('variant', g.icon, vg.variant)" class="dotnew"></span>
@@ -441,23 +452,82 @@ footer { text-align:center; color:var(--muted); font-size:.75rem; padding:20px 0
       </details>
     </section>
 
-    <details class="stylestrip">
-      <summary><span class="ic" v-html="IC.comment"></span> style references · {{ usedStyles().length }} in use</summary>
-      <div v-for="sid in usedStyles()" :key="sid" class="group" v-show="S.styleRefs[sid]">
+</div>
+
+<div v-show="S.tab === 'styles'">
+    <section>
+      <h2>Styles — the pack's look, its references and rules</h2>
+
+      <div class="group" v-for="sid in usedStyles()" :key="sid">
         <div class="ghead">
           <b>{{ sid }}</b>
-          <span class="chip">{{ S.styleRefs[sid]?.source }}</span>
-          <span class="muted">not part of the icon set — replace with own: <code>iconpilot style-ref . --style {{ sid }} --add file.svg</code></span>
+          <span class="chip" v-if="S.styleRefs[sid]">{{ S.styleRefs[sid].source }} refs</span>
+          <span class="muted">{{ styleSummary(sid) }}</span>
+          <span class="spacer"></span>
+          <button class="subtle" @click="editStyle(sid)">edit rules</button>
+          <button class="subtle armed-x" @click="removeStyle(sid)" title="remove the variant from every glyph">remove</button>
         </div>
-        <div class="row">
-          <img v-for="ic in (S.styleRefs[sid]?.icons || [])" :key="sid + ic.name"
-               width="48" height="48" loading="lazy" style="border-radius:8px"
-               :src="'/api/style-ref-file?style=' + encodeURIComponent(sid) + '&name=' + encodeURIComponent(ic.name)"
-               :alt="sid + ' ' + ic.name">
+        <div class="row" style="flex-wrap:wrap">
+          <figure v-for="ic in (S.styleRefs[sid]?.icons || [])" :key="sid + ic.name" class="refcell">
+            <img width="48" height="48" loading="lazy"
+                 :src="'/api/style-ref-file?style=' + encodeURIComponent(sid) + '&name=' + encodeURIComponent(ic.name)"
+                 :alt="ic.name">
+            <figcaption class="muted">{{ ic.name }}</figcaption>
+            <button v-if="isOwnRef(sid, ic.name)" class="subtle armed-x" @click="removeRef(sid, ic.name)" title="remove own reference">✕</button>
+          </figure>
+          <figure v-for="p in (S.styleDetail?.[sid]?.pinned || [])" :key="'p' + p.icon" class="refcell">
+            <img width="48" height="48" loading="lazy"
+                 :src="render('icons/' + p.icon + '/' + p.variant + '.svg', 48, '#ffffff')">
+            <figcaption class="muted">📌 {{ p.icon }}</figcaption>
+          </figure>
+          <button class="subtle" @click="pickRefFile(sid)" title="upload an own SVG reference">＋ upload</button>
         </div>
       </div>
-    </details>
 
+      <div class="group">
+        <div class="ghead"><b>add a style to every glyph</b></div>
+        <div class="row" style="flex-wrap:wrap; gap:10px">
+          <button v-for="(st, sid) in S.styles" :key="sid" v-show="!usedStyles().includes(sid)"
+                  class="subtle" style="flex-direction:column; display:flex; align-items:center; gap:4px"
+                  @click="addStyleToPack(sid)">
+            <img v-if="S.styleRefs[sid]" width="40" height="40" style="border-radius:6px"
+                 :src="'/api/style-ref-file?style=' + encodeURIComponent(sid) + '&name=' + encodeURIComponent(S.styleRefs[sid].icons[0]?.name || '')">
+            <span>{{ sid }}</span>
+          </button>
+        </div>
+      </div>
+    </section>
+
+    <!-- style rule editor -->
+    <div v-if="S.styleEdit" class="overlay" @click.self="S.styleEdit = null">
+      <div class="dialog" style="max-width:620px">
+        <h3><span>style rules · {{ S.styleEdit.id }}</span>
+            <button class="subtle" @click="S.styleEdit = null" aria-label="Close">✕</button></h3>
+        <div class="row" style="flex-direction:column; align-items:stretch; gap:6px">
+          <div class="row"><label style="width:110px" class="muted">label</label><input v-model="S.styleEdit.label" style="flex:1"></div>
+          <div class="row"><label style="width:110px" class="muted">grid px</label><input v-model="S.styleEdit.size" type="number" style="width:90px">
+            <label style="width:110px; margin-left:12px" class="muted">stroke width</label><input v-model="S.styleEdit.strokeWidth" type="number" step="0.5" style="width:90px"></div>
+          <div class="row"><label style="width:110px" class="muted">min gap</label><input v-model="S.styleEdit.minGap" type="number" step="0.5" style="width:90px">
+            <label style="width:110px; margin-left:12px" class="muted">max nodes</label><input v-model="S.styleEdit.maxNodes" type="number" style="width:90px"></div>
+          <div class="row"><label style="width:110px" class="muted">palette</label><input v-model="S.styleEdit.palette" placeholder="hex, comma separated" style="flex:1"></div>
+          <div class="row"><label style="width:110px" class="muted">style words</label><input v-model="S.styleEdit.words" placeholder="comma separated" style="flex:1"></div>
+          <div class="row"><label style="width:110px" class="muted">avoid</label><input v-model="S.styleEdit.avoid" placeholder="comma separated" style="flex:1"></div>
+          <div class="row"><label style="width:110px" class="muted">gate checks</label>
+            <label v-for="gk in ['min_gap','grid','live_area','max_nodes','palette']" :key="gk" style="display:flex; gap:4px; align-items:center">
+              <input type="checkbox" :checked="!(S.styleEdit.gateOff || []).includes(gk)" @change="toggleGate(gk)"> {{ gk }}
+            </label>
+          </div>
+          <div class="row"><label style="width:110px" class="muted">guidance</label><input v-model="S.styleEdit.guidance" style="flex:1"></div>
+        </div>
+        <div class="row" style="margin-top:10px">
+          <button class="primary" @click="saveStyleRules">save rules</button>
+          <button class="subtle" @click="S.styleEdit = null" aria-label="Close">cancel</button>
+        </div>
+      </div>
+    </div>
+</div>
+
+<div v-show="S.tab === 'pack'">
     <section>
       <h2>Icons</h2>
       <div class="group" v-for="(icon, id) in S.pack.icons" :key="id">
@@ -488,7 +558,18 @@ footer { text-align:center; color:var(--muted); font-size:.75rem; padding:20px 0
         </div>
       </div>
     </section>
-    <footer>iconpilot review v{{ S.version }} · flock-serialized writes · approval is always yours</footer>
+    </div>
+
+<div v-show="S.tab === 'settings'">
+  <section>
+    <h2>Settings</h2>
+    <div class="group" id="settings-panel"></div>
+    <p class="muted">open the settings dialog:</p>
+    <button class="primary" @click="openSettings()">open settings</button>
+  </section>
+</div>
+
+<footer>iconpilot review v{{ S.version }} · flock-serialized writes · approval is always yours</footer>
   </main>
 
   <div class="actionbar" :class="{ ready: S.actionBar.ready }">
@@ -777,10 +858,11 @@ const S = reactive({
   dlg: null, sheet: null, fbDlg: null, settingsDlg: false,
   decisionEdit: '', showGen: false, editingBrief: null,
   flash: '', flashOk: true, applying: false, instructions: '',
+  tab: (location.hash || '#round').slice(1) || 'round',
   kbFocus: 0, kbVariant: 0, kbCand: 0, kbUsed: false, compare: null, histView: null,
   recraftReady: false, debug: new URLSearchParams(location.search).has('debug'), debugDlg: null, nextDlg: null,
   appliedRound: null,
-  recraftModels: {}, styleRefs: {}, theme: 'light', iconHist: {}, svgFiles: {}, rejectArm: null,
+  recraftModels: {}, styleRefs: {}, styleDetail: {}, styleEdit: null, theme: 'light', iconHist: {}, svgFiles: {}, rejectArm: null,
   history: [], showHistory: false,
   set: { version: '', rules: '', strokeWidth: 2, linecap: 'round', linejoin: 'round', padding: 2, precision: 0.5, palette: null, errors: '' },
   bgs: [
@@ -851,6 +933,10 @@ function initTheme() {
   applyTheme(th || (matchMedia && matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light'));
 }
 function toggleTheme() { applyTheme(S.theme === 'dark' ? 'light' : 'dark'); }
+function setTab(tb) {
+  S.tab = tb;
+  history.replaceState(null, '', '#' + tb);
+}
 function markSeen() { try { localStorage.setItem(seenKey(), new Date().toISOString()); } catch {} }
 function seenTs() { try { return localStorage.getItem(seenKey()) || ''; } catch { return ''; } }
 function isNew(i) { return !!i.created && i.created + 'Z' > seenTs(); }
@@ -1022,6 +1108,107 @@ function batchReject(maxScore) {
   flash('batch: rejected ' + (maxScore === 0 ? 'unrated' : 'all rated ≤ ' + maxScore), true);
 }
 function isViewing() { return !!(S.viewRound && S.viewRound !== S.latest); }
+function styleSummary(sid) {
+  const st = S.styles[sid]; if (!st) return '';
+  const bits = [st.construction, st.color_mode];
+  if (st.stroke) bits.push('stroke ' + st.stroke.width);
+  if (st.size) bits.push(st.size + 'px grid');
+  return bits.join(' · ');
+}
+function isOwnRef(sid, name) { return (S.styleDetail?.[sid]?.refs || []).some(r => r.name === name && r.own); }
+async function editStyle(sid) {
+  try {
+    const d = await api('/api/style-detail?style=' + encodeURIComponent(sid));
+    S.styleDetail = { ...S.styleDetail, [sid]: d };
+    const def = d.def || {};
+    const gateOff = Object.entries(def.gate || {}).filter(([, off]) => off === false).map(([k]) => k);
+    S.styleEdit = {
+      id: sid,
+      label: def.label || sid,
+      size: def.size || '',
+      strokeWidth: def.stroke ? def.stroke.width : '',
+      minGap: def.min_gap,
+      maxNodes: def.max_nodes,
+      palette: (def.palette || []).join(', '),
+      words: (def.style_words || []).join(', '),
+      avoid: (def.avoid || []).join(', '),
+      guidance: def.guidance || '',
+      gateOff,
+      extends: (d.snapshot || {}).extends,
+    };
+    focusDialog();
+  } catch (e) { flash('style detail: ' + e.message, false); }
+}
+function toggleGate(gk) {
+  const go = S.styleEdit.gateOff || [];
+  S.styleEdit.gateOff = go.includes(gk) ? go.filter(k => k !== gk) : [...go, gk];
+}
+async function saveStyleRules() {
+  const e = S.styleEdit;
+  const sdef = {};
+  if (e.extends) sdef.extends = e.extends;
+  if (e.label) sdef.label = e.label;
+  if (e.size) sdef.size = +e.size;
+  if (e.strokeWidth) sdef.stroke = { width: +e.strokeWidth, linecap: 'round', linejoin: 'round' };
+  sdef.min_gap = +e.minGap || 1.5;
+  sdef.max_nodes = +e.maxNodes || 40;
+  if (e.palette.trim()) sdef.palette = e.palette.split(',').map(s => s.trim()).filter(Boolean);
+  if (e.words.trim()) sdef.style_words = e.words.split(',').map(s => s.trim()).filter(Boolean);
+  if (e.avoid.trim()) sdef.avoid = e.avoid.split(',').map(s => s.trim()).filter(Boolean);
+  if (e.guidance.trim()) sdef.guidance = e.guidance;
+  const off = Object.fromEntries((e.gateOff || []).map(k => [k, false]));
+  if (Object.keys(off).length) sdef.gate = off;
+  try {
+    await api('/api/pack-style', { method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ id: e.id, def: sdef }) });
+    flash('style rules saved: ' + e.id, true);
+    S.styleEdit = null; await load();
+  } catch (err) { flash('save style: ' + (err.d?.error || err.message), false); }
+}
+async function removeStyle(sid) {
+  if (!confirm('Remove style "' + sid + '"? This deletes its variant from every glyph (approved ones must be unlocked first).')) return;
+  try {
+    await api('/api/pack-style-remove', { method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ id: sid }) });
+    flash('style removed: ' + sid, true);
+    await load();
+  } catch (err) { flash('remove style: ' + (err.d?.error || err.message), false); }
+}
+async function addStyleToPack(sid) {
+  if (!confirm('Add style "' + sid + '" as a variant to every glyph?')) return;
+  await addVariantBulkFor(sid);
+  await load();
+}
+async function addVariantBulkFor(sid) {
+  try {
+    const r = await api('/api/pack-variant-bulk', { method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ style: sid }) });
+    flash('variant ' + sid + ' added to ' + r.added + ' glyph(s)', true);
+  } catch (err) { flash('add: ' + (err.d?.error || err.message), false); }
+}
+function pickRefFile(sid) {
+  const inp = document.createElement('input');
+  inp.type = 'file'; inp.accept = '.svg,image/svg+xml';
+  inp.onchange = async () => {
+    const f = inp.files[0]; if (!f) return;
+    const svg = await f.text();
+    try {
+      await api('/api/style-ref-upload', { method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ style: sid, name: f.name, svg }) });
+      flash('reference uploaded: ' + f.name, true);
+      await load();
+    } catch (err) { flash('upload: ' + (err.d?.error || err.message), false); }
+  };
+  inp.click();
+}
+async function removeRef(sid, name) {
+  try {
+    await api('/api/style-ref-remove', { method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ style: sid, name }) });
+    flash('reference removed: ' + name, true);
+    await load();
+  } catch (err) { flash('remove ref: ' + (err.d?.error || err.message), false); }
+}
 function usedStyles() {
   const used = new Set();
   for (const icon of Object.values(S.pack.icons || {}))
@@ -1581,7 +1768,8 @@ const App = {
       fbFor, fbNew, fbTitle, fbItems, fbChat, openFb, addFeedback, resolveFeedback, switchRound, isViewing,
       IC, relTime, isNew, copyPrompt, reopen, toggleTheme, cmpLabel, initTheme, loadIconHist, hasRating,
       showDebug, openNextDlg, addVariantBulk, addCustomStyle, saveRecraftDefaults,
-      isPostponed, togglePostpone, applyAndNext, colState, toggleCol, toggleAll, usedStyles,
+      isPostponed, togglePostpone, applyAndNext, colState, toggleCol, toggleAll, usedStyles, setTab,
+      styleSummary, isOwnRef, editStyle, toggleGate, saveStyleRules, removeStyle, addStyleToPack, pickRefFile, removeRef,
 
     };
   },

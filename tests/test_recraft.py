@@ -738,8 +738,8 @@ def test_sheet_prompt_asks_for_named_groups() -> None:
 
 
 def test_curated_style_map_covers_registry() -> None:
-    from iconpilot.styles import resolve_styles
     from iconpilot.recraft import CURATED_STYLE_MAP
+    from iconpilot.styles import resolve_styles
 
     missing = set(resolve_styles({})) - set(CURATED_STYLE_MAP)
     assert not missing, f"styles without curated mapping: {missing}"
