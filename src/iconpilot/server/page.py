@@ -295,9 +295,9 @@ footer { text-align:center; color:var(--muted); font-size:.75rem; padding:20px 0
 
   <main>
 <nav class="tabs" role="tablist">
-  <button :class="{ on: S.tab === 'round' }" @click="setTab('round')" role="tab" aria-label="current round"><span class="ic" v-html="IC.star"></span><span class="tab-label">current round</span></button>
+  <button :class="{ on: S.tab === 'round' }" @click="setTab('round')" role="tab" aria-label="pick"><span class="ic" v-html="IC.star"></span><span class="tab-label">pick</span></button>
+  <button :class="{ on: S.tab === 'pack' }" @click="setTab('pack')" role="tab" aria-label="icons"><span class="ic" v-html="IC.grid"></span><span class="tab-label">icons</span></button>
   <button :class="{ on: S.tab === 'styles' }" @click="setTab('styles')" role="tab" aria-label="styles"><span class="ic" v-html="IC.palette"></span><span class="tab-label">styles</span></button>
-  <button :class="{ on: S.tab === 'pack' }" @click="setTab('pack')" role="tab" aria-label="icon pack"><span class="ic" v-html="IC.grid"></span><span class="tab-label">icon pack</span></button>
   <button :class="{ on: S.tab === 'settings' }" @click="setTab('settings')" role="tab" aria-label="settings"><span class="ic" v-html="IC.gear"></span><span class="tab-label">settings</span></button>
 </nav>
 <div v-show="S.tab === 'round'">
@@ -466,6 +466,39 @@ footer { text-align:center; color:var(--muted); font-size:.75rem; padding:20px 0
 
 </div>
 
+<div v-show="S.tab === 'pack'">
+    <section>
+      <h2>Icons — the set</h2>
+      <div class="group" v-for="(icon, id) in S.pack.icons" :key="id">
+        <div class="ghead">
+          <b>{{ id }}</b>
+          <span v-if="icon.main_color" class="chip" :style="{background: icon.main_color}">{{ icon.main_color }}</span>
+          <div v-if="S.editing === id" style="display:flex; gap:6px; flex:1">
+            <input style="flex:1; min-width:100px" :value="icon.brief"
+                   placeholder="describe the icon — human and agent read the same text"
+                   @keydown.enter="saveIcon(id, $event.target.value)" @blur="saveIcon(id, $event.target.value)">
+          </div>
+          <span v-else class="muted" style="flex:1; cursor:text" @click="S.editing = id">{{ icon.brief }}</span>
+          <button class="subtle" @click="S.editing = S.editing === id ? null : id">edit</button>
+        </div>
+        <div class="grid">
+          <div class="card" v-for="(v, vid) in icon.variants" :key="vid">
+            <img v-if="!v.link && S.svgFiles[id + '/' + vid]" class="thumb" loading="lazy" width="64" height="64"
+                 :src="render('icons/' + id + '/' + vid + '.svg', 64, '#ffffff')"
+                 @click="openIcon(id, vid, v)">
+            <div v-else-if="!v.link" class="thumb missing" title="not drafted yet">—</div>
+            <div class="name">{{ vid }}</div>
+            <span class="chip" :class="v.status">{{ v.link ? '→ ' + v.link : v.status }}</span>
+            <button v-if="v.status === 'approved' && !v.link" class="iconbtn"
+                    :class="{ on: isPinned(id, vid) }" :title="isPinned(id, vid) ? 'unpin' : 'pin as style reference'"
+                    @click="togglePin(id, vid)"><span class="ic" :class="{ filled: isPinned(id, vid) }" v-html="IC.pin"></span></button>
+            <span v-if="v.status === 'stale' || edited(id, vid)" class="muted">needs re-review</span>
+          </div>
+        </div>
+      </div>
+    </section>
+    </div>
+
 <div v-show="S.tab === 'styles'">
     <section>
       <h2>Styles — the pack's look, its references and rules</h2>
@@ -554,39 +587,6 @@ footer { text-align:center; color:var(--muted); font-size:.75rem; padding:20px 0
       </div>
     </div>
 </div>
-
-<div v-show="S.tab === 'pack'">
-    <section>
-      <h2>Icons</h2>
-      <div class="group" v-for="(icon, id) in S.pack.icons" :key="id">
-        <div class="ghead">
-          <b>{{ id }}</b>
-          <span v-if="icon.main_color" class="chip" :style="{background: icon.main_color}">{{ icon.main_color }}</span>
-          <div v-if="S.editing === id" style="display:flex; gap:6px; flex:1">
-            <input style="flex:1; min-width:100px" :value="icon.brief"
-                   placeholder="describe the icon — human and agent read the same text"
-                   @keydown.enter="saveIcon(id, $event.target.value)" @blur="saveIcon(id, $event.target.value)">
-          </div>
-          <span v-else class="muted" style="flex:1; cursor:text" @click="S.editing = id">{{ icon.brief }}</span>
-          <button class="subtle" @click="S.editing = S.editing === id ? null : id">edit</button>
-        </div>
-        <div class="grid">
-          <div class="card" v-for="(v, vid) in icon.variants" :key="vid">
-            <img v-if="!v.link && S.svgFiles[id + '/' + vid]" class="thumb" loading="lazy" width="64" height="64"
-                 :src="render('icons/' + id + '/' + vid + '.svg', 64, '#ffffff')"
-                 @click="openIcon(id, vid, v)">
-            <div v-else-if="!v.link" class="thumb missing" title="not drafted yet">—</div>
-            <div class="name">{{ vid }}</div>
-            <span class="chip" :class="v.status">{{ v.link ? '→ ' + v.link : v.status }}</span>
-            <button v-if="v.status === 'approved' && !v.link" class="iconbtn"
-                    :class="{ on: isPinned(id, vid) }" :title="isPinned(id, vid) ? 'unpin' : 'pin as style reference'"
-                    @click="togglePin(id, vid)"><span class="ic" :class="{ filled: isPinned(id, vid) }" v-html="IC.pin"></span></button>
-            <span v-if="v.status === 'stale' || edited(id, vid)" class="muted">needs re-review</span>
-          </div>
-        </div>
-      </div>
-    </section>
-    </div>
 
 <div v-show="S.tab === 'settings'">
   <section>
@@ -738,15 +738,35 @@ footer { text-align:center; color:var(--muted); font-size:.75rem; padding:20px 0
   </div>
 
   <div v-if="S.debugDlg" class="overlay" @click.self="S.debugDlg = null">
-    <div class="dialog">
-      <h3><span><span class="ic-lg" v-html="IC.bolt"></span> Recraft request · {{ S.debugDlg.icon }}#{{ S.debugDlg.variant }} (≈ ${{ S.debugDlg.cost }})</span>
+    <div class="dialog" style="max-width:640px">
+      <h3><span><span class="ic-lg" v-html="IC.bolt"></span> Recraft · {{ S.debugDlg.icon }}#{{ S.debugDlg.variant }}</span>
           <button class="subtle" @click="S.debugDlg = null" aria-label="Close">✕</button></h3>
-      <p class="muted" style="margin:0 0 8px">{{ S.debugDlg.endpoint }}</p>
-      <textarea :value="S.debugDlg.request" readonly rows="8"></textarea>
+
+      <div class="row" style="margin-bottom:8px">
+        <label class="muted" style="flex:0 0 80px">model</label>
+        <select v-model="S.debugDlg.model" @change="showDebug(S.debugDlg.icon, S.debugDlg.variant, S.debugDlg.model)">
+          <option v-for="m in S.debugDlg.models" :key="m" :value="m">{{ m }}</option>
+        </select>
+        <label class="muted" style="flex:0 0 50px; margin-left:10px">grid</label>
+        <select v-model="S.debugDlg.n" @change="showDebug(S.debugDlg.icon, S.debugDlg.variant, null, +S.debugDlg.n)">
+          <option v-for="k in [1,2,3,4,5,6,9,12,16]" :key="k" :value="k">{{ k }}</option>
+        </select>
+        <select v-if="S.debugDlg.variants && S.debugDlg.variants.length > 1" v-model="S.debugDlg.variant" @change="showDebug(S.debugDlg.icon, S.debugDlg.variant)">
+          <option v-for="vd in S.debugDlg.variants" :key="vd" :value="vd">{{ vd }}</option>
+        </select>
+        <span class="chip">{{ S.debugDlg.style }}</span>
+      </div>
+
+      <p class="muted" style="margin:0 0 6px">{{ S.debugDlg.endpoint }} · {{ S.debugDlg.refs }} style ref(s) · {{ S.debugDlg.promptChars }}/{{ S.debugDlg.promptLimit }} chars</p>
+
+      <textarea :value="S.debugDlg.request" readonly rows="12" style="font-size:.8rem"></textarea>
+
       <div class="row" style="margin-top:8px">
-        <button class="primary" @click="copyText(S.debugDlg.request, 'request JSON copied')">copy request JSON</button>
-        <button class="subtle" @click="copyText(S.debugDlg.full, 'full hint copied')">copy full hint</button>
-        <button class="subtle" @click="S.debugDlg = null" aria-label="Close">✕</button>
+        <button class="primary" @click="debugCopy('request')">copy request JSON</button>
+        <button class="subtle" @click="debugCopy('full')">copy full hint ({{ S.debugDlg.full.length }} chars)</button>
+        <button v-if="S.debug && !S.recraftReady" class="subtle" @click="debugCopy('prompt')">copy prompt only</button>
+        <span v-if="S.debugDlg.copied" class="chip new" style="margin-left:4px">✓ {{ S.debugDlg.copied }}</span>
+        <button class="subtle" @click="S.debugDlg = null" aria-label="Close" style="margin-left:auto">close</button>
       </div>
     </div>
   </div>
@@ -1314,16 +1334,37 @@ async function showDebug(icon, variant, model, n) {
     if (model) q.set('model', model);
     if (n) q.set('n', n);
     const r = await api('/api/recraft-request?' + q);
-    r.request.prompt = (r.request.prompt || '').slice(0, 220) + '…';
+    S.debugDlg = null;  // reset before rebuild
+    const fullPrompt = r.request.prompt || '';
+    r.request.prompt = fullPrompt.length > 300 ? fullPrompt.slice(0, 300) + '… (full hint below)' : fullPrompt;
     S.debugDlg = {
       icon, variant,
       variants: openVariantIds(icon),
+      style: (S.pack.icons?.[icon]?.variants?.[variant]?.style) || '',
       endpoint: r.endpoint, refs: r.style_refs_attached,
-      request: JSON.stringify(r.request, null, 2), full: r.full_prompt,
+      request: JSON.stringify(r.request, null, 2),
+      full: r.full_prompt || '',
+      fullPrompt,
+      promptChars: fullPrompt.length,
+      promptLimit: fullPrompt.length > 1000 ? 10000 : 1000,
       cost: r.est_cost_usd, models: r.models || [], model: r.request.model, n: r.request.n,
+      copied: '',
     };
     focusDialog();
   } catch (e) { flash('preview: ' + e.message, false); }
+}
+async function debugCopy(what) {
+  const d = S.debugDlg;
+  if (!d) return;
+  let text = '', label = '';
+  if (what === 'request') { text = d.request; label = 'request JSON'; }
+  else if (what === 'full') { text = d.full; label = 'full hint (' + d.full.length + ' chars)'; }
+  else if (what === 'prompt') { text = d.fullPrompt; label = 'prompt'; }
+  try {
+    await copyText(text, '');
+    d.copied = label + ' copied';
+    setTimeout(() => { if (S.debugDlg) S.debugDlg.copied = ''; }, 2000);
+  } catch (e) { d.copied = 'copy blocked'; }
 }
 function openVariantIds(icon) {
   const icon0 = S.pack.icons?.[icon];
@@ -1827,8 +1868,8 @@ const App = {
       isLocked, recraftDraft, recraftIcon, startRound, totalCost,
       fbFor, fbNew, fbTitle, fbItems, fbChat, openFb, addFeedback, resolveFeedback, switchRound, isViewing,
       IC, relTime, isNew, copyPrompt, reopen, toggleTheme, cmpLabel, initTheme, loadIconHist, hasRating,
-      showDebug, openNextDlg, addVariantBulk, addCustomStyle, saveRecraftDefaults,
-      GATE_HELP, styleRules, stylePalette, ruleTitle, styleUsageCount, isPostponed, togglePostpone, applyAndNext, colState, toggleCol, toggleAll, usedStyles, setTab,
+      showDebug, debugCopy, openNextDlg, addVariantBulk, addCustomStyle, saveRecraftDefaults,
+      GATE_HELP, styleRules, stylePalette, ruleTitle, styleUsageCount, isPostponed, togglePostpone, applyAndNext, colState, toggleCol, toggleAll, usedStyles, setTab, iconSuggest, pickSuggestion, addNewIcon, startRoundWithNew,
       styleSummary, isOwnRef, editStyle, toggleGate, saveStyleRules, removeStyle, addStyleToPack, pickRefFile, removeRef,
 
     };

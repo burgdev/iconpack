@@ -660,7 +660,7 @@ def draft(
     pack_dir = resolve_pack_dir(pack)
 
     # prompt: description (docs) over brief, + color world + style words + rules
-    full_prompt = rc.draft_prompt(icon, style, pack_data)
+    full_prompt = rc.draft_prompt(icon, style, pack_data, model=recraft_cfg.get("model"))
     if prompt:
         full_prompt = (full_prompt + ", " + prompt)[:1000]
 

@@ -44,8 +44,33 @@ MODEL_PRICES: dict[str, float] = {
 }
 STYLE_CREATE_PRICE = 0.005
 
+
+def prompt_limit(model: str) -> int:
+    """Max prompt chars per model: V4/V4.1 = 10,000; V2/V3 = 1,000."""
+    return 10000 if "v4" in model else 1000
+
+
 # our style ids → Recraft V2-vector CURATED icon styles (by name). Used to
 # generate reference icons in exactly that look via the `style` parameter.
+# Suggested vector model per style family (V4 for detail/gradient, V2 for classic line styles)
+STYLE_MODEL_SUGGESTIONS = {
+    "primitive": "recraftv2_vector",
+    "mono-line": "recraftv2_vector",
+    "mono-line-thin": "recraftv2_vector",
+    "mono-bold": "recraftv2_vector",
+    "filled": "recraftv2_vector",
+    "duotone": "recraftv4_1_vector",
+    "lineal-color": "recraftv4_1_vector",
+    "flat-color": "recraftv4_1_vector",
+    "gradient-color": "recraftv4_1_vector",
+    "broken-line": "recraftv2_vector",
+    "colored-outline": "recraftv4_1_vector",
+    "isometric": "recraftv4_1_vector",
+    "offset-fill": "recraftv4_1_vector",
+    "pixel": "recraftv2_vector",
+    "doodle": "recraftv2_vector",
+}
+
 CURATED_STYLE_MAP = {
     "mono-line": "Outline",
     "mono-line-thin": "Thin",
@@ -79,13 +104,14 @@ VECTOR_MODELS = (
 )
 
 
-def draft_prompt(icon: dict, style, pack: dict) -> str:
+def draft_prompt(icon: dict, style, pack: dict, model: str | None = None) -> str:
     """Rich text-to-image prompt: icon brief, color world, style, rules.
 
     The brief is the single icon description (humans and agent share it);
     always names the main color and palette so Recraft lands in the pack's
-    color world.
+    color world. Truncated to the model's prompt limit.
     """
+    limit = prompt_limit(model or "")
     # one field: the brief describes the icon for humans AND the agent
     parts = [
         icon.get("brief") or icon.get("description") or "",
@@ -99,7 +125,7 @@ def draft_prompt(icon: dict, style, pack: dict) -> str:
     if style.avoid:
         parts.append("avoid: " + ", ".join(style.avoid[:3]))
     parts += pack.get("rules", [])[:3]
-    return ", ".join(p for p in parts if p)[:1000]
+    return ", ".join(p for p in parts if p)[:limit]
 
 
 def price_per_image(model: str) -> float:
@@ -185,12 +211,12 @@ SHEET_PROMPT_SUFFIX = (
 )
 
 
-def sheet_prompt(prompt: str, grid: int) -> str:
+def sheet_prompt(prompt: str, grid: int, model: str | None = None) -> str:
     """Wrap a drafting prompt so one image carries grid x grid variants."""
     g = int(grid)
-    return (
-        prompt[: 900 - len(SHEET_PROMPT_SUFFIX) // 2] + SHEET_PROMPT_SUFFIX.format(g=g, n=g * g)
-    )[:1000]
+    lim = prompt_limit(model or "")
+    tail = SHEET_PROMPT_SUFFIX.format(g=g, n=g * g)
+    return (prompt[: lim - len(tail)] + tail)[:lim]
 
 
 def generate_refs_curated(
@@ -223,7 +249,9 @@ def generate_refs_curated(
     return split_sheet(svg, grid, target=24.0)
 
 
-def batch_prompt(icon_prompts: list[str], vpi: int, style_phrase: str, grid: int) -> str:
+def batch_prompt(
+    icon_prompts: list[str], vpi: int, style_phrase: str, grid: int, model: str | None = None
+) -> str:
     """One sheet prompt for several icons x variants per icon.
 
     Cell assignment is row-major: icon k occupies cells k*vpi+1 .. (k+1)*vpi.
@@ -240,7 +268,8 @@ def batch_prompt(icon_prompts: list[str], vpi: int, style_phrase: str, grid: int
         + f". Style: {style_phrase}."
     )
     tail = SHEET_PROMPT_SUFFIX.format(g=grid, n=n)
-    return (body[: 1000 - len(tail)] + tail)[:1000]
+    lim = prompt_limit(model or "")
+    return (body[: lim - len(tail)] + tail)[:lim]
 
 
 def plan_batch(calls_by_style: dict[str, list[str]], vpi: int) -> list[dict]:
