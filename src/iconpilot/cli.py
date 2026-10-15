@@ -20,7 +20,7 @@ from iconpilot.export.export import (
     export_svg,
 )
 from iconpilot.gate.run import run_gate
-from iconpilot.pack import PackError, load_pack, revalidate, write_pack_atomic
+from iconpilot.pack import PackError, load_pack, next_run_id, revalidate, write_pack_atomic
 from iconpilot.packs import summarize
 from iconpilot.render.contact import contact_sheet
 from iconpilot.render.render import hamming, hash_file
@@ -240,7 +240,7 @@ def next_round(pack: str) -> None:
             err=True,
         )
 
-    run = f"r{len(runs) + 1:03d}"
+    run = next_run_id(runs_dir)
     (runs_dir / run).mkdir(parents=True, exist_ok=True)
     open_ = open_variants(pack_data)
     (runs_dir / run / "round.json").write_text(
@@ -303,14 +303,19 @@ def recraft_style(
     # collect references grouped by PACK STYLE — each gets its own Recraft
     # style, so mono and color variants stay independently consistent.
     refs_by_style: dict[str, list[str]] = {}
+    seen: set[tuple[str, str, str]] = set()
 
     def add_ref(iid: str, vid: str, pack_style: str) -> None:
+        key = (iid, vid, pack_style)
+        if key in seen:
+            return
         bucket = refs_by_style.setdefault(pack_style, [])
         if len(bucket) >= 10:  # Recraft limit per style
             return
         f = pack_dir / "icons" / iid / f"{vid}.svg"
         if f.is_file():
             bucket.append(f.read_text())
+            seen.add(key)
 
     for pri in (True, False):  # pinned pass, then approved pass
         for iid, icon in pack_data["icons"].items():
@@ -340,7 +345,7 @@ def recraft_style(
         raise typer.Exit(code=1) from exc
 
     recraft = pack_data.setdefault("recraft", {})
-    recraft.setdefault("style_id", next(iter(style_ids.values())))
+    recraft["style_id"] = next(iter(style_ids.values()))
     recraft["style_ids"] = {**recraft.get("style_ids", {}), **style_ids}
     recraft["model"] = rc.DEFAULT_MODEL
     recraft.setdefault("name", f"{pack_data['name']} style")
@@ -426,33 +431,33 @@ def draft(
     runs_dir = pack_dir / ".runs"
     runs = sorted(p.name for p in runs_dir.glob("r*")) if runs_dir.is_dir() else []
     if new_round or not runs:
-        run = f"r{len(runs) + 1:03d}"
+        run = next_run_id(runs_dir)
     else:
         run = runs[-1]
-    cand_dir = runs_dir / run / variant / icon_id
-    cand_dir.mkdir(parents=True, exist_ok=True)
-    existing = len(list(cand_dir.glob("r*.svg")))
     viewbox = pack_data["spec"]["viewBox"]
-
+    normalized = [rc.normalize(raw, viewbox) for raw in raw_svgs]
     wrote: list[Path] = []
-    for i, raw in enumerate(raw_svgs, start=1):
-        svg = rc.normalize(raw, viewbox)
-        f = cand_dir / f"r{existing + i}.svg"
-        f.write_text(svg)
-        wrote.append(f)
+    with pack_lock(pack_dir):  # count + write + cost under the lock (race-safe)
+        cand_dir = runs_dir / run / variant / icon_id
+        cand_dir.mkdir(parents=True, exist_ok=True)
+        existing = len(list(cand_dir.glob("r*.svg")))
+        for i, svg in enumerate(normalized, start=1):
+            f = cand_dir / f"r{existing + i}.svg"
+            f.write_text(svg)
+            wrote.append(f)
 
-    # record cost (round.json convention from the skill)
-    round_json = runs_dir / run / "round.json"
-    try:
-        rj = json.loads(round_json.read_text()) if round_json.is_file() else {}
-    except ValueError:
-        rj = {}
-    rj.setdefault("models_used", {})["seeder"] = (
-        pack_data.get("recraft", {}).get("model") or rc.FALLBACK_MODEL
-    )
-    rj["candidates_generated"] = rj.get("candidates_generated", 0) + len(wrote)
-    rj["estimated_cost_usd"] = round(rj.get("estimated_cost_usd", 0) + 0.05 * len(wrote), 4)
-    round_json.write_text(json.dumps(rj, indent=2) + "\n")
+        # record cost (round.json convention from the skill)
+        round_json = runs_dir / run / "round.json"
+        try:
+            rj = json.loads(round_json.read_text()) if round_json.is_file() else {}
+        except ValueError:
+            rj = {}
+        rj.setdefault("models_used", {})["seeder"] = (
+            pack_data.get("recraft", {}).get("model") or rc.FALLBACK_MODEL
+        )
+        rj["candidates_generated"] = rj.get("candidates_generated", 0) + len(wrote)
+        rj["estimated_cost_usd"] = round(rj.get("estimated_cost_usd", 0) + 0.05 * len(wrote), 4)
+        round_json.write_text(json.dumps(rj, indent=2) + "\n")
 
     # gate each seed (informational — seeds are redrawn by the agent, not shipped)
     n_pass = 0

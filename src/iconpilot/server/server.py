@@ -22,7 +22,7 @@ from urllib.parse import parse_qs, urlparse
 
 from iconpilot import __version__
 from iconpilot.decide import apply_decisions, parse_decision_text
-from iconpilot.pack import load_pack, revalidate, write_pack_atomic
+from iconpilot.pack import load_pack, next_run_id, revalidate, write_pack_atomic
 from iconpilot.render.contact import contact_sheet
 from iconpilot.render.render import render_png_text
 
@@ -354,8 +354,7 @@ class ReviewHandler(BaseHTTPRequestHandler):
         import json as _json
 
         runs_dir = self.pack_dir / ".runs"
-        runs = sorted(p.name for p in runs_dir.glob("r*")) if runs_dir.is_dir() else []
-        run = f"r{len(runs) + 1:03d}"
+        run = next_run_id(runs_dir)
         (runs_dir / run).mkdir(parents=True, exist_ok=True)
         try:
             pack, _ = load_pack(self.pack_dir / "pack.json")
@@ -377,12 +376,14 @@ class ReviewHandler(BaseHTTPRequestHandler):
         import iconpilot.recraft as rc
         from iconpilot.gate.run import run_gate
 
-        token = rc.resolve_token()
-        if not token:
-            raise ValueError("no Recraft token on the server — set RECRAFT_API_TOKEN")
         icon_id = data.get("icon") or ""
         variant = data.get("variant")
-        n = int(data.get("n") or 4)
+        try:
+            n = int(data.get("n") or 4)
+        except (TypeError, ValueError) as exc:
+            raise ValueError("n must be an integer 1-6") from exc
+        if not 1 <= n <= 6:
+            raise ValueError("n must be 1-6")
         with pack_lock(self.pack_dir):
             pack, styles = load_pack(self.pack_dir / "pack.json")
         icon = pack["icons"].get(icon_id)
@@ -396,6 +397,11 @@ class ReviewHandler(BaseHTTPRequestHandler):
             variant = variants[0]
         else:
             raise ValueError(f"{icon_id} has variants {variants} — pass 'variant'")
+        if icon["variants"][variant].get("status") == "approved":
+            raise ValueError(f"{icon_id}#{variant} is approved/locked — unlock to redraft")
+        token = rc.resolve_token()
+        if not token:
+            raise ValueError("no Recraft token on the server — set RECRAFT_API_TOKEN")
 
         style = styles[icon["variants"][variant]["style"]]
         recraft_cfg = pack.get("recraft", {})
@@ -418,18 +424,34 @@ class ReviewHandler(BaseHTTPRequestHandler):
         run = runs[-1] if runs else None
         if not run:
             raise ValueError("no round yet — POST /api/round/new first")
-        cand_dir = runs_dir / run / variant / icon_id
-        cand_dir.mkdir(parents=True, exist_ok=True)
-        existing = len(list(cand_dir.glob("r*.svg")))
+        # count + write + cost record under the pack lock: closes the concurrent
+        # draft race (two tabs double-firing the same icon/variant).
+        import json as _json
+
         viewbox = pack["spec"]["viewBox"]
-        wrote = []
-        n_pass = 0
-        for i, raw in enumerate(svgs, start=1):
-            f = cand_dir / f"r{existing + i}.svg"
-            f.write_text(rc.normalize(raw, viewbox))
-            wrote.append(f.name)
-            if run_gate(f, pack, style).passed:
-                n_pass += 1
+        normalized = [rc.normalize(raw, viewbox) for raw in svgs]
+        with pack_lock(self.pack_dir):
+            cand_dir = runs_dir / run / variant / icon_id
+            cand_dir.mkdir(parents=True, exist_ok=True)
+            existing = len(list(cand_dir.glob("r*.svg")))
+            wrote = []
+            n_pass = 0
+            for i, svg in enumerate(normalized, start=1):
+                f = cand_dir / f"r{existing + i}.svg"
+                f.write_text(svg)
+                wrote.append(f.name)
+                if run_gate(f, pack, style).passed:
+                    n_pass += 1
+            round_json = runs_dir / run / "round.json"
+            try:
+                rj = _json.loads(round_json.read_text()) if round_json.is_file() else {}
+            except ValueError:
+                rj = {}
+            rj.setdefault("models_used", {})["seeder"] = (
+                recraft_cfg.get("model") or rc.FALLBACK_MODEL
+            )
+            rj["estimated_cost_usd"] = round(rj.get("estimated_cost_usd", 0) + 0.05 * len(wrote), 4)
+            round_json.write_text(_json.dumps(rj, indent=2) + "\n")
         return {
             "round": run,
             "icon": icon_id,
@@ -448,6 +470,10 @@ class ReviewHandler(BaseHTTPRequestHandler):
                 self._json(500, {"error": str(exc)})
             return
         if url.path == "/api/recraft":
+            origin = self.headers.get("Origin")
+            if origin and urlparse(origin).netloc != self.headers.get("Host", ""):
+                self._json(403, {"error": "cross-origin POST rejected"})
+                return
             data = self._body()
             try:
                 self._json(200, self._recraft_draft(data))

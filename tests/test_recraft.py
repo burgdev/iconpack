@@ -267,3 +267,48 @@ def test_draft_picks_per_style_id(tmp_path: Path, monkeypatch: pytest.MonkeyPatc
     r = runner.invoke(app, ["draft", str(d), "sun", "--n", "1"])
     assert r.exit_code == 0, r.output
     assert seen["style_id"] == "per-style-9"
+
+
+def test_next_run_number_gap_safe(tmp_path: Path) -> None:
+    d = _pack(tmp_path)
+    # simulate manual deletion: r001 and r003 exist (gap)
+    for r in ("r001", "r003"):
+        (d / ".runs" / r).mkdir(parents=True)
+    (d / ".runs" / "r003" / "round.json").write_text('{"round": "r003", "sentinel": 1}')
+    r = runner.invoke(app, ["next", str(d)])
+    assert r.exit_code == 0, r.output
+    assert "r004" in r.output  # max+1, not len+1 (=r003, a clobber)
+    kept = json.loads((d / ".runs" / "r003" / "round.json").read_text())
+    assert kept["sentinel"] == 1  # untouched
+
+
+def test_viewbox_fallbacks() -> None:
+    assert rc._viewbox_size('<svg width="512" height="512"><path/></svg>') == 512.0
+    assert rc._viewbox_size("<svg><path/></svg>") == 1024.0  # default
+
+
+def test_recraft_style_asserts_refs_per_style(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Each pack style gets ITS OWN reference set (mono refs ≠ color refs)."""
+    d = _pack(tmp_path, pinned=True)
+    pack = json.loads((d / "pack.json").read_text())
+    pack["icons"]["sun"]["variants"]["mono"] = {
+        "style": "mono-line",
+        "status": "approved",
+        "chosen": {"run": "r0", "variant": "x"},
+    }
+    (d / "pack.json").write_text(json.dumps(pack))
+    (d / "icons" / "sun" / "mono.svg").write_text("<svg>MONO-REF</svg>")
+
+    made: list[list[str]] = []
+    monkeypatch.setattr(rc, "resolve_token", lambda models_file=None: "tok")
+    monkeypatch.setattr(
+        rc,
+        "create_style",
+        lambda token, refs, match="precise": made.append(refs) or {"id": f"st-{len(made)}"},
+    )
+    r = runner.invoke(app, ["recraft-style", str(d)])
+    assert r.exit_code == 0, r.output
+    flat_ref = (d / "icons" / "sun" / "flat.svg").read_text()
+    assert made == [[flat_ref], ["<svg>MONO-REF</svg>"]]

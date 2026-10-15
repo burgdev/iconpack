@@ -390,7 +390,12 @@ def test_round_new_endpoint(server: _Server, srvpack: Path) -> None:
     assert isinstance(data["open"], list)
 
 
-def test_recraft_endpoint_no_token(server: _Server) -> None:
+def test_recraft_endpoint_no_token(server: _Server, srvpack: Path) -> None:
+    # unlock first: validation (incl. locked guard) runs before the token check
+    pj = srvpack / "pack.json"
+    pack = json.loads(pj.read_text())
+    pack["icons"]["hut"]["variants"]["mono"]["status"] = "todo"
+    pj.write_text(json.dumps(pack))
     code, data = server.req("POST", "/api/recraft", {"icon": "hut", "variant": "mono", "n": 2})
     assert code in (400, 502)
     assert "token" in data["error"].lower()
@@ -406,6 +411,11 @@ def test_recraft_endpoint_drafts(server: _Server, srvpack: Path, monkeypatch) ->
         return [svg] * n
 
     monkeypatch.setattr(rc, "generate", fake_generate)
+    # unlock the variant for this test (guard is tested separately)
+    pj = srvpack / "pack.json"
+    pack = json.loads(pj.read_text())
+    pack["icons"]["hut"]["variants"]["mono"]["status"] = "todo"
+    pj.write_text(json.dumps(pack))
     code, data = server.req("POST", "/api/recraft", {"icon": "hut", "variant": "mono", "n": 2})
     assert code == 200, data
     assert data["wrote"] == ["r1.svg", "r2.svg"]
@@ -420,3 +430,33 @@ def test_run_state_includes_locked(server: _Server) -> None:
     assert code == 200
     data = json.loads(body)
     assert "locked" in data and isinstance(data["locked"], dict)
+
+
+def test_recraft_endpoint_locked_guard(server: _Server, srvpack: Path) -> None:
+    code, data = server.req("POST", "/api/recraft", {"icon": "hut", "variant": "mono", "n": 1})
+    assert code == 400
+    assert "locked" in data["error"]
+
+
+def test_recraft_endpoint_n_validation(server: _Server, srvpack: Path) -> None:
+    code, data = server.req("POST", "/api/recraft", {"icon": "hut", "variant": "mono", "n": 99})
+    assert code == 400
+    assert "n must be" in data["error"]
+
+
+def test_recraft_endpoint_cross_origin(server: _Server) -> None:
+    import urllib.error
+
+    data = json.dumps({"icon": "hut", "n": 1}).encode()
+    req = urllib.request.Request(
+        server.base + "/api/recraft",
+        data=data,
+        method="POST",
+        headers={"Content-Type": "application/json", "Origin": "https://evil.example"},
+    )
+    try:
+        with urllib.request.urlopen(req) as r:
+            code = r.status
+    except urllib.error.HTTPError as e:
+        code = e.code
+    assert code == 403

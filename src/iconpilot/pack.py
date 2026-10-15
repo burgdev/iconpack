@@ -30,6 +30,22 @@ def schema_errors(pack: dict) -> list[str]:
     ]
 
 
+def next_run_id(runs_dir: Path) -> str:
+    """Gap-safe monotonic run id: max existing number + 1.
+
+    Count-based ids (len(runs)+1) silently clobber an existing round when the
+    numbering has gaps (e.g. manual deletion).
+    """
+    import re as _re
+
+    nums = [
+        int(m.group(1))
+        for p in runs_dir.glob("r*")
+        if p.is_dir() and (m := _re.match(r"r(\d+)$", p.name))
+    ]
+    return f"r{max(nums, default=0) + 1:03d}"
+
+
 def revalidate(pack: dict) -> tuple[dict[str, Style], list[str]]:
     """Validate an in-memory pack dict; returns (styles, errors)."""
     errors = schema_errors(pack)
