@@ -113,7 +113,20 @@ class ReviewHandler(BaseHTTPRequestHandler):
         if url.path == "/api/pack":
             try:
                 pack, _ = load_pack(self.pack_dir / "pack.json")
-                self._json(200, {"rev": pack.get("rev", 0), "version": __version__, "pack": pack})
+                files = {
+                    f"{iid}/{vid}": (self.pack_dir / "icons" / iid / f"{vid}.svg").is_file()
+                    for iid, ic in pack.get("icons", {}).items()
+                    for vid, vd in ic.get("variants", {}).items()
+                }
+                self._json(
+                    200,
+                    {
+                        "rev": pack.get("rev", 0),
+                        "version": __version__,
+                        "pack": pack,
+                        "svg_files": files,
+                    },
+                )
             except Exception as exc:
                 self._json(500, {"error": str(exc)})
             return
@@ -182,6 +195,29 @@ class ReviewHandler(BaseHTTPRequestHandler):
             self.send_header("Content-Length", str(len(body)))
             self.end_headers()
             self.wfile.write(body)
+            return
+
+        if url.path == "/api/icon-runs":
+            icon_id = (q.get("icon") or [""])[0]
+            runs_dir = self.pack_dir / ".runs"
+            out = []
+            if runs_dir.is_dir():
+                for run in sorted(
+                    (p.name for p in runs_dir.glob("r*") if p.is_dir()), reverse=True
+                ):
+                    for svg in sorted((runs_dir / run).rglob("*.svg")):
+                        rel = svg.relative_to(runs_dir / run).parts
+                        if len(rel) == 3 and rel[1] == icon_id:
+                            out.append(
+                                {
+                                    "round": run,
+                                    "variant": rel[0],
+                                    "icon": rel[1],
+                                    "cand": rel[2][:-4],
+                                    "path": f".runs/{run}/{rel[0]}/{rel[1]}/{rel[2]}",
+                                }
+                            )
+            self._json(200, {"candidates": out})
             return
 
         if url.path == "/api/prompt":
@@ -749,8 +785,11 @@ class ReviewHandler(BaseHTTPRequestHandler):
             style_id = data.get("style")
             note = data.get("note")
             pinned = data.get("pinned")
+            reopen = bool(data.get("reopen"))
             if not (
-                icon_id and variant_id and (style_id or note is not None or pinned is not None)
+                icon_id
+                and variant_id
+                and (style_id or note is not None or pinned is not None or reopen)
             ):
                 self._json(400, {"error": "need icon, variant, style"})
                 return
@@ -761,6 +800,8 @@ class ReviewHandler(BaseHTTPRequestHandler):
                     if v is None or "link" in v:
                         self._json(404, {"error": f"no authored variant {icon_id}#{variant_id}"})
                         return
+                    if reopen and v.get("status") == "approved":
+                        v["status"] = "todo"  # chosen stays as historical record
                     if style_id and style_id not in styles:
                         self._json(400, {"errors": [f"unknown style '{style_id}'"]})
                         return

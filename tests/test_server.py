@@ -609,7 +609,7 @@ def test_prompt_endpoint(server: _Server, srvpack: Path) -> None:
     # current candidates with verdicts
     assert "## Current candidates (r001)" in prompt
     assert "**a1** (approved):" in prompt
-    assert VALID_SVG.split("?>")[1][:20] in prompt  # the candidate SVG itself
+    assert VALID_SVG[:40] in prompt  # the candidate SVG itself
     # unknown variant
     code, body = server.get("/api/prompt?icon=hut&variant=nope")
     assert code == 404

@@ -6,17 +6,65 @@ PAGE = """<!doctype html>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>iconpilot review</title>
+<script>
+(function () {
+  var th = null;
+  try { th = localStorage.getItem('iconpilot.theme'); } catch (e) {}
+  if (!th) th = (window.matchMedia && matchMedia('(prefers-color-scheme: dark)').matches) ? 'dark' : 'light';
+  document.documentElement.dataset.theme = th;
+})();
+</script>
 <style>
 :root {
-  --bg: #f6f7f9; --card: #ffffff; --ink: #17202a; --muted: #66707a;
-  --line: #dfe3e8; --accent: #2e7d32; --accent-ink: #ffffff;
-  --warn: #b07d2e; --danger: #c62828; --chip: #eceff3; --shadow: 0 1px 3px rgba(20,30,40,.08);
+  /* light — tinted neutrals, hue 150; see DESIGN.md */
+  --bg: oklch(0.975 0.004 150);
+  --card: oklch(0.995 0.002 150);
+  --card-2: oklch(0.955 0.005 150);
+  --ink: oklch(0.250 0.012 155);
+  --muted: oklch(0.500 0.015 155);
+  --line: oklch(0.905 0.006 150);
+  --accent: oklch(0.500 0.125 152);
+  --accent-ink: oklch(0.995 0.002 150);
+  --warn: oklch(0.620 0.130 70);
+  --danger: oklch(0.550 0.170 25);
+  --star: oklch(0.750 0.150 85);
+  --chip: color-mix(in oklab, var(--line) 45%, var(--card));
+  --focus: oklch(0.600 0.110 152);
+  --shadow: 0 1px 3px oklch(0.25 0.02 155 / 0.10);
+  --shadow-lg: 0 12px 40px oklch(0.20 0.02 155 / 0.22);
+  color-scheme: light;
 }
-@media (prefers-color-scheme: dark) {
-  :root { --bg:#12161b; --card:#1a2027; --ink:#e8ecf0; --muted:#8b95a0; --line:#2a323c;
-          --chip:#242c35; --shadow:0 1px 3px rgba(0,0,0,.4); }
+:root[data-theme="dark"] {
+  --bg: oklch(0.165 0.008 155);
+  --card: oklch(0.205 0.009 155);
+  --card-2: oklch(0.245 0.010 155);
+  --ink: oklch(0.930 0.008 150);
+  --muted: oklch(0.700 0.012 150);
+  --line: oklch(0.300 0.012 155);
+  --accent: oklch(0.720 0.135 152);
+  --accent-ink: oklch(0.150 0.025 152);
+  --warn: oklch(0.780 0.125 75);
+  --danger: oklch(0.680 0.160 25);
+  --star: oklch(0.800 0.140 85);
+  --chip: color-mix(in oklab, var(--line) 40%, var(--card));
+  --focus: oklch(0.760 0.115 152);
+  --shadow: 0 1px 3px oklch(0 0 0 / 0.35);
+  --shadow-lg: 0 12px 40px oklch(0 0 0 / 0.50);
+  color-scheme: dark;
 }
 * { box-sizing: border-box; }
+input, select, textarea {
+  font: inherit; color: var(--ink); background: var(--card);
+  border: 1px solid var(--line); border-radius: 8px;
+  padding: 6px 10px; min-height: 32px;
+}
+select { cursor: pointer; }
+input[type="color"] { min-height: 28px; padding: 0 2px; }
+input[type="range"] { min-height: 0; padding: 0; }
+:is(button, input, select, textarea, summary):focus-visible {
+  outline: 2px solid var(--focus); outline-offset: 1px;
+}
+button { transition: border-color .12s ease-out, background-color .12s ease-out, color .12s ease-out; }
 body { margin:0; font:15px/1.45 system-ui,-apple-system,Segoe UI,Roboto,sans-serif;
        background:var(--bg); color:var(--ink); }
 header { position:sticky; top:0; z-index:10; background:var(--card); border-bottom:1px solid var(--line);
@@ -78,10 +126,10 @@ textarea[readonly] { color:var(--muted); }
 .err { color:var(--danger); font-size:.85rem; white-space:pre-wrap; margin:4px 0; }
 .ok { color:var(--accent); font-size:.85rem; }
 /* dialog */
-.overlay { position:fixed; inset:0; background:rgba(8,12,16,.55); display:flex; align-items:center;
+.overlay { position:fixed; inset:0; background:oklch(0.15 0.01 155 / 0.48); display:flex; align-items:center;
            justify-content:center; z-index:50; padding:16px; }
 .dialog { background:var(--card); border:1px solid var(--line); border-radius:14px; max-width:560px; width:100%;
-          max-height:92vh; overflow:auto; padding:16px; box-shadow:0 12px 40px rgba(0,0,0,.25); }
+          max-height:92vh; overflow:auto; padding:16px; box-shadow:var(--shadow-lg); }
 .dialog h3 { margin:0 0 8px; font-size:1rem; display:flex; justify-content:space-between; align-items:center; }
 .dialog .controls { display:flex; flex-wrap:wrap; gap:8px; align-items:center; margin:8px 0; }
 .dialog .controls label { font-size:.78rem; color:var(--muted); min-width:74px; }
@@ -106,7 +154,7 @@ input[type=color] { width:34px; height:28px; padding:0 2px; border:1px solid var
 .sheetstage { display:flex; align-items:flex-end; justify-content:center; gap:20px; padding:12px 0 16px; }
 .stars { display:flex; gap:2px; }
 .stars button { flex:1; font-size:30px; line-height:1.3; padding:10px 0; color:var(--line); border:none; background:none; }
-.stars button.on { color:#e8a825; }
+.stars button.on { color: var(--star); }
 .sheetrow { display:flex; justify-content:space-between; margin-top:10px; gap:8px; }
 @media (min-width: 700px) {
   .sheet .sheetbox { position:relative; bottom:auto; border-radius:16px; border-bottom:1px solid var(--line); }
@@ -139,13 +187,26 @@ footer { text-align:center; color:var(--muted); font-size:.75rem; padding:20px 0
 .gmeta select { font:inherit; font-size:.8rem; padding:4px 6px; border-radius:8px;
                 border:1px solid var(--line); background:var(--card); color:var(--ink); max-width:140px; }
 .vargrid { display:flex; flex-direction:column; gap:10px; }
-.vargroup { border-left:3px solid var(--line); padding-left:10px; }
+.vargroup { border:1px solid var(--line); background: color-mix(in oklab, var(--card-2) 55%, var(--card));
+            border-radius:10px; padding:8px 10px; }
 .varhead { display:flex; align-items:center; gap:8px; margin-bottom:6px; }
 .compare-grid { display:flex; gap:16px; }
 .compare-col { flex:1; text-align:center; }
 .compare-label { font-weight:600; margin-bottom:8px; }
 .compare-sizes { display:flex; justify-content:center; gap:12px; align-items:flex-end; margin-top:8px; }
 .card.kbactive { outline: 3px solid var(--accent); outline-offset: 2px; }
+.iconbtn-lg { padding:6px 9px; display:inline-flex; align-items:center; }
+.iconbtn .ic.filled svg { fill: currentColor; }
+.histstrip { margin:0 0 8px; font-size:.8rem; }
+.histstrip summary { cursor:pointer; color:var(--muted); display:inline-flex; gap:6px; align-items:center;
+                     padding:2px 6px; border-radius:6px; user-select:none; }
+.histstrip summary:hover { background:var(--chip); color:var(--ink); }
+.histgrid { display:flex; flex-wrap:wrap; gap:10px; padding:8px 0 4px; }
+.histcell { margin:0; text-align:center; }
+.histcell img { display:block; margin:0 auto 3px; border-radius:6px; }
+.histcell figcaption { font-size:.68rem; }
+.thumb.missing { width:64px; height:64px; display:flex; align-items:center; justify-content:center;
+                 color:var(--muted); border:1px dashed var(--line); border-radius:8px; }
 .iconbtn { padding:3px 7px; font-size:.85rem; border:none; background:none; cursor:pointer;
              color:var(--muted); border-radius:6px; }
 .iconbtn:hover { color:var(--ink); background:var(--chip); }
@@ -167,6 +228,10 @@ footer { text-align:center; color:var(--muted); font-size:.75rem; padding:20px 0
   <header>
     <h1>{{ S.pack.name || 'iconpilot' }}</h1>
     <span class="meta">rev {{ S.rev }} · S.round {{ S.round || '—' }}</span>
+    <button class="subtle iconbtn-lg" @click="toggleTheme"
+            :title="S.theme === 'dark' ? 'switch to light' : 'switch to dark'">
+      <span class="ic" v-html="S.theme === 'dark' ? IC.sun : IC.moon"></span>
+    </button>
     <select v-if="S.rounds.length" :value="S.viewRound || S.latest" @change="switchRound($event.target.value)"
             class="subtle" style="padding:4px 6px" title="browse any pass — latest is the live one">
       <option v-for="r in S.rounds" :key="r" :value="r">{{ r }}{{ r === S.latest ? ' (live)' : '' }}</option>
@@ -218,10 +283,23 @@ footer { text-align:center; color:var(--muted); font-size:.75rem; padding:20px 0
                  title="main color"
                  @input="saveMainColorIcon(g, $event.target.value)">
         </div>
+        <details class="histstrip" @toggle="e => e.target.open && loadIconHist(g)">
+          <summary><span class="ic" v-html="IC.history"></span> earlier passes</summary>
+          <div v-if="(S.iconHist[g.icon] || []).length" class="histgrid">
+            <figure v-for="hc in S.iconHist[g.icon]" :key="hc.round + hc.variant + hc.cand" class="histcell">
+              <img loading="lazy" width="40" height="40"
+                   :src="render(hc.path, 40, '#f6f9f7', mainColorIcon(g))">
+              <figcaption class="muted">{{ hc.round }} · {{ hc.variant }}/{{ hc.cand }}</figcaption>
+            </figure>
+          </div>
+          <p v-else class="muted">no earlier drafts</p>
+        </details>
         <div class="vargrid">
           <div class="vargroup" v-for="vg in variantGroups(g)" :key="vg.variant">
             <div class="varhead">
               <span class="chip" :class="{ done: isLocked(g.icon, vg.variant) }">{{ vg.variant }}<span v-if="isLocked(g.icon, vg.variant)" class="ic" v-html="IC.lock"></span></span>
+              <button v-if="isLocked(g.icon, vg.variant)" class="iconbtn" title="reopen for the next pass (approved file stays in history)"
+                      @click="reopen(g.icon, vg.variant)"><span class="ic" v-html="IC.unlock"></span></button>
               <select :value="vg.style" @change="switchStyle(g.icon, vg.variant, $event.target.value)" class="varstyle" title="style">
                 <option v-for="(st, sid) in S.styles" :key="sid" :value="sid">{{ sid }}</option>
               </select>
@@ -229,8 +307,6 @@ footer { text-align:center; color:var(--muted); font-size:.75rem; padding:20px 0
                       title="feedback for this variant" @click="openFb('variant', g.icon, vg.variant)">
                 <span class="ic" v-html="IC.comment"></span><span v-if="fbNew('variant', g.icon, vg.variant)" class="dotnew"></span>
               </button>
-              <button class="iconbtn" title="copy SVG path (open in Inkscape)"
-                      @click="copyPath(g.icon, vg.variant, vg.cands[0]?.cand)">⧉</button>
               <button class="iconbtn" title="copy a complete LLM hint for this variant — paste into any model, bring SVGs back"
                       @click="copyPrompt(g.icon, vg.variant)"><span class="ic" v-html="IC.copy"></span></button>
               <button class="iconbtn" :class="{ on: S.drafting === g.icon + '/' + vg.variant }"
@@ -343,14 +419,15 @@ footer { text-align:center; color:var(--muted); font-size:.75rem; padding:20px 0
         </div>
         <div class="grid">
           <div class="card" v-for="(v, vid) in icon.variants" :key="vid">
-            <img v-if="!v.link" class="thumb" loading="lazy" width="64" height="64"
+            <img v-if="!v.link && S.svgFiles[id + '/' + vid]" class="thumb" loading="lazy" width="64" height="64"
                  :src="render('icons/' + id + '/' + vid + '.svg', 64, '#ffffff')"
                  @click="openIcon(id, vid, v)">
+            <div v-else-if="!v.link" class="thumb missing" title="not drafted yet">—</div>
             <div class="name">{{ vid }}</div>
             <span class="chip" :class="v.status">{{ v.link ? '→ ' + v.link : v.status }}</span>
             <button v-if="v.status === 'approved' && !v.link" class="iconbtn"
                     :class="{ on: isPinned(id, vid) }" :title="isPinned(id, vid) ? 'unpin' : 'pin as style reference'"
-                    @click="togglePin(id, vid)">{{ isPinned(id, vid) ? '📌' : '📍' }}</button>
+                    @click="togglePin(id, vid)"><span class="ic" :class="{ filled: isPinned(id, vid) }" v-html="IC.pin"></span></button>
             <span v-if="v.status === 'stale' || edited(id, vid)" class="muted">needs re-review</span>
           </div>
         </div>
@@ -475,6 +552,10 @@ footer { text-align:center; color:var(--muted); font-size:.75rem; padding:20px 0
                 @click="rate(S.sheet.c, n); S.sheet = null;">★</button>
       </div>
       <div class="sheetrow">
+        <button class="subtle" @click="copyPath(S.sheet.c.icon, S.sheet.c.variant, S.sheet.c.cand)"
+                title="copy this SVG path (open in Inkscape)"><span class="ic" v-html="IC.copy"></span> path</button>
+        <button class="subtle" @click="copyPrompt(S.sheet.c.icon, S.sheet.c.variant)"
+                title="copy a complete LLM hint for this variant"><span class="ic" v-html="IC.spark"></span> LLM hint</button>
         <button class="armed-x" @click="drop(S.sheet.c); S.sheet = null">drop (0)</button>
         <button class="subtle" @click="S.sheet = null">cancel</button>
       </div>
@@ -541,7 +622,7 @@ const S = reactive({
   dlg: null, sheet: null, fbDlg: null, settingsDlg: false,
   decisionEdit: '', showGen: false, editingBrief: null,
   flash: '', flashOk: true, applying: false, instructions: '',
-  kbFocus: 0, kbVariant: 0, kbCand: 0, compare: null,
+  kbFocus: 0, kbVariant: 0, kbCand: 0, compare: null, theme: 'light', iconHist: {}, svgFiles: {},
   history: [], showHistory: false,
   set: { version: '', rules: '', strokeWidth: 2, linecap: 'round', linejoin: 'round', padding: 2, precision: 0.5, palette: null, errors: '' },
   bgs: [
@@ -566,6 +647,12 @@ const IC = {
   plus: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14M5 12h14"/></svg>',
   undo: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7v6h6"/><path d="M21 17a9 9 0 0 0-15-6.7L3 13"/></svg>',
   copy: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>',
+  pin: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 17v5"/><path d="M9 10.76a2 2 0 0 1-1.11 1.79l-1.78.9A2 2 0 0 0 5 15.24V16a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1v-.76a2 2 0 0 0-1.11-1.79l-1.78-.9A2 2 0 0 1 15 10.76V6h1a2 2 0 0 0 0-4H8a2 2 0 0 0 0 4h1z"/></svg>',
+  unlock: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 9.9-1"/></svg>',
+  sun: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="4"/><path d="M12 2v2m0 16v2M4.9 4.9l1.4 1.4m11.4 11.4 1.4 1.4M2 12h2m16 0h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/></svg>',
+  moon: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3a6 6 0 0 0 9 9 9 9 0 1 1-9-9z"/></svg>',
+  history: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/><path d="M12 7v5l4 2"/></svg>',
+  spark: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v2m0 14v2M3 12h2m14 0h2M5.6 5.6l1.4 1.4m10 10 1.4 1.4m0-12.8-1.4 1.4m-10 10-1.4 1.4"/><path d="M12 8.5 13.5 12 12 15.5 10.5 12z"/></svg>',
 };
 function relTime(iso) {
   if (!iso) return '';
@@ -576,6 +663,17 @@ function relTime(iso) {
   return Math.floor(s / 86400) + 'd';
 }
 function seenKey() { return 'iconpilot.seen.' + (S.pack.name || ''); }
+function applyTheme(th) {
+  S.theme = th;
+  document.documentElement.dataset.theme = th;
+  try { localStorage.setItem('iconpilot.theme', th); } catch {}
+}
+function initTheme() {
+  let th = null;
+  try { th = localStorage.getItem('iconpilot.theme'); } catch {}
+  applyTheme(th || (matchMedia && matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light'));
+}
+function toggleTheme() { applyTheme(S.theme === 'dark' ? 'light' : 'dark'); }
 function markSeen() { try { localStorage.setItem(seenKey(), new Date().toISOString()); } catch {} }
 function seenTs() { try { return localStorage.getItem(seenKey()) || ''; } catch { return ''; } }
 function isNew(i) { return !!i.created && i.created + 'Z' > seenTs(); }
@@ -590,14 +688,17 @@ S.grouped = computed(() => {
 });
 async function copyText(text, okMsg) {
   try {
-    await navigator.clipboard.writeText(text).catch(async () => {
+    if (navigator.clipboard && window.isSecureContext) {
+      await navigator.clipboard.writeText(text);
+    } else {
       const ta = document.createElement('textarea');
       ta.value = text; ta.style.cssText = 'position:fixed;opacity:0';
-      document.body.appendChild(ta); ta.select();
-      document.execCommand('copy'); ta.remove();
-    });
+      document.body.appendChild(ta); ta.focus(); ta.select();
+      const ok = document.execCommand('copy'); ta.remove();
+      if (!ok) throw new Error('execCommand denied');
+    }
     flash(okMsg, true);
-  } catch (e) { flash('copy failed', false); }
+  } catch (e) { flash('copy blocked — select the composer textarea and paste manually', false); }
 }
 async function copyPath(icon, variant, cand) {
   const q = new URLSearchParams({ icon, variant });
@@ -639,7 +740,7 @@ async function togglePin(icon, variant) {
   try {
     const r = await api('/api/variant', { method: 'PUT', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ icon, variant, pinned: !current }) });
-    S.msg = `${!current ? '📌 pinned' : 'unpinned'} ${icon}/${variant} (rev ${r.rev})`;
+    S.msg = `${!current ? 'pinned' : 'unpinned'} ${icon}/${variant} (rev ${r.rev})`;
     S.msgClass = 'ok'; await load();
   } catch (e) { S.msg = e.message; S.msgClass = 'err'; }
 }
@@ -725,6 +826,22 @@ function batchReject(maxScore) {
 }
 function isViewing() { return !!(S.viewRound && S.viewRound !== S.latest); }
 function isLocked(icon, variant) { return !!S.locked[icon + '/' + variant]; }
+async function loadIconHist(g) {
+  if (S.iconHist[g.icon]) return;
+  try {
+    const r = await api('/api/icon-runs?icon=' + encodeURIComponent(g.icon));
+    S.iconHist = { ...S.iconHist, [g.icon]: r.candidates };
+  } catch (e) { flash('history: ' + e.message, false); }
+}
+async function reopen(icon, variant) {
+  if (!confirm('Reopen ' + icon + '#' + variant + ' for drafting? The approved file stays in history.')) return;
+  try {
+    await api('/api/variant', { method: 'PUT', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ icon, variant, reopen: true }) });
+    flash(icon + '#' + variant + ' reopened', true);
+    await load();
+  } catch (e) { flash('reopen: ' + e.message, false); }
+}
 async function switchRound(r) {
   S.viewRound = r === S.latest ? null : r;
   S.decisions = {}; editDirty = false; S.decisionEdit = ''; S.instructions = ''; S.compare = null;
@@ -887,16 +1004,19 @@ function styleLabel(sid) {
   return sid + (s ? ` — ${s.label}` : '');
 }
 function openSheet(c) { S.sheet = { c }; }
+function cmpLabel(c) { return c.variant + '/' + c.cand; }
 function toggleCompare(c) {
-  if (!S.compare) { S.compare = [c]; S.msg = 'compare: selected ' + c.icon + '/' + c.variant + '/' + c.cand; }
-  else if (S.compare.length < 2) {
-    S.compare.push(c);
-    S.msg = 'comparing ' + S.compare.map(x => x.cand).join(' vs ');
-  } else {
-    S.compare = [c];
-    S.msg = 'compare: selected ' + c.cand;
+  if (S.compare && S.compare.length === 1
+      && S.compare[0].variant === c.variant && S.compare[0].cand === c.cand) {
+    S.compare = null; flash('compare reset', true); return;
   }
-  S.msgClass = 'ok';
+  if (!S.compare || S.compare.length >= 2) {
+    S.compare = [c];
+    flash('compare: picked ' + cmpLabel(c) + ' — pick a second one', true);
+  } else {
+    S.compare.push(c);
+    flash('comparing ' + S.compare.map(cmpLabel).join(' vs '), true);
+  }
 }
 function openSettings() {
   const sp = S.pack.spec || {};
@@ -1040,7 +1160,8 @@ async function load(manual) {
   const [p, run, styles, ai, hist] = await Promise.all([
     api('/api/pack'), api(runUrl), api('/api/styles'), api('/api/ai-status'), api('/api/history'),
   ]);
-  S.pack = p.pack; S.rev = p.rev; S.round = run.round; S.latest = run.latest;
+  S.pack = p.pack; S.rev = p.rev; S.svgFiles = p.svg_files || {};
+  S.round = run.round; S.latest = run.latest;
   S.locked = run.locked || {};
   S.rounds = (S.history || []).map(h => h.round).reverse();  // newest first
   S.candidates = run.candidates.map(c => ({
@@ -1058,6 +1179,7 @@ async function load(manual) {
 const App = {
   setup() {
     onMounted(() => {
+      initTheme();
       load().catch(e => { S.msg = e.message; S.msgClass = 'err'; });
       setInterval(async () => {
         try {
@@ -1121,7 +1243,7 @@ const App = {
       batchApprove, batchReject, toggleCompare,
       isLocked, recraftDraft, recraftIcon, startRound, saveIconDesc, totalCost,
       fbFor, fbNew, fbTitle, fbItems, fbChat, openFb, addFeedback, resolveFeedback, switchRound, isViewing,
-      IC, relTime, isNew, copyPrompt,
+      IC, relTime, isNew, copyPrompt, reopen, toggleTheme, cmpLabel, initTheme, loadIconHist,
 
     };
   },
