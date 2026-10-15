@@ -80,13 +80,21 @@ header .meta { color:var(--muted); font-size:.8rem; }
 .ic-lg svg { width:18px; height:18px; vertical-align:-4px; }
 .dotnew { width:7px; height:7px; border-radius:50%; background:var(--warn); display:inline-block; margin-left:2px; }
 .chip.new { background:var(--warn); color:var(--bg); font-size:.65rem; padding:1px 6px; font-weight:600; }
-.chat { max-height:280px; overflow-y:auto; border:1px solid var(--line); border-radius:8px; padding:8px; margin-bottom:10px; background:color-mix(in srgb, var(--bg) 60%, transparent); }
-.chat-head { font-size:.7rem; text-transform:uppercase; letter-spacing:.06em; color:var(--muted); margin:8px 0 4px; }
+.focusgrid { border-collapse:collapse; width:100%; }
+.focusgrid th, .focusgrid td { padding:4px 6px; text-align:center; border-bottom:1px solid var(--line); }
+.focusgrid td:first-child, .focusgrid th:first-child { text-align:left; font-weight:600; }
+.focusgrid input[type=checkbox] { min-height:0; }
+.chat { max-height:300px; overflow-y:auto; border:1px solid var(--line); border-radius:10px; padding:10px; margin-bottom:10px;
+       background:color-mix(in oklab, var(--bg) 60%, var(--card)); display:flex; flex-direction:column; gap:6px; }
+.chat-head { font-size:.68rem; text-transform:uppercase; letter-spacing:.08em; color:var(--muted); text-align:center; margin:6px 0 2px; }
 .chat-head:first-child { margin-top:0; }
-.bubble { display:flex; align-items:baseline; gap:6px; padding:3px 0; }
-.msg.agent .bubble-text { color:var(--warn); }
-.bubble-text { flex:1; }
-.bubble-time { font-size:.7rem; }
+.bubble { display:flex; align-items:baseline; gap:8px; padding:5px 10px; border-radius:12px; max-width:88%; font-size:.88rem; }
+.bubble.user { align-self:flex-end; background:color-mix(in oklab, var(--accent) 14%, var(--card)); }
+.bubble.agent { align-self:flex-start; background:color-mix(in oklab, var(--warn) 12%, var(--card)); }
+.bubble.agent .bubble-text { color:var(--ink); }
+.r-archived .bubble { opacity:.75; }
+.bubble-text { flex:1; overflow-wrap:anywhere; }
+.bubble-time { font-size:.66rem; color:var(--muted); white-space:nowrap; }
 .scope { font-size:.75rem; }
 .chip.agent { background:color-mix(in srgb, var(--warn) 18%, transparent); }
 .chip.user { background:color-mix(in srgb, var(--line) 40%, transparent); }
@@ -471,9 +479,10 @@ footer { text-align:center; color:var(--muted); font-size:.75rem; padding:20px 0
       </template>
     </span>
     <button class="subtle" @click="undo" title="undo last apply" aria-label="undo"><span class="ic" v-html="IC.undo"></span></button>
-    <button class="primary ab-apply" @click="apply"
-            :disabled="!S.decisionEdit.trim() || S.applying">
-      {{ S.applying ? '…' : 'Apply' + (S.lines.length ? ' · ' + S.lines.length : '') }}</button>
+    <button class="primary ab-apply" @click="applyAndNext()"
+            :disabled="!S.decisionEdit.trim() || S.applying">apply ▸ next pass</button>
+        <button class="subtle" @click="apply()" v-if="S.decisionEdit.trim() && !S.applying"
+                title="record decisions without starting the next pass">apply only</button>
   </div>
 
   <div v-if="S.settingsDlg" class="overlay" @click.self="S.settingsDlg = false">
@@ -532,19 +541,21 @@ footer { text-align:center; color:var(--muted); font-size:.75rem; padding:20px 0
       <h3><span><span class="ic-lg" v-html="IC.comment"></span> {{ fbTitle() }}</span>
           <button class="subtle" @click="S.fbDlg = null">✕</button></h3>
       <p class="muted" style="margin:0 0 8px">Per-round feedback — guides the next draft, then dies with its round (history keeps it). Generally valid? The agent promotes it into the standing note via CLI.</p>
-      <textarea v-model="S.fbDlg.text" placeholder="what to change in the next draft — e.g. 'thinner roof, door on the right'"></textarea>
+      <textarea ref="fbInput" v-model="S.fbDlg.text" rows="2"
+                placeholder="what to change in the next draft — Enter to add, Shift+Enter for a new line"
+                @keydown.enter.exact.prevent="addFeedback"></textarea>
       <div class="row" style="margin:8px 0">
         <button class="primary" @click="addFeedback">Add</button>
-        <span class="muted">newest guidance sits in the transcript below</span>
+        <span class="muted">guidance lives until resolved · the agent promotes durable points itself</span>
       </div>
-      <div class="chat">
+      <div class="chat" ref="fbChat" aria-live="polite">
         <template v-for="r in fbChat()" :key="r.round + (r.archived ? '-a' : '-l')">
-          <div class="chat-head">{{ r.round }}{{ r.archived ? ' · archived' : ' · live' }}</div>
-          <div v-for="i in r.items" :key="r.round + i.id" class="bubble" :class="i.author">
-            <span class="chip" :class="i.author">{{ i.author }}</span>
+          <div class="chat-head" :class="{ 'r-archived': r.archived }">{{ r.round }}{{ r.archived ? ' · archived' : ' · live' }}</div>
+          <div v-for="i in r.items" :key="r.round + i.id" class="bubble" :class="i.author"
+               :title="i.author + ' · ' + (i.created || '')">
             <span class="bubble-text">{{ i.text }}</span>
-            <span class="muted bubble-time">{{ relTime(i.created) }}</span>
             <span v-if="isNew(i)" class="chip new">new</span>
+            <span class="bubble-time">{{ relTime(i.created) }}</span>
             <button v-if="!r.archived" class="subtle armed-x" title="resolve (done / addressed)" @click="resolveFeedback(i)">✕</button>
           </div>
         </template>
@@ -557,17 +568,36 @@ footer { text-align:center; color:var(--muted); font-size:.75rem; padding:20px 0
   </div>
 
   <div v-if="S.nextDlg" class="overlay" @click.self="S.nextDlg = null">
-    <div class="dialog">
+    <div class="dialog" style="max-width:640px">
       <h3><span>Focus for the next pass</span><button class="subtle" @click="S.nextDlg = null" aria-label="Close">✕</button></h3>
-      <p class="muted" style="margin:0 0 8px">Pick what to draft next — e.g. color first, mono later. Everything stays open; this only sets the focus.</p>
-      <div style="max-height:300px; overflow-y:auto">
-        <label v-for="v in S.nextDlg.all" :key="v.key" style="display:flex; gap:8px; align-items:center; padding:3px 0">
-          <input type="checkbox" v-model="S.nextDlg.sel[v.key]"> {{ v.label }}
-        </label>
+      <p class="muted" style="margin:0 0 8px">Preselected = previous pass. Toggle a whole column, or single cells.</p>
+      <div style="max-height:340px; overflow-y:auto">
+        <table class="focusgrid">
+          <thead>
+            <tr>
+              <th></th>
+              <th v-for="c in S.nextDlg.cols" :key="c">
+                <button class="subtle" :class="{ armed: colState(c) === 'all' }" @click="toggleCol(c)"
+                        :title="'toggle all ' + c">{{ c }}</button>
+              </th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr v-for="r in S.nextDlg.rows" :key="r">
+              <td class="muted">{{ r }}</td>
+              <td v-for="c in S.nextDlg.cols" :key="c">
+                <input v-if="S.nextDlg.cells.includes(r + '#' + c)" type="checkbox"
+                       v-model="S.nextDlg.sel[r + '#' + c]" :aria-label="r + ' ' + c">
+                <span v-else class="muted">·</span>
+              </td>
+            </tr>
+          </tbody>
+        </table>
       </div>
       <div class="row" style="margin-top:10px">
         <button class="primary" @click="startRound(Object.entries(S.nextDlg.sel).filter(([,on]) => on).map(([k]) => k))">start pass</button>
-        <button class="subtle" @click="startRound()">all open</button>
+        <button class="subtle" @click="toggleAll(true)">select all</button>
+        <button class="subtle" @click="toggleAll(false)">none</button>
         <button class="subtle" @click="S.nextDlg = null" aria-label="Close">✕</button>
       </div>
     </div>
@@ -875,6 +905,13 @@ function openFb(scope, icon, vid) {
   S.fbDlg = { scope, icon, variant: vid, text: '' };
   markSeen();
   focusDialog();
+  chatToBottom();
+}
+function chatToBottom() {
+  requestAnimationFrame(() => {
+    const el = document.querySelector('.chat');
+    if (el) el.scrollTop = el.scrollHeight;
+  });
 }
 function fbChat() {
   const d = S.fbDlg;
@@ -897,7 +934,7 @@ async function addFeedback() {
   try {
     await api('/api/feedback', { method: 'POST', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ scope: d.scope, icon: d.icon, variant: d.variant, text: d.text.trim(), author: 'user' }) });
-    d.text = ''; await load();
+    d.text = ''; await load(); chatToBottom();
   } catch (e) { flash('feedback: ' + e.message, false); }
 }
 async function resolveFeedback(i) {
@@ -1033,9 +1070,26 @@ function openVariantsLive() {
 function openNextDlg() {
   const pending = Object.values(S.decisions).some(e => e.items?.length);
   if (pending && !confirm('There are unapplied ratings. Start a new pass anyway? ' + String.fromCharCode(10) + '(The LLM will not see them — apply first if you want them recorded.)')) return;
-  S.nextDlg = { sel: {}, all: openVariantsLive() };
-  S.nextDlg.sel = Object.fromEntries(S.nextDlg.all.map(v => [v.key, true]));
+  const all = openVariantsLive();
+  const cells = all.map(v => v.key);
+  const prev = new Set(S.lastFocus || []);
+  const sel = Object.fromEntries(all.map(v => [v.key, prev.size ? prev.has(v.key) : true]));
+  const rows = [...new Set(all.map(v => v.key.split('#')[0]))];
+  const cols = [...new Set(all.map(v => v.key.split('#')[1]))];
+  S.nextDlg = { sel, cells, rows, cols };
   focusDialog();
+}
+function colState(col) {
+  const keys = S.nextDlg.cells.filter(k => k.endsWith('#' + col));
+  const on = keys.filter(k => S.nextDlg.sel[k]).length;
+  return on === keys.length ? 'all' : on === 0 ? 'none' : 'some';
+}
+function toggleCol(col) {
+  const turnOn = colState(col) !== 'all';
+  for (const k of S.nextDlg.cells.filter(k => k.endsWith('#' + col))) S.nextDlg.sel[k] = turnOn;
+}
+function toggleAll(on) {
+  for (const k of S.nextDlg.cells) S.nextDlg.sel[k] = on;
 }
 async function startRound(only) {
   try {
@@ -1299,11 +1353,12 @@ async function undo() {
   } catch (e) { flash('✗ ' + e.message, false); }
 }
 async function apply() {
-  if (isViewing()) { flash('viewing history — switch back to the live pass', false); return; }
+  if (isViewing()) { flash('viewing history — switch back to the live pass', false); return false; }
   const text = S.decisionEdit.trim();
-  if (!text || S.applying) return;
+  if (!text || S.applying) return false;
   S.applying = true;
   flash('applying…', true);
+  let ok = false;
   try {
     const r = await api('/api/decision', { method: 'POST', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ text, round: S.round, instructions: S.instructions.trim() }) });
@@ -1312,13 +1367,21 @@ async function apply() {
     await load();
     S.appliedRound = S.round;
     const approves = (r.log || []).filter(l => l.includes('→ approved')).length;
-    flash('✓ applied — ' + (r.log || []).length + ' change(s), ' + approves + ' approved · start the next pass when ready', true);
+    flash('✓ applied — ' + (r.log || []).length + ' change(s), ' + approves + ' approved', true);
+    ok = true;
   } catch (e) {
     const detail = e.d?.errors ? e.d.errors.join(' · ') : e.message;
     flash('✗ ' + detail.slice(0, 90), false);
     S.msg = detail; S.msgClass = 'err';
   }
   S.applying = false;
+  return ok;
+}
+async function applyAndNext() {
+  const ok = await apply();
+  if (!ok) return;
+  const focus = S.lastFocus && S.lastFocus.length ? S.lastFocus : null;
+  await startRound(focus || undefined);
 }
 function decisionsJson() {
   const icons = {};
@@ -1461,7 +1524,7 @@ const App = {
       fbFor, fbNew, fbTitle, fbItems, fbChat, openFb, addFeedback, resolveFeedback, switchRound, isViewing,
       IC, relTime, isNew, copyPrompt, reopen, toggleTheme, cmpLabel, initTheme, loadIconHist, hasRating,
       showDebug, openNextDlg, addVariantBulk, addCustomStyle, saveRecraftDefaults,
-      isPostponed, togglePostpone,
+      isPostponed, togglePostpone, applyAndNext, colState, toggleCol, toggleAll,
 
     };
   },

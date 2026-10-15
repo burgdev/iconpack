@@ -144,6 +144,14 @@ class ReviewHandler(BaseHTTPRequestHandler):
                     rel = svg.relative_to(self.pack_dir / ".runs" / active).parts
                     if len(rel) == 3:
                         entries.append({"variant": rel[0], "icon": rel[1], "cand": rel[2][:-4]})
+            focus = None
+            if active:
+                rj = self.pack_dir / ".runs" / active / "round.json"
+                if rj.is_file():
+                    try:
+                        focus = json.loads(rj.read_text()).get("open")
+                    except (ValueError, OSError):
+                        pass
             # open/locked per icon+variant so the page can badge locked work
             locked: dict[str, bool] = {}
             try:
@@ -160,6 +168,7 @@ class ReviewHandler(BaseHTTPRequestHandler):
                     "latest": runs[-1] if runs else None,
                     "candidates": entries,
                     "locked": locked,
+                    "focus": focus,
                 },
             )
             return
