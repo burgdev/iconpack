@@ -589,3 +589,17 @@ def test_decision_on_history_round_rejected(server: _Server, srvpack: Path) -> N
     code, data = server.req("POST", "/api/decision", {"text": "hut: a1 ok", "round": "r001"})
     assert code == 400
     assert "history" in data["error"]
+
+
+def test_prompt_endpoint(server: _Server, srvpack: Path) -> None:
+    server.req("POST", "/api/feedback", {"scope": "icon", "icon": "hut", "text": "wider roof"})
+    code, body = server.get("/api/prompt?icon=hut&variant=mono&n=3")
+    assert code == 200
+    prompt = json.loads(body)["prompt"]
+    assert "3 distinct SVG icon candidates" in prompt
+    assert "hut#mono" in prompt
+    assert "wider roof" in prompt  # live feedback included
+    assert "gate" in prompt.lower()
+    # unknown variant
+    code, body = server.get("/api/prompt?icon=hut&variant=nope")
+    assert code == 404

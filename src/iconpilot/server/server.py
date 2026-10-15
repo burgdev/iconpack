@@ -184,6 +184,30 @@ class ReviewHandler(BaseHTTPRequestHandler):
             self.wfile.write(body)
             return
 
+        if url.path == "/api/prompt":
+            icon_id = (q.get("icon") or [""])[0]
+            variant = (q.get("variant") or [""])[0]
+            try:
+                n = int((q.get("n") or ["2"])[0])
+            except ValueError:
+                n = 2
+            n = max(1, min(n, 4))
+            try:
+                pack, styles = load_pack(self.pack_dir / "pack.json")
+            except Exception as exc:
+                self._json(500, {"error": str(exc)})
+                return
+            icon = pack["icons"].get(icon_id)
+            if icon is None or "style" not in icon.get("variants", {}).get(variant, {}):
+                self._json(404, {"error": f"no authored variant {icon_id}#{variant}"})
+                return
+            from iconpilot.context import build_prompt
+
+            self._json(
+                200, {"prompt": build_prompt(self.pack_dir, pack, styles, icon_id, variant, n=n)}
+            )
+            return
+
         if url.path == "/api/styles":
             _, styles = load_pack(self.pack_dir / "pack.json")
             self._json(

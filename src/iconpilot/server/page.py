@@ -231,6 +231,8 @@ footer { text-align:center; color:var(--muted); font-size:.75rem; padding:20px 0
               </button>
               <button class="iconbtn" title="copy SVG path (open in Inkscape)"
                       @click="copyPath(g.icon, vg.variant, vg.cands[0]?.cand)">⧉</button>
+              <button class="iconbtn" title="copy a complete LLM hint for this variant — paste into any model, bring SVGs back"
+                      @click="copyPrompt(g.icon, vg.variant)"><span class="ic" v-html="IC.copy"></span></button>
               <button class="iconbtn" :class="{ on: S.drafting === g.icon + '/' + vg.variant }"
                       title="Recraft: seed 4 drafts for this variant (~$0.18-0.20)"
                       @click="recraftDraft(g.icon, vg.variant)"><span class="ic" v-html="IC.bolt"></span></button>
@@ -563,6 +565,7 @@ const IC = {
   bolt: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M13 2 3 14h9l-1 8 10-12h-9l1-8z"/></svg>',
   plus: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14M5 12h14"/></svg>',
   undo: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7v6h6"/><path d="M21 17a9 9 0 0 0-15-6.7L3 13"/></svg>',
+  copy: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>',
 };
 function relTime(iso) {
   if (!iso) return '';
@@ -585,19 +588,30 @@ S.grouped = computed(() => {
   }
   return [...m.values()];
 });
+async function copyText(text, okMsg) {
+  try {
+    await navigator.clipboard.writeText(text).catch(async () => {
+      const ta = document.createElement('textarea');
+      ta.value = text; ta.style.cssText = 'position:fixed;opacity:0';
+      document.body.appendChild(ta); ta.select();
+      document.execCommand('copy'); ta.remove();
+    });
+    flash(okMsg, true);
+  } catch (e) { flash('copy failed', false); }
+}
 async function copyPath(icon, variant, cand) {
   const q = new URLSearchParams({ icon, variant });
   if (cand) q.set('cand', cand);
   try {
     const r = await api('/api/svg-path?' + q);
-    await navigator.clipboard.writeText(r.path).catch(async () => {
-      const ta = document.createElement('textarea');
-      ta.value = r.path; ta.style.cssText = 'position:fixed;opacity:0';
-      document.body.appendChild(ta); ta.select();
-      document.execCommand('copy'); ta.remove();
-    });
-    S.msg = 'path copied: ' + r.path; S.msgClass = 'ok';
-  } catch (e) { S.msg = 'copy failed'; S.msgClass = 'err'; }
+    await copyText(r.path, 'path copied: ' + r.path);
+  } catch (e) { flash('copy failed', false); }
+}
+async function copyPrompt(icon, variant) {
+  try {
+    const r = await api('/api/prompt?icon=' + encodeURIComponent(icon) + '&variant=' + encodeURIComponent(variant));
+    await copyText(r.prompt, 'LLM hint copied for ' + icon + '#' + variant + ' — paste it anywhere, bring the SVGs back');
+  } catch (e) { flash('hint: ' + e.message, false); }
 }
 function variantGroups(g) {
   const m = new Map();
@@ -1107,7 +1121,7 @@ const App = {
       batchApprove, batchReject, toggleCompare,
       isLocked, recraftDraft, recraftIcon, startRound, saveIconDesc, totalCost,
       fbFor, fbNew, fbTitle, fbItems, fbChat, openFb, addFeedback, resolveFeedback, switchRound, isViewing,
-      IC, relTime, isNew,
+      IC, relTime, isNew, copyPrompt,
 
     };
   },

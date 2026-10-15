@@ -160,6 +160,29 @@ def build_context(
     return ctx
 
 
+def build_prompt(
+    pack_dir: Path,
+    pack: dict,
+    styles: dict,
+    icon_id: str,
+    variant_id: str,
+    n: int = 2,
+) -> str:
+    """A self-contained LLM prompt for drafting candidates outside the loop.
+
+    Context + instructions in one paste: the user can drop this into any chat
+    model and paste the SVGs it returns into .runs/<round>/<variant>/<icon>/.
+    """
+    ctx = build_context(pack_dir, pack, styles, icon_id, variant_id)
+    head = (
+        f"You are drafting {n} distinct SVG icon candidates for the variant "
+        f"`{icon_id}#{variant_id}` of an icon pack. Follow the deterministic "
+        f"context below exactly — the gate rejects anything off-contract.\n\n"
+        f"Return ONLY the SVGs, each in its own code block, no commentary."
+    )
+    return f"{head}\n\n---\n\n{render_markdown(ctx)}"
+
+
 def render_markdown(ctx: dict) -> str:
     lines = [f"# {ctx['icon']}#{ctx['variant']} — drafting context", ""]
     lines += [f"**Brief:** {ctx['brief']}", ""]
