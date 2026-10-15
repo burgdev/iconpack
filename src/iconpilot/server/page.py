@@ -973,13 +973,36 @@ async function switchRound(r) {
 }
 function totalCost() { return S.history.reduce((a, h) => a + (h.cost_usd || 0), 0); }
 
-async function showDebug(icon, variant) {
+async function showDebug(icon, variant, model, n) {
   try {
-    const r = await api('/api/recraft-request?icon=' + encodeURIComponent(icon) + '&variant=' + encodeURIComponent(variant));
-    r.request.prompt = r.request.prompt.slice(0, 160) + '… (full hint below)';
-    S.debugDlg = { icon, variant, endpoint: r.endpoint, request: JSON.stringify(r.request, null, 2), full: r.full_prompt, cost: r.est_cost_usd };
+    const q = new URLSearchParams({ icon, variant });
+    if (model) q.set('model', model);
+    if (n) q.set('n', n);
+    const r = await api('/api/recraft-request?' + q);
+    r.request.prompt = (r.request.prompt || '').slice(0, 220) + '…';
+    S.debugDlg = {
+      icon, variant,
+      variants: openVariantIds(icon),
+      endpoint: r.endpoint, refs: r.style_refs_attached,
+      request: JSON.stringify(r.request, null, 2), full: r.full_prompt,
+      cost: r.est_cost_usd, models: r.models || [], model: r.request.model, n: r.request.n,
+    };
     focusDialog();
   } catch (e) { flash('preview: ' + e.message, false); }
+}
+function openVariantIds(icon) {
+  const icon0 = S.pack.icons?.[icon];
+  if (!icon0) return [];
+  return Object.entries(icon0.variants || {})
+    .filter(([vid, v]) => !v.link && !S.locked[icon + '/' + vid] && !v.postponed).map(([vid]) => vid);
+}
+async function saveRecraftDefaults(model, n) {
+  try {
+    await api('/api/pack', { method: 'PUT', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ recraft: { model, n } }) });
+    flash('Recraft defaults saved: ' + model + ' · ' + n + '/request', true);
+    await load();
+  } catch (e) { flash('defaults: ' + (e.d?.error || e.message), false); }
 }
 async function recraftDraft(icon, variant, n = 4) {
   const key = icon + '/' + variant;

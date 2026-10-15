@@ -202,8 +202,9 @@ def test_page_setup_return_symbols_defined() -> None:
     from iconpilot.server.page import PAGE
 
     js = PAGE.split('<script type="module">')[1].split("</script>")[0]
-    # the setup() return is the LAST `return {` in the module
-    start = js.rindex("return {")
+    # bind to the return inside App.setup(), not any later `return {`
+    setup_at = js.index("setup()")
+    start = js.index("return {", setup_at)
     body = js[start : js.index("\n    };", start)]
     names = [
         ln.strip().rstrip(",") for ln in body.splitlines() if _re.fullmatch(r"\w+,?", ln.strip())
