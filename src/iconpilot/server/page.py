@@ -1402,6 +1402,84 @@ async function recraftIcon(g) {
   for (const vg of open) await recraftDraft(g.icon, vg.variant);
 }
 
+function iconSuggest() {
+  const q = (S.nextDlg?.newIcon || '').toLowerCase().trim();
+  if (!q || q.length < 2) { if (S.nextDlg) S.nextDlg.suggestions = []; return; }
+  const existing = Object.keys(S.pack.icons || {}).map(iid => {
+    const icon = S.pack.icons[iid];
+    const brief = (icon.brief || '').toLowerCase();
+    return { key: iid, label: iid + ' — ' + (icon.brief || '').slice(0, 60), brief, isExisting: true };
+  });
+  const matches = existing.filter(s => s.key.includes(q) || s.brief.includes(q)).slice(0, 5);
+  if (S.nextDlg) S.nextDlg.suggestions = matches;
+}
+function pickSuggestion(s) {
+  const d = S.nextDlg;
+  if (!d) return;
+  if (s.isExisting) {
+    const icon = S.pack.icons[s.key];
+    for (const [vid, v] of Object.entries(icon.variants || {})) {
+      if (v.link || v.postponed) continue;
+      const key = s.key + '#' + vid;
+      if (!d.cells.includes(key)) {
+        d.cells.push(key);
+        d.sel[key] = true;
+        if (!d.rows.includes(s.key)) d.rows.push(s.key);
+        if (!d.cols.includes(vid)) d.cols.push(vid);
+      }
+    }
+    d.newIcon = ''; d.suggestions = [];
+    flash(s.key + ' added to focus', true);
+  } else {
+    d.pending = d.pending || [];
+    d.pending.push(s.label);
+    d.newIcon = ''; d.suggestions = [];
+  }
+}
+function addNewIcon() {
+  const d = S.nextDlg;
+  if (!d || !d.newIcon?.trim()) return;
+  const raw = d.newIcon.trim();
+  const dashIdx = raw.indexOf('—') >= 0 ? raw.indexOf('—') : raw.indexOf('-') >= 2 ? raw.indexOf('-') : -1;
+  const name = (dashIdx > 0 ? raw.slice(0, dashIdx) : raw).trim().toLowerCase().replace(/[^a-z0-9-]/g, '-').replace(/^-+|-+$/g, '');
+  const brief = dashIdx > 0 ? raw.slice(dashIdx + 1).trim() : raw.trim();
+  if (!name) return;
+  d.pending = d.pending || [];
+  d.pending.push(name + (brief && brief !== name ? ' — ' + brief : ''));
+  d.newIcon = ''; d.suggestions = [];
+}
+async function startRoundWithNew() {
+  const d = S.nextDlg;
+  if (!d) return;
+  const created = [];
+  for (const entry of d.pending || []) {
+    const dashIdx = entry.indexOf(' — ');
+    const name = dashIdx > 0 ? entry.slice(0, dashIdx) : entry;
+    const brief = dashIdx > 0 ? entry.slice(dashIdx + 3) : name;
+    try {
+      await api('/api/icon', { method: 'PUT', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ icon: name, brief }) });
+      created.push(name);
+    } catch (e) { /* may already exist */ }
+    for (const sid of usedStyles()) {
+      try {
+        await api('/api/pack-variant-bulk', { method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ style: sid }) });
+      } catch (e2) {}
+    }
+  }
+  if (created.length) flash(created.length + ' icon(s) created', true);
+  await load();
+  const sel = Object.entries(S.nextDlg?.sel || {}).filter(([, on]) => on).map(([k]) => k);
+  for (const name of created) {
+    const icon = S.pack.icons[name];
+    if (!icon) continue;
+    for (const vid of Object.keys(icon.variants || {})) {
+      if (!icon.variants[vid].link) sel.push(name + '#' + vid);
+    }
+  }
+  await startRound(sel);
+}
 function openVariantsLive() {
   const out = [];
   for (const [iid, icon] of Object.entries(S.pack.icons || {}))
@@ -1418,7 +1496,7 @@ function openNextDlg() {
   const sel = Object.fromEntries(all.map(v => [v.key, prev.size ? prev.has(v.key) : true]));
   const rows = [...new Set(all.map(v => v.key.split('#')[0]))];
   const cols = [...new Set(all.map(v => v.key.split('#')[1]))];
-  S.nextDlg = { sel, cells, rows, cols };
+  S.nextDlg = { sel, cells, rows, cols, newIcon: '', suggestions: [], pending: [] };
   focusDialog();
 }
 function colState(col) {
