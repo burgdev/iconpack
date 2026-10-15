@@ -1172,14 +1172,16 @@ class ReviewHandler(BaseHTTPRequestHandler):
                 with pack_lock(self.pack_dir):
                     pack, _ = load_pack(self.pack_dir / "pack.json")
                     removed = 0
-                    for icon in pack["icons"].values():
-                        vd = icon.get("variants", {}).get(sid)
-                        if vd is None:
-                            continue
-                        if vd.get("status") == "approved":
-                            raise ValueError(f"{icon}#{sid} is approved — unlock first")
-                        del icon["variants"][sid]
-                        removed += 1
+                    for iid, icon in pack["icons"].items():
+                        for vid in [
+                            k
+                            for k, vd in icon.get("variants", {}).items()
+                            if k == sid or vd.get("style") == sid
+                        ]:
+                            if icon["variants"][vid].get("status") == "approved":
+                                raise ValueError(f"{iid}#{vid} is approved — unlock first")
+                            del icon["variants"][vid]
+                            removed += 1
                     pack.get("styles", {}).pop(sid, None)
                     (pack.get("recraft", {}).get("style_ids", {}) or {}).pop(sid, None)
                     _, errors = revalidate(pack)

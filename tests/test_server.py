@@ -740,7 +740,11 @@ def test_style_rules_edit_and_remove(server: _Server, srvpack: Path) -> None:
     pack = json.loads((srvpack / "pack.json").read_text())
     snap = pack["styles"]["mono-line"]
     assert snap["min_gap"] == 2.5 and snap.get("extends") == "mono-line"
-    # remove the style variant from all icons
+    # remove the style variant from all icons (unlock the approved one first)
+    pj = srvpack / "pack.json"
+    pk = json.loads(pj.read_text())
+    pk["icons"]["hut"]["variants"]["mono"]["status"] = "todo"
+    pj.write_text(json.dumps(pk))
     code, data = server.req("POST", "/api/pack-style-remove", {"id": "mono-line"})
     assert code == 200, data
     pack = json.loads((srvpack / "pack.json").read_text())
