@@ -458,19 +458,26 @@ def generate(
     style_id: str | None = None,
     model: str | None = None,
     reference_urls: list[str] | None = None,
+    curated_style: str | None = None,
 ) -> list[str]:
     """Generate n SVG candidates; returns raw SVG texts (native Recraft grid).
 
     reference_urls: style references attached directly to the request
-    (data URLs ok; +$0.005/request instead of a style_id).
+    (data URLs ok; +$0.005/request instead of a style_id). V4-only.
+    curated_style: a curated style NAME for V2/V3 models (e.g. "Outline").
     """
     if not 1 <= n <= 6:
         raise RecraftError(f"n must be 1-6, got {n}")
     if reference_urls and style_id:
         raise RecraftError("pass style_id OR reference_urls, not both")
-    # style_reference_urls is V4-only — silently drop for V2/V3 models
-    if reference_urls and "v4" not in model:
+
+    if model and "v4" not in model:
+        # V2/V3: use the `style` parameter with a curated name, drop refs
         reference_urls = None
+        if curated_style:
+            pass  # will be set in payload below
+    elif reference_urls:
+        pass  # V4: refs are fine
     model = model or (DEFAULT_MODEL if (style_id or reference_urls) else FALLBACK_MODEL)
     if model not in VECTOR_MODELS:
         raise RecraftError(f"model must be a vector model, got '{model}'")
@@ -486,6 +493,8 @@ def generate(
         payload["style_match"] = "precise"
     if reference_urls:
         payload["style_reference_urls"] = reference_urls
+    elif curated_style and model and "v4" not in model:
+        payload["style"] = curated_style
     out = _request(token, "POST", "/images/generations", payload)
     svgs: list[str] = []
     for item in out.get("data", []):
