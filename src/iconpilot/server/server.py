@@ -841,6 +841,24 @@ class ReviewHandler(BaseHTTPRequestHandler):
         style_id = plan["style_id"]
 
         # Recraft rejects SVG references — render to PNG first
+        # auto-refresh stale Recraft styles ($0.005, cached until refs change)
+        if plan.get("needs_style_refresh") and plan["refs"]:
+            try:
+                new_style = rc.create_style(token, plan["refs"])
+                new_id = new_style["id"]
+                pack_style = pack["icons"][icon_id]["variants"][variant]["style"]
+                with pack_lock(self.pack_dir):
+                    pk, _ = load_pack(self.pack_dir / "pack.json")
+                    snap = pk.setdefault("styles", {}).setdefault(pack_style, {})
+                    snap["recraft_style_id"] = new_id
+                    snap["recraft_style_hash"] = rc.refs_hash(plan["refs"])
+                    pk.setdefault("recraft", {}).setdefault("style_ids", {})[pack_style] = new_id
+                    write_pack_atomic(self.pack_dir, pk)
+                plan["style_id"] = new_id
+                style_id = new_id
+                plan["needs_style_refresh"] = False
+            except rc.RecraftError:
+                pass
         ref_urls = None
         if plan["refs"] and "v4" in plan["model"] and not plan.get("curated"):
             import base64 as _b64
