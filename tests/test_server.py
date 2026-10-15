@@ -593,6 +593,12 @@ def test_decision_on_history_round_rejected(server: _Server, srvpack: Path) -> N
 
 def test_prompt_endpoint(server: _Server, srvpack: Path) -> None:
     server.req("POST", "/api/feedback", {"scope": "icon", "icon": "hut", "text": "wider roof"})
+    # give the round decisions so candidates carry verdicts
+    (srvpack / ".runs" / "r001" / "decisions.json").write_text(
+        json.dumps(
+            {"round": "r001", "icons": {"hut/mono": {"items": [{"cand": "a1", "action": "ok"}]}}}
+        )
+    )
     code, body = server.get("/api/prompt?icon=hut&variant=mono&n=3")
     assert code == 200
     prompt = json.loads(body)["prompt"]
@@ -600,6 +606,10 @@ def test_prompt_endpoint(server: _Server, srvpack: Path) -> None:
     assert "hut#mono" in prompt
     assert "wider roof" in prompt  # live feedback included
     assert "gate" in prompt.lower()
+    # current candidates with verdicts
+    assert "## Current candidates (r001)" in prompt
+    assert "**a1** (approved):" in prompt
+    assert VALID_SVG.split("?>")[1][:20] in prompt  # the candidate SVG itself
     # unknown variant
     code, body = server.get("/api/prompt?icon=hut&variant=nope")
     assert code == 404

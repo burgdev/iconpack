@@ -180,7 +180,59 @@ def build_prompt(
         f"context below exactly — the gate rejects anything off-contract.\n\n"
         f"Return ONLY the SVGs, each in its own code block, no commentary."
     )
-    return f"{head}\n\n---\n\n{render_markdown(ctx)}"
+    parts = [head, "", "---", "", render_markdown(ctx)]
+
+    # current candidates from the latest round, with their verdicts
+    runs_dir = pack_dir / ".runs"
+    runs = sorted(p.name for p in runs_dir.glob("r*")) if runs_dir.is_dir() else []
+    if runs:
+        run = runs[-1]
+        verdicts: dict[str, str] = {}
+        dec_file = runs_dir / run / "decisions.json"
+        if dec_file.is_file():
+            try:
+                dec = json.loads(dec_file.read_text())
+                for i in dec.get("icons", {}).get(f"{icon_id}/{variant_id}", {}).get("items", []):
+                    if "action" in i:
+                        verdicts[i["cand"]] = (
+                            "approved"
+                            if i["action"] == "ok"
+                            else "rejected"
+                            if i["action"] == "no"
+                            else str(i["action"])
+                        )
+                    elif "rate_cand" in i:
+                        verdicts[i["rate_cand"]] = f"rated {i['rate_n']}/10"
+            except (ValueError, OSError):
+                pass
+        cdir = runs_dir / run / variant_id / icon_id
+        if cdir.is_dir():
+            blocks = []
+            for svg in sorted(cdir.glob("*.svg"))[:6]:
+                verdict = verdicts.get(svg.stem, "unrated")
+                blocks.append(f"**{svg.stem}** ({verdict}):\n```svg\n{svg.read_text()}\n```")
+            if blocks:
+                parts += [
+                    "",
+                    "---",
+                    "",
+                    f"## Current candidates ({run}) — keep what scored, do not repeat rejects",
+                    "",
+                    *blocks,
+                ]
+
+    # pinned references: the look to match
+    refs = []
+    for iid, ic in pack.get("icons", {}).items():
+        for vid, v in ic.get("variants", {}).items():
+            if v.get("pinned") and v.get("status") == "approved":
+                f = pack_dir / "icons" / iid / f"{vid}.svg"
+                if f.is_file():
+                    refs.append(f"**{iid}#{vid}** (pinned):\n```svg\n{f.read_text()}\n```")
+    if refs:
+        parts += ["", "---", "", "## Style references (pinned) — match this look", "", *refs[:4]]
+
+    return "\n".join(parts)
 
 
 def render_markdown(ctx: dict) -> str:
