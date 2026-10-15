@@ -634,6 +634,9 @@ footer { text-align:center; color:var(--muted); font-size:.75rem; padding:20px 0
             </div>
           </div>
           <div class="row"><label class="muted" title="freeform prose for the drafting agent">guidance</label><input v-model="S.styleEdit.guidance" style="flex:1"></div>
+          <div class="row"><label class="muted" title="Curated V2 style name (cheaper: $0.044/img vs $0.05+ for V4)">V2 style name</label>
+            <input v-model="S.styleEdit.curatedStyle" placeholder="auto" style="flex:1">
+          </div>
           <div class="row"><label class="muted" title="Recraft model preferred for this style (auto uses the suggestion)">Recraft model</label>
             <select v-model="S.styleEdit.recraftModel" style="flex:1">
               <option value="">auto (suggestion)</option>

@@ -854,6 +854,7 @@ class ReviewHandler(BaseHTTPRequestHandler):
                 style_id=style_id,
                 model=plan["model"],
                 reference_urls=ref_urls,
+                curated_style=plan.get("curated"),
             )
             cells = rc.split_sheet(sheet_svgs[0], grid, target=24.0)
             svgs = cells[: plan["n"]]  # only the requested versions
@@ -865,6 +866,7 @@ class ReviewHandler(BaseHTTPRequestHandler):
                 style_id=style_id,
                 model=plan["model"],
                 reference_urls=ref_urls,
+                curated_style=plan.get("curated"),
             )
         n = plan["n"]
 
