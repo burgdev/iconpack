@@ -33,7 +33,7 @@ from iconpilot.render.contact import contact_sheet
 from iconpilot.render.render import hamming, hash_file
 from iconpilot.server.server import pack_lock
 from iconpilot.server.server import serve as serve_review
-from iconpilot.styles import resolve_styles, user_styles_path
+from iconpilot.styles import resolve_styles, snapshot_style, user_styles_path
 
 app = typer.Typer(
     name="iconpilot",
@@ -146,6 +146,12 @@ def add(
     try:
         with pack_lock(pack_dir):
             pack_data, styles = _load_pack_arg(pack)
+            for spec_v in variant or ["mono:mono-line"]:
+                try:
+                    snapshot_style(pack_data, spec_v.split(":", 1)[1])
+                except ValueError as exc:
+                    typer.secho(str(exc), fg=typer.colors.RED, err=True)
+                    raise typer.Exit(code=2) from exc
             if icon in pack_data["icons"]:
                 typer.secho(f"icon '{icon}' already exists", fg=typer.colors.RED, err=True)
                 raise typer.Exit(code=2)
@@ -418,6 +424,52 @@ def feedback(
                 else "pack"
             )
             typer.echo(f"  [{i['id']}] ({i['author']}, {where}) {i['text'][:80]}")
+
+
+@app.command()
+def waive(
+    pack: str,
+    target: str = typer.Argument(help="icon#variant or style:<style-id>."),
+    check: str = typer.Argument(help="min_gap | grid | live_area | max_nodes | palette"),
+    reason: str = typer.Option(..., "--reason", help="why this exception is fine (written down)."),
+    by: str = typer.Option("user", help="user or agent."),
+) -> None:
+    """Record a documented gate exception. The gate passes with a note."""
+    pack_dir = resolve_pack_dir(pack)
+    with pack_lock(pack_dir):
+        pack_data, _ = _load_pack_arg(pack)
+        pack_data.setdefault("waivers", []).append(
+            {"check": check, "target": target, "reason": reason[:200], "by": by}
+        )
+        write_pack_atomic(pack_dir, pack_data)
+    typer.secho(f"waived {check} for {target} — {reason[:60]}", fg=typer.colors.GREEN)
+
+
+@app.command(name="style-ref")
+def style_ref_cmd(
+    pack: str,
+    add: str = typer.Option(None, "--add", help="Copy an SVG file in as an own reference."),
+    style: str = typer.Option(..., "--style", help="Style id the reference belongs to."),
+) -> None:
+    """Own style references (override the bundled ones); no args = list."""
+    import shutil
+
+    pack_dir = resolve_pack_dir(pack)
+    if add:
+        src = Path(add)
+        if not src.is_file():
+            typer.secho(f"not a file: {src}", fg=typer.colors.RED, err=True)
+            raise typer.Exit(code=2)
+        d = pack_dir / ".style-refs" / style
+        d.mkdir(parents=True, exist_ok=True)
+        shutil.copyfile(src, d / src.name)
+        typer.secho(f"own reference added: {style}/{src.name}", fg=typer.colors.GREEN)
+        return
+    from iconpilot.styles import style_refs
+
+    for f in style_refs(pack_dir, style):
+        origin = "own" if str(f).startswith(str(pack_dir)) else "bundled"
+        typer.echo(f"  {origin}: {f.name}")
 
 
 @app.command(name="recraft-style")

@@ -33,6 +33,8 @@ from iconpilot.render.contact import contact_sheet
 from iconpilot.render.render import render_png_text
 
 EDITABLE_FIELDS = ("brief", "prompt", "main_color", "note", "description")
+
+
 _HEX_RE = __import__("re").compile(r"^#[0-9a-fA-F]{6}$")
 
 
@@ -210,6 +212,52 @@ class ReviewHandler(BaseHTTPRequestHandler):
             self.wfile.write(body)
             return
 
+        if url.path == "/api/style-refs":
+            from iconpilot.styles import style_refs
+
+            try:
+                pack, all_styles = load_pack(self.pack_dir / "pack.json")
+            except Exception:
+                pack, all_styles = {"icons": {}}, {}
+            used = {
+                vd.get("style")
+                for icon in pack.get("icons", {}).values()
+                for vd in icon.get("variants", {}).values()
+                if vd.get("style")
+            }
+            out = {}
+            for sid in sorted(set(all_styles) | used):
+                files = style_refs(self.pack_dir, sid)
+                if not files:
+                    continue
+                own = any(str(f).startswith(str(self.pack_dir)) for f in files)
+                out[sid] = {
+                    "source": "own" if own else "bundled",
+                    "icons": [{"name": f.stem} for f in files],
+                }
+            self._json(200, out)
+            return
+        if url.path == "/api/style-ref-file":
+            # serve one style reference icon (own or bundled) for rendering
+            sid = (q.get("style") or [""])[0]
+            name = (q.get("name") or [""])[0]
+            if not sid or not name or "/" in sid or "/" in name or ".." in name:
+                self._json(400, {"error": "bad style ref request"})
+                return
+            from iconpilot.styles import style_refs
+
+            for f in style_refs(self.pack_dir, sid):
+                if f.stem == name:
+                    body = f.read_bytes()
+                    self.send_response(200)
+                    self.send_header("Content-Type", "image/svg+xml")
+                    self.send_header("Cache-Control", "max-age=86400")
+                    self.send_header("Content-Length", str(len(body)))
+                    self.end_headers()
+                    self.wfile.write(body)
+                    return
+            self._json(404, {"error": "no such reference"})
+            return
         if url.path == "/api/recraft-models":
             import iconpilot.recraft as _rc
 

@@ -40,6 +40,7 @@ class Style:
     size: int | None = None  # design grid px; None = inherit the pack spec viewBox
     palette: tuple[str, ...] = ()  # allowed hex colors for colored styles; empty = any
     guidance: str | None = None  # optional freeform prose rendered into context when set
+    gate: dict | None = None  # per-check toggles, e.g. {"min_gap": false} for broken lines
     note: str | None = None
 
     def __post_init__(self) -> None:
@@ -215,6 +216,38 @@ BUILTIN_STYLES: dict[str, Style] = {
 
 def user_styles_path() -> Path:
     return Path.home() / ".config" / "iconpilot" / "styles.toml"
+
+
+def bundled_refs_path() -> Path:
+    """Reference icons shipped with the tool, per style id."""
+    return Path(__file__).parent / "style_refs"
+
+
+def style_refs(pack_dir: Path, style_id: str) -> list[Path]:
+    """Reference icons for a style: pack-local (.style-refs/) beat bundled."""
+    own = sorted((pack_dir / ".style-refs" / style_id).glob("*.svg"))
+    if own:
+        return own
+    bundled = sorted((bundled_refs_path() / style_id).glob("*.svg"))
+    return bundled
+
+
+def snapshot_style(pack: dict, style_id: str) -> None:
+    """Copy the resolved style definition into pack.styles.
+
+    Packs stay independent of registry edits: once used, the style lives in
+    the pack. 'extends' keeps the lineage traceable.
+    """
+    resolved = resolve_styles(pack.get("styles"))
+    if style_id in (pack.get("styles") or {}):
+        return  # already snapshotted or user-customized
+    st = resolved.get(style_id)
+    if st is None:
+        raise ValueError(f"unknown style '{style_id}'")
+    d = st.as_dict()
+    d.pop("id", None)
+    d["extends"] = style_id
+    pack.setdefault("styles", {})[style_id] = d
 
 
 def _style_from_dict(style_id: str, d: dict, base: Style | None) -> Style:

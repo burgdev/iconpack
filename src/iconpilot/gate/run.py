@@ -41,6 +41,13 @@ class GateReport:
         self.passed = False
         self.errors.append(msg)
 
+    def waive(self, msg: str, reason: str) -> None:
+        """Drop a failure with a documented reason (config or waiver)."""
+        if msg in self.errors:
+            self.errors.remove(msg)
+        self.checks.append(f"waived: {msg} ({reason})")
+        self.passed = not self.errors
+
     def as_dict(self) -> dict:
         return {
             "passed": self.passed,
@@ -391,7 +398,59 @@ def run_gate(svg_path: str | Path, pack: dict, style: Style) -> GateReport:
     _lint(root, pack.get("spec", {}), style, report)
     _geometry(root, pack.get("spec", {}), style, viewbox, report)
     _render(path, style, report)
+    _apply_overrides(report, pack, style, path)
     return report
+
+
+# check keys → failure-message prefixes they can disable/waive
+_CHECK_PREFIXES = {
+    "min_gap": ("near-miss",),
+    "grid": ("off the", "grid"),
+    "live_area": ("outside live area",),
+    "max_nodes": ("nodes",),
+    "palette": ("outside the style palette",),
+}
+
+
+def _apply_overrides(report: GateReport, pack: dict, style: Style, path: Path) -> None:
+    """Style gate config (toggles) and pack waivers (documented exceptions).
+
+    Toggles: style.gate = {"min_gap": false, ...} disables a check for the
+    whole style — config, not exception. Waivers: pack.waivers records a
+    reason per icon#variant (or style:<id>) and appears in the report.
+    """
+    gate_cfg = getattr(style, "gate", None) or {}
+    for key, prefixes in _CHECK_PREFIXES.items():
+        if gate_cfg.get(key) is False:
+            for err in list(report.errors):
+                if any(p in err for p in prefixes):
+                    report.waive(err, f"style config: {key} off")
+
+    # target = icon#variant derived from the path (icons/<i>/<v>.svg or
+    # .runs/<r>/<v>/<i>/<c>.svg)
+    parts = path.parts
+    target = ""
+    if "icons" in parts:
+        i = parts.index("icons")
+        if len(parts) >= i + 3:
+            target = f"{parts[i + 1]}#{parts[i + 2].removesuffix('.svg')}"
+    elif ".runs" in parts:
+        i = parts.index(".runs")
+        if len(parts) >= i + 5:
+            target = f"{parts[i + 3]}#{parts[i + 2]}"
+    if not target:
+        return
+    for w in pack.get("waivers", []):
+        w_target = w.get("target", "")
+        if w_target not in (target, f"style:{style.id}"):
+            continue
+        key = w.get("check", "")
+        prefixes = _CHECK_PREFIXES.get(key)
+        if not prefixes:
+            continue
+        for err in list(report.errors):
+            if any(p in err for p in prefixes):
+                report.waive(err, f"waiver by {w.get('by', '?')}: {w.get('reason', '')}")
 
 
 def fix_svg(svg_path: Path, precision: float = 0.5) -> tuple[str, int]:

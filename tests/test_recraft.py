@@ -552,3 +552,102 @@ def test_generate_reference_urls_in_payload(monkeypatch: pytest.MonkeyPatch) -> 
     )
     assert captured["payload"]["style_reference_urls"] == ["data:image/svg+xml;base64,PHN2Zy8+"]
     assert "style_id" not in captured["payload"]
+
+
+# --- style refs, snapshot, gate config, waivers -------------------------------
+
+
+def test_bundled_refs_exist_for_every_registry_style() -> None:
+    from iconpilot.styles import bundled_refs_path, resolve_styles
+
+    for sid in resolve_styles({}):
+        refs = list((bundled_refs_path() / sid).glob("*.svg"))
+        assert len(refs) >= 3, f"{sid} needs >= 3 bundled refs"
+
+
+def test_own_refs_beat_bundled(tmp_path: Path) -> None:
+    from iconpilot.styles import style_refs
+
+    d = tmp_path / "pk"
+    d.mkdir()
+    (d / ".style-refs" / "mono-line").mkdir(parents=True)
+    (d / ".style-refs" / "mono-line" / "mine.svg").write_text("<svg/>")
+    refs = style_refs(d, "mono-line")
+    assert [r.name for r in refs] == ["mine.svg"]
+
+
+def test_add_snapshots_style_into_pack(tmp_path: Path) -> None:
+    d = tmp_path / "pk"
+    d.mkdir()
+    runner.invoke(app, ["new", str(d)])
+    r = runner.invoke(app, ["add", str(d), "sun", "--brief", "sun", "--variant", "m:duotone"])
+    assert r.exit_code == 0, r.output
+    pack = json.loads((d / "pack.json").read_text())
+    snap = pack["styles"]["duotone"]
+    assert snap["extends"] == "duotone" and snap["color_mode"] == "bicolor"
+    # pack is now independent: even a hypothetical registry change wouldn't drift
+
+
+def test_gate_config_toggles_check(tmp_path: Path) -> None:
+    from iconpilot.gate.run import run_gate
+    from iconpilot.styles import resolve_styles
+
+    style = resolve_styles({"broken-line": {"extends": "mono-line", "gate": {"min_gap": False}}})[
+        "broken-line"
+    ]
+    pack = {
+        "icons": {},
+        "spec": {
+            "viewBox": "0 0 24 24",
+            "allowed_elements": ["path"],
+            "precision": 0.5,
+            "live_area": {"padding": 2},
+            "stroke": {"width": 2, "linecap": "round", "linejoin": "round"},
+            "fill": "none",
+        },
+    }
+    # two strokes 1.0 apart → min_gap failure on mono-line; waived on broken-line
+    svg = tmp_path / "g.svg"
+    svg.write_text(
+        '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" '
+        'stroke-width="2" stroke-linecap="round"><path d="M6 6 H18"/><path d="M6 7 H18"/></svg>'
+    )
+    base = resolve_styles({})["mono-line"]
+    r_base = run_gate(svg, pack, base)
+    r_broken = run_gate(svg, pack, style)
+    assert not r_base.passed
+    assert r_broken.passed
+    assert any("style config: min_gap off" in c for c in r_broken.checks)
+
+
+def test_waiver_suppresses_with_reason(tmp_path: Path) -> None:
+    from iconpilot.gate.run import run_gate
+    from iconpilot.styles import resolve_styles
+
+    d = tmp_path / "pk"
+    (d / "icons" / "sun" / "mono").mkdir(parents=True)
+    svg = d / "icons" / "sun" / "mono.svg"
+    svg.write_text(
+        '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" '
+        'stroke-width="2" stroke-linecap="round"><path d="M6 6 H18"/><path d="M6 7 H18"/></svg>'
+    )
+    pack = {
+        "icons": {
+            "sun": {"brief": "s", "variants": {"mono": {"style": "mono-line", "status": "todo"}}}
+        },
+        "spec": {
+            "viewBox": "0 0 24 24",
+            "allowed_elements": ["path"],
+            "precision": 0.5,
+            "live_area": {"padding": 2},
+            "stroke": {"width": 2, "linecap": "round", "linejoin": "round"},
+            "fill": "none",
+        },
+        "waivers": [
+            {"check": "min_gap", "target": "sun#mono", "reason": "gap is intentional", "by": "user"}
+        ],
+    }
+    style = resolve_styles({})["mono-line"]
+    rep = run_gate(svg, pack, style)
+    assert rep.passed
+    assert any("waiver by user" in c and "gap is intentional" in c for c in rep.checks)

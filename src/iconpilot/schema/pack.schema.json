@@ -130,6 +130,33 @@
       "items": {
         "$ref": "#/$defs/feedbackItem"
       }
+    },
+    "waivers": {
+      "type": "array",
+      "description": "Documented gate exceptions: {check, target (icon#variant or style:<id>), reason, by}.",
+      "items": {
+        "type": "object",
+        "properties": {
+          "check": {
+            "type": "string"
+          },
+          "target": {
+            "type": "string"
+          },
+          "reason": {
+            "type": "string"
+          },
+          "by": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "check",
+          "target",
+          "reason"
+        ],
+        "additionalProperties": false
+      }
     }
   },
   "$defs": {

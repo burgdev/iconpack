@@ -694,3 +694,11 @@ def test_postpone_flow(server: _Server, srvpack: Path) -> None:
     assert code == 200
     pack = json.loads((srvpack / "pack.json").read_text())
     assert "postponed" not in pack["icons"]["hut"]["variants"]["mono"]
+
+
+def test_style_refs_endpoint(server: _Server) -> None:
+    code, body = server.get("/api/style-refs")
+    assert code == 200
+    data = json.loads(body)
+    assert "mono-line" in data and data["mono-line"]["source"] == "bundled"
+    assert len(data["mono-line"]["icons"]) == 3

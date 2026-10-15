@@ -110,6 +110,17 @@ def build_context(
         ctx["palette"] = list(style.palette)
     if style.guidance:
         ctx["style_guidance"] = style.guidance
+    # style reference icons (own > bundled): the look to match, independent
+    # of the icon set itself
+    from iconpilot.styles import style_refs
+
+    refs = style_refs(pack_dir, style.id)[:3]
+    if refs and "reference_svg" not in ctx and "anchor_svg" not in ctx:
+        ctx["style_ref_svgs"] = [r.read_text() for r in refs]
+        ctx["style_ref_source"] = (
+            "own" if (pack_dir / ".style-refs" / style.id).is_dir() else "bundled"
+        )
+
     dm = pack.get("inherits", {}).get("design_md")
     if dm:
         ctx["design_md"] = dm
@@ -265,6 +276,8 @@ def render_markdown(ctx: dict) -> str:
         lines += [f"**Main color:** `{ctx['main_color']}`", ""]
     if "pack_description" in ctx:
         lines += [f"**Pack (docs):** {ctx['pack_description']}", ""]
+    for i, svg in enumerate(ctx.get("style_ref_svgs", [])[:3], 1):
+        lines += [f"**Style reference {i} (match this look):**", "```svg", svg, "```", ""]
     if "pack_note" in ctx:
         lines += [f"**Pack note (standing instructions):** {ctx['pack_note']}", ""]
     if "icon_note" in ctx:

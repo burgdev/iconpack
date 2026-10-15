@@ -437,6 +437,25 @@ footer { text-align:center; color:var(--muted); font-size:.75rem; padding:20px 0
     </section>
 
     <section>
+      <h2>Style icons — reference look, not part of the icon set</h2>
+      <div v-for="(st, sid) in S.styleRefs" :key="sid" class="group">
+        <div class="ghead">
+          <b>{{ sid }}</b>
+          <span class="chip">{{ st.source }}</span>
+          <span class="muted">references for this style — add own SVGs via <code>iconpilot style-ref . --style {{ sid }} --add file.svg</code></span>
+        </div>
+        <div class="grid">
+          <figure v-for="ic in st.icons" :key="sid + ic.name" class="card" style="border-style:dashed">
+            <img class="thumb" width="64" height="64" loading="lazy"
+                 :src="'/api/style-ref-file?style=' + encodeURIComponent(sid) + '&name=' + encodeURIComponent(ic.name)">
+            <figcaption class="muted">{{ ic.name }}</figcaption>
+          </figure>
+        </div>
+      </div>
+      <p v-if="!Object.keys(S.styleRefs).length" class="muted">no style references available</p>
+    </section>
+
+    <section>
       <h2>Icons</h2>
       <div class="group" v-for="(icon, id) in S.pack.icons" :key="id">
         <div class="ghead">
@@ -749,7 +768,7 @@ const S = reactive({
   kbFocus: 0, kbVariant: 0, kbCand: 0, kbUsed: false, compare: null, histView: null,
   recraftReady: false, debug: new URLSearchParams(location.search).has('debug'), debugDlg: null, nextDlg: null,
   appliedRound: null,
-  recraftModels: {}, theme: 'light', iconHist: {}, svgFiles: {}, rejectArm: null,
+  recraftModels: {}, styleRefs: {}, theme: 'light', iconHist: {}, svgFiles: {}, rejectArm: null,
   history: [], showHistory: false,
   set: { version: '', rules: '', strokeWidth: 2, linecap: 'round', linejoin: 'round', padding: 2, precision: 0.5, palette: null, errors: '' },
   bgs: [
@@ -1464,6 +1483,7 @@ async function load(manual) {
     style: p.pack.icons?.[c.icon]?.variants?.[c.variant]?.style,
   }));
   S.styles = styles;
+  try { S.styleRefs = await api('/api/style-refs'); } catch { S.styleRefs = {}; }
   S.ai = { text: ai.status || '', active: !!ai.active };
   setFavicon(ai.phase || 'idle');
   S.version = p.version || '';
