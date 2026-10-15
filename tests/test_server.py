@@ -180,10 +180,13 @@ def test_ai_status_endpoint(server: _Server, srvpack: Path) -> None:
     status_dir = srvpack / ".runs"
     (status_dir / ".ai-status").write_text("drafting hut/mono — 4 candidates\n")
     _code, body = server.get("/api/ai-status")
-    assert json.loads(body) == {"status": "drafting hut/mono — 4 candidates", "active": True}
+    data = json.loads(body)
+    assert data["status"] == "drafting hut/mono — 4 candidates"
+    assert data["active"] is True
+    assert data["phase"] == "review"  # candidates exist, no decisions
     (status_dir / ".ai-status").unlink()
     _code, body = server.get("/api/ai-status")
-    assert json.loads(body) == {"status": "", "active": False}
+    assert json.loads(body) == {"status": "", "active": False, "phase": "review"}
 
 
 def test_render_with_custom_colors(server: _Server, srvpack: Path) -> None:

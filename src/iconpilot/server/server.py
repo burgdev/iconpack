@@ -105,6 +105,7 @@ class ReviewHandler(BaseHTTPRequestHandler):
             body = PAGE.encode()
             self.send_response(200)
             self.send_header("Content-Type", "text/html; charset=utf-8")
+            self.send_header("Cache-Control", "no-cache, must-revalidate")
             self.send_header("Content-Length", str(len(body)))
             self.end_headers()
             self.wfile.write(body)
@@ -527,7 +528,16 @@ class ReviewHandler(BaseHTTPRequestHandler):
                         f"{runs[-1]} waiting for the agent to draft"
                         f" ({open_n} open variant(s)) — your decisions are applied"
                     )
-            self._json(200, {"status": status, "active": bool(status)})
+            phase = "idle"
+            if runs:
+                latest_p = self.pack_dir / ".runs" / runs[-1]
+                if (latest_p / "decisions.json").is_file():
+                    phase = "applied"
+                elif any(latest_p.rglob("*.svg")):
+                    phase = "review"
+                else:
+                    phase = "agent"
+            self._json(200, {"status": status, "active": bool(status), "phase": phase})
             return
 
         if url.path == "/api/sheet":

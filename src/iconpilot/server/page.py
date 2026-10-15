@@ -6,6 +6,7 @@ PAGE = """<!doctype html>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>iconpilot review</title>
+<link id="fav" rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3C/svg%3E">
 <script>
 (function () {
   var th = null;
@@ -792,6 +793,22 @@ function relTime(iso) {
   return Math.floor(s / 86400) + 'd';
 }
 function seenKey() { return 'iconpilot.seen.' + (S.pack.name || ''); }
+const FAV = {
+  // phase → [bg, glyph-path, title-suffix]
+  agent:  ['#b7791f', 'M13 2 3 14h9l-1 8 10-12h-9l1-8z', 'agent drafting'],
+  review: ['#2f855a', 'M12 2l2.9 6.3 6.9.8-5.1 4.7 1.4 6.8-6.1-3.4-6.1 3.4 1.4-6.8L2.2 9.1l6.9-.8z', 'your turn — rate'],
+  applied:['#2b6cb0', 'M20 6 9 17l-5-5', 'applied — start next pass'],
+  idle:   ['#718096', 'M12 8a4 4 0 1 0 0 8 4 4 0 0 0 0-8z', 'idle'],
+};
+function setFavicon(phase) {
+  const [bg, glyph, label] = FAV[phase] || FAV.idle;
+  const svg = "<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'>"
+    + "<rect width='24' height='24' rx='6' fill='" + bg + "'/>"
+    + "<path d='" + glyph + "' fill='none' stroke='#fff' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'/></svg>";
+  const link = document.getElementById('fav');
+  if (link) link.href = 'data:image/svg+xml,' + encodeURIComponent(svg);
+  document.title = label + ' · iconpilot review';
+}
 function applyTheme(th) {
   S.theme = th;
   document.documentElement.dataset.theme = th;
@@ -1448,6 +1465,7 @@ async function load(manual) {
   }));
   S.styles = styles;
   S.ai = { text: ai.status || '', active: !!ai.active };
+  setFavicon(ai.phase || 'idle');
   S.version = p.version || '';
   S.history = hist.rounds || [];
   restoreDraft();  // bring back in-progress ratings after a reload
