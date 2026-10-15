@@ -101,6 +101,9 @@ header .meta { color:var(--muted); font-size:.8rem; }
 @media (max-width: 640px) { .tabs .tab-label { display:none; } .tabs button { padding:10px 12px; } }
 .refcell { margin:0; width:56px; display:inline-flex; flex-direction:column; align-items:center; gap:2px; position:relative; }
 .refcell img { border-radius:8px; background:#fff; display:block; }
+.stylecard { width:110px; padding:10px 8px; border:1px solid var(--line); border-radius:10px;
+             display:inline-flex; flex-direction:column; align-items:center; gap:6px; cursor:pointer; background:var(--card); }
+.stylecard:hover { border-color:var(--accent); }
 .stylepick { width:92px; flex-direction:column; display:inline-flex; align-items:center; gap:4px; padding:8px 6px; }
 .refcell .armed-x { position:absolute; top:-6px; right:-6px; padding:0 5px; }
 .palchip { width:44px; height:32px; border-radius:8px; border:1px solid var(--line); position:relative;
@@ -503,57 +506,100 @@ footer { text-align:center; color:var(--muted); font-size:.75rem; padding:20px 0
 
 <div v-show="S.tab === 'styles'">
     <section>
-      <h2>Styles — the pack's look, its references and rules</h2>
+      <h2>Styles — the pack's look, references and rules</h2>
 
+      <!-- used styles: cards with refs, rules, model -->
       <div class="group" v-for="sid in usedStyles()" :key="sid">
         <div class="ghead">
-          <b>{{ sid }}</b>
+          <b @click="styleDetail(sid)" style="cursor:pointer">{{ sid }}</b>
           <span class="chip" title="glyphs using this style">{{ styleUsageCount(sid) }} glyphs</span>
-          <span class="chip" v-if="S.styleRefs[sid]" title="where the reference icons come from">{{ S.styleRefs[sid].source }} refs</span>
           <span class="chip rule" v-for="ru in styleRules(sid)" :key="ru" :title="ruleTitle(ru)">{{ ru }}</span>
           <span class="palrow" v-if="stylePalette(sid).length" title="style palette"><i v-for="c in stylePalette(sid)" :key="c" class="paldot" :style="{background: c}" :title="c"></i></span>
           <span class="spacer"></span>
-          <button class="subtle" @click="editStyle(sid)">edit rules</button>
-          <button class="subtle" :class="{ 'armed-x': S.removeArm === sid }" @click="removeStyle(sid)"
-                  title="remove the variant from every glyph (click twice)">remove</button>
+          <button class="iconbtn" @click="editStyle(sid)" title="edit style rules and model" aria-label="edit style"><span class="ic" v-html="IC.gear"></span></button>
+          <button class="iconbtn" :class="{ on: S.removeArm === sid }" @click="removeStyle(sid)" title="remove from every glyph" aria-label="remove style"><span class="ic" v-html="IC.lock"></span></button>
         </div>
-        <p class="muted" style="margin:0 0 4px">references — the look to match (own uploads replace bundled)</p>
+        <p class="muted" style="margin:0 0 4px">references — bundled defaults + own uploads (own shown first)</p>
         <div class="row" style="flex-wrap:wrap">
-          <figure v-for="ic in (S.styleRefs[sid]?.icons || [])" :key="sid + ic.name" class="refcell">
+          <figure v-for="ic in (S.styleRefs[sid]?.own || []).concat(S.styleRefs[sid]?.bundled || [])"
+                  :key="sid + (ic.own ? 'o' : 'b') + ic.name" class="refcell"
+                  :style="isOwnRef(sid, ic.name) ? '' : 'opacity:.7'">
             <img width="48" height="48" loading="lazy"
                  :src="'/api/style-ref-file?style=' + encodeURIComponent(sid) + '&name=' + encodeURIComponent(ic.name)"
                  :alt="ic.name">
             <figcaption class="muted">{{ ic.name }}</figcaption>
-            <button v-if="isOwnRef(sid, ic.name)" class="subtle armed-x" @click="removeRef(sid, ic.name)" title="remove own reference">✕</button>
+            <button v-if="isOwnRef(sid, ic.name)" class="subtle armed-x" @click="removeRef(sid, ic.name)"
+                    title="remove own reference" aria-label="remove reference">✕</button>
           </figure>
-          <figure v-for="p in (S.styleDetail?.[sid]?.pinned || [])" :key="'p' + p.icon" class="refcell">
+          <figure v-for="pn in (S.styleDetail?.[sid]?.pinned || [])" :key="'p' + pn.icon" class="refcell">
             <img width="48" height="48" loading="lazy"
-                 :src="render('icons/' + p.icon + '/' + p.variant + '.svg', 48, '#ffffff')">
-            <figcaption class="muted">{{ p.icon }}</figcaption>
-            <button class="subtle" @click="togglePin(p.icon, p.variant)" title="unpin from style references"
-                    aria-label="unpin"><span class="ic filled" v-html="IC.pin"></span></button>
+                 :src="render('icons/' + pn.icon + '/' + pn.variant + '.svg', 48, '#ffffff')">
+            <figcaption class="muted">{{ pn.icon }}</figcaption>
           </figure>
-          <button class="subtle" @click="pickRefFile(sid)" title="upload an own SVG reference">＋ upload</button>
+          <button class="subtle stylepick" @click="pickRefFile(sid)" title="upload an own SVG reference"><span class="ic" v-html="IC.plus"></span> upload</button>
         </div>
       </div>
 
+      <!-- add styles: card per available style -->
       <div class="group">
-        <div class="ghead"><b>add a style to every glyph</b></div>
+        <div class="ghead"><b>add a style</b></div>
         <div class="row" style="flex-wrap:wrap; gap:10px">
-          <button v-for="(st, sid) in S.styles" :key="sid" v-show="!usedStyles().includes(sid)"
-                  class="subtle stylepick" @click="addStyleToPack(sid)">
-            <img v-if="S.styleRefs[sid]" width="40" height="40" style="border-radius:6px"
-                 :src="'/api/style-ref-file?style=' + encodeURIComponent(sid) + '&name=' + encodeURIComponent(S.styleRefs[sid].icons[0]?.name || '')">
-            <span>{{ sid }}</span>
-          </button>
+          <div v-for="(st, sid) in S.styles" :key="sid" v-show="!usedStyles().includes(sid)"
+               class="stylecard" @click="styleDetail(sid)">
+            <div class="row" style="gap:4px">
+              <img v-for="ic in ((S.styleRefs[sid]?.bundled || S.styleRefs[sid]?.own || []).slice(0, 3))"
+                   :key="ic.name" width="36" height="36" loading="lazy" style="border-radius:6px; background:#fff"
+                   :src="'/api/style-ref-file?style=' + encodeURIComponent(sid) + '&name=' + encodeURIComponent(ic.name)">
+            </div>
+            <div class="muted" style="font-size:.8rem">{{ sid }}</div>
+            <div class="muted" style="font-size:.7rem">{{ styleSummary(sid) }}</div>
+          </div>
+          <div class="stylecard" @click="editCustomStyle()" style="border-style:dashed">
+            <span class="ic-lg" v-html="IC.plus"></span>
+            <div class="muted" style="font-size:.8rem">custom style</div>
+            <div class="muted" style="font-size:.7rem">define your own</div>
+          </div>
         </div>
       </div>
     </section>
 
-    <!-- style rule editor -->
+    <!-- style detail (read-only) dialog -->
+    <div v-if="S.styleView && !S.styleEdit" class="overlay" @click.self="S.styleView = null">
+      <div class="dialog" style="max-width:640px">
+        <h3><span>{{ S.styleView.id }}</span>
+            <span class="row" style="gap:4px">
+              <button class="iconbtn" @click="editStyle(S.styleView.id)" title="edit rules and model" aria-label="edit"><span class="ic" v-html="IC.gear"></span></button>
+              <button class="subtle" @click="S.styleView = null" aria-label="Close">✕</button>
+            </span></h3>
+        <div class="row" style="flex-wrap:wrap; gap:6px; margin-bottom:10px">
+          <img v-for="ic in (S.styleRefs[S.styleView.id]?.own || []).concat(S.styleRefs[S.styleView.id]?.bundled || [])"
+               :key="ic.name" width="48" height="48" style="border-radius:8px; background:#fff"
+               :src="'/api/style-ref-file?style=' + encodeURIComponent(S.styleView.id) + '&name=' + encodeURIComponent(ic.name)">
+        </div>
+        <div class="kv">
+          <b>construction</b><span>{{ S.styleView.def.construction }}</span>
+          <b>color mode</b><span>{{ S.styleView.def.color_mode }}</span>
+          <b v-if="S.styleView.def.stroke">stroke</b><span v-if="S.styleView.def.stroke">{{ S.styleView.def.stroke.width }}px {{ S.styleView.def.stroke.linecap }}</span>
+          <b v-if="S.styleView.def.size">grid</b><span v-if="S.styleView.def.size">{{ S.styleView.def.size }}px</span>
+          <b>min gap</b><span>{{ S.styleView.def.min_gap }}</span>
+          <b>max nodes</b><span>{{ S.styleView.def.max_nodes }}</span>
+          <b v-if="S.styleView.def.palette">palette</b>
+          <span v-if="S.styleView.def.palette"><i v-for="c in S.styleView.def.palette" :key="c" class="paldot" :style="{background:c}" :title="c"></i></span>
+          <b v-if="S.styleView.def.style_words">words</b><span v-if="S.styleView.def.style_words">{{ S.styleView.def.style_words.join(', ') }}</span>
+          <b v-if="S.styleView.def.avoid">avoid</b><span v-if="S.styleView.def.avoid">{{ S.styleView.def.avoid.join(', ') }}</span>
+          <b v-if="S.styleView.def.gate">gate off</b><span v-if="S.styleView.def.gate">{{ Object.entries(S.styleView.def.gate).filter(([,v2]) => !v2).map(([k]) => k).join(', ') }}</span>
+          <b v-if="S.styleView.model">Recraft model</b><span v-if="S.styleView.model">{{ S.styleView.model }}</span>
+        </div>
+        <div class="row" v-if="!usedStyles().includes(S.styleView.id)" style="margin-top:10px">
+          <button class="primary" @click="addStyleToPack(S.styleView.id); S.styleView = null;">add to every glyph</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- style EDITOR dialog -->
     <div v-if="S.styleEdit" class="overlay" @click.self="S.styleEdit = null">
       <div class="dialog" style="max-width:620px">
-        <h3><span>style rules · {{ S.styleEdit.id }}</span>
+        <h3><span>edit · {{ S.styleEdit.id }}</span>
             <button class="subtle" @click="S.styleEdit = null" aria-label="Close">✕</button></h3>
         <div class="row" style="flex-direction:column; align-items:stretch; gap:6px">
           <div class="row"><label class="muted">label</label><input v-model="S.styleEdit.label" style="flex:1"></div>
@@ -572,7 +618,7 @@ footer { text-align:center; color:var(--muted); font-size:.75rem; padding:20px 0
           </div>
           <div class="row"><label class="muted" title="vocabulary injected into every drafting brief">style words</label><input v-model="S.styleEdit.words" placeholder="comma separated" style="flex:1"></div>
           <div class="row"><label class="muted" title="negative vocabulary — never appears in drafts">avoid</label><input v-model="S.styleEdit.avoid" placeholder="comma separated" style="flex:1"></div>
-          <div class="row" style="align-items:flex-start"><label class="muted">gate checks</label>
+          <div class="row" style="align-items:flex-start"><label class="muted" title="deterministic gate checks — uncheck to disable per style">gate checks</label>
             <div style="flex:1; display:flex; flex-direction:column; gap:4px">
               <label v-for="g in GATE_HELP" :key="g.k" style="display:flex; gap:8px; align-items:baseline">
                 <input type="checkbox" :checked="!(S.styleEdit.gateOff || []).includes(g.k)" @change="toggleGate(g.k)" style="min-height:0">
@@ -581,9 +627,16 @@ footer { text-align:center; color:var(--muted); font-size:.75rem; padding:20px 0
             </div>
           </div>
           <div class="row"><label class="muted" title="freeform prose for the drafting agent">guidance</label><input v-model="S.styleEdit.guidance" style="flex:1"></div>
+          <div class="row"><label class="muted" title="Recraft model preferred for this style (auto uses the suggestion)">Recraft model</label>
+            <select v-model="S.styleEdit.recraftModel" style="flex:1">
+              <option value="">auto (suggestion)</option>
+              <option v-for="m in vectorModels()" :key="m" :value="m">{{ m }}</option>
+            </select>
+            <span v-if="S.recraftModels.suggestions?.[S.styleEdit.id]" class="muted">→ {{ S.recraftModels.suggestions[S.styleEdit.id] }}</span>
+          </div>
         </div>
         <div class="row" style="margin-top:10px">
-          <button class="primary" @click="saveStyleRules">save rules</button>
+          <button class="primary" @click="saveStyleRules">save</button>
           <button class="subtle" @click="S.styleEdit = null" aria-label="Close">cancel</button>
         </div>
       </div>
@@ -602,20 +655,7 @@ footer { text-align:center; color:var(--muted); font-size:.75rem; padding:20px 0
         <textarea v-model="S.set.note" placeholder="FEEDBACK to the agent, every draft — e.g. 'no chimneys anywhere'. Clear when resolved."></textarea></div>
       <div class="controls" style="align-items:flex-start"><label>rules</label>
         <textarea v-model="S.set.rules" placeholder="one rule per line — injected into every drafting context"></textarea></div>
-      <div class="controls" style="align-items:flex-start"><label>add variant</label>
-        <div class="row" style="flex-direction:column; align-items:stretch; gap:6px">
-          <div class="row">
-            <select v-model="S.set.addStyle"><option v-for="(st, sid) in S.styles" :key="sid" :value="sid">{{ sid }}</option></select>
-            <button class="subtle" @click="addVariantBulk">add to every glyph</button>
-          </div>
-          <div class="row" v-if="S.styleRefs[S.set.addStyle]">
-            <img v-for="ic in (S.styleRefs[S.set.addStyle].icons || []).slice(0, 5)"
-                 :key="ic.name" width="40" height="40" loading="lazy" style="border-radius:6px"
-                 :src="'/api/style-ref-file?style=' + encodeURIComponent(S.set.addStyle) + '&name=' + encodeURIComponent(ic.name)"
-                 :alt="ic.name">
-            <span class="muted">{{ S.set.addStyle }} look ({{ S.styleRefs[S.set.addStyle].source }})</span>
-          </div>
-        </div></div>
+      <!-- removed: style management moved to styles tab -->
       <div class="controls" style="align-items:flex-start"><label>custom style</label>
         <div class="row" style="flex-direction:column; align-items:stretch; gap:4px">
           <div class="row"><input v-model="S.set.csId" placeholder="style id (e.g. outline-color)" style="flex:1">
@@ -925,7 +965,7 @@ const S = reactive({
   kbFocus: 0, kbVariant: 0, kbCand: 0, kbUsed: false, compare: null, histView: null,
   recraftReady: false, debug: new URLSearchParams(location.search).has('debug'), debugDlg: null, nextDlg: null,
   appliedRound: null,
-  recraftModels: {}, styleRefs: {}, styleDetail: {}, styleEdit: null, removeArm: null, theme: 'light', iconHist: {}, svgFiles: {}, rejectArm: null,
+  recraftModels: {}, styleRefs: {}, styleDetail: {}, styleEdit: null, styleView: null, removeArm: null, theme: 'light', iconHist: {}, svgFiles: {}, rejectArm: null,
   history: [], showHistory: false,
   set: { version: '', rules: '', strokeWidth: 2, linecap: 'round', linejoin: 'round', padding: 2, precision: 0.5, palette: null, errors: '' },
   bgs: [
@@ -1190,6 +1230,27 @@ function ruleTitle(ru) {
   if (ru.endsWith(' off')) return 'gate check disabled for this style';
   return ru;
 }
+function vectorModels() {
+  const prices = S.recraftModels?.prices || {};
+  return Object.keys(prices).filter(m => m.includes('vector'));
+}
+async function styleDetail(sid) {
+  try {
+    const d = await api('/api/style-detail?style=' + encodeURIComponent(sid));
+    S.styleDetail = { ...S.styleDetail, [sid]: d };
+    const snap = d.snapshot || {};
+    S.styleView = { id: sid, def: d.def, model: snap.recraft_model || (S.recraftModels.suggestions || {})[sid] || 'auto' };
+    focusDialog();
+  } catch (e) { flash('style detail: ' + e.message, false); }
+}
+function editCustomStyle() {
+  S.styleEdit = {
+    id: '', label: '', size: '', strokeWidth: '', minGap: 1.5, maxNodes: 40,
+    paletteList: [], words: '', avoid: '', guidance: '', gateOff: [],
+    recraftModel: '', extends: 'mono-line',
+  };
+  focusDialog();
+}
 function styleUsageCount(sid) {
   let n = 0;
   for (const icon of Object.values(S.pack.icons || {}))
@@ -1217,6 +1278,7 @@ function styleSummary(sid) {
 }
 function isOwnRef(sid, name) { return (S.styleDetail?.[sid]?.refs || []).some(r => r.name === name && r.own); }
 async function editStyle(sid) {
+  S.styleView = null;
   try {
     const d = await api('/api/style-detail?style=' + encodeURIComponent(sid));
     S.styleDetail = { ...S.styleDetail, [sid]: d };
@@ -1245,6 +1307,9 @@ function toggleGate(gk) {
 }
 async function saveStyleRules() {
   const e = S.styleEdit;
+  if (!e.id?.trim()) {
+    e.id = e.label?.trim().toLowerCase().replace(/[^a-z0-9-]/g, '-') || 'custom-style';
+  }
   const sdef = {};
   if (e.extends) sdef.extends = e.extends;
   if (e.label) sdef.label = e.label;

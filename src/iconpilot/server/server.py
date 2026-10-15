@@ -260,15 +260,20 @@ class ReviewHandler(BaseHTTPRequestHandler):
                 for vd in icon.get("variants", {}).values()
                 if vd.get("style")
             }
+            from iconpilot.styles import bundled_refs_path
+
             out = {}
             for sid in sorted(set(all_styles) | used):
-                files = style_refs(self.pack_dir, sid)
-                if not files:
+                bundled = sorted((bundled_refs_path() / sid).glob("*.svg"))
+                own_dir = self.pack_dir / ".style-refs" / sid
+                own = sorted(own_dir.glob("*.svg")) if own_dir.is_dir() else []
+                if not bundled and not own:
                     continue
-                own = any(str(f).startswith(str(self.pack_dir)) for f in files)
                 out[sid] = {
                     "source": "own" if own else "bundled",
-                    "icons": [{"name": f.stem} for f in files],
+                    "bundled": [{"name": f.stem} for f in bundled],
+                    "own": [{"name": f.stem} for f in own],
+                    "icons": [{"name": f.stem} for f in (own or bundled)],
                 }
             self._json(200, out)
             return
