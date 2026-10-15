@@ -589,6 +589,15 @@ def recraft_style(
     recraft["style_ids"] = {**recraft.get("style_ids", {}), **style_ids}
     recraft["model"] = rc.DEFAULT_MODEL
     recraft.setdefault("name", f"{pack_data['name']} style")
+
+    # store style_id + refs hash per style IN THE STYLE SNAPSHOT
+    # so we know when to recreate (hash mismatch) vs reuse (hash match)
+    for sid, rid in style_ids.items():
+        snap = pack_data.setdefault("styles", {}).setdefault(sid, {})
+        if "extends" not in snap:
+            snap["extends"] = sid
+        snap["recraft_style_id"] = rid
+        snap["recraft_style_hash"] = rc.refs_hash(refs_by_style.get(sid, []))
     with pack_lock(pack_dir):
         write_pack_atomic(pack_dir, pack_data)
     typer.secho(

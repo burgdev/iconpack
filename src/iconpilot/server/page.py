@@ -596,6 +596,7 @@ footer { text-align:center; color:var(--muted); font-size:.75rem; padding:20px 0
           <b v-if="S.styleView.def.avoid">avoid</b><span v-if="S.styleView.def.avoid">{{ S.styleView.def.avoid.join(', ') }}</span>
           <b v-if="S.styleView.def.gate">gate off</b><span v-if="S.styleView.def.gate">{{ Object.entries(S.styleView.def.gate).filter(([,v2]) => !v2).map(([k]) => k).join(', ') }}</span>
           <b v-if="S.styleView.model">Recraft model</b><span v-if="S.styleView.model">{{ S.styleView.model }}</span>
+          <b v-if="S.styleView.recraftStyleId">Recraft style</b><span v-if="S.styleView.recraftStyleId" class="muted" style="font-size:.75rem">{{ S.styleView.recraftStyleId }}</span>
         </div>
         <div class="row" v-if="!usedStyles().includes(S.styleView.id)" style="margin-top:10px">
           <button class="primary" @click="addStyleToPack(S.styleView.id); S.styleView = null;">add to every glyph</button>
@@ -1274,7 +1275,7 @@ async function styleDetail(sid) {
     const d = await api('/api/style-detail?style=' + encodeURIComponent(sid));
     S.styleDetail = { ...S.styleDetail, [sid]: d };
     const snap = d.snapshot || {};
-    S.styleView = { id: sid, def: d.def, model: snap.recraft_model || (S.recraftModels.suggestions || {})[sid] || 'auto' };
+    S.styleView = { id: sid, def: d.def, model: snap.recraft_model || (S.recraftModels.suggestions || {})[sid] || 'auto', recraftStyleId: snap.recraft_style_id || (S.pack.recraft?.style_ids || {})[sid] || '' };
     focusDialog();
   } catch (e) { flash('style detail: ' + e.message, false); }
 }

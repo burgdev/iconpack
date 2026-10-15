@@ -761,6 +761,12 @@ class ReviewHandler(BaseHTTPRequestHandler):
 
         style_snap = pack.get("styles", {}).get(v.get("style"), {})
         curated = style_snap.get("recraft_curated") or rc.CURATED_STYLE_MAP.get(v["style"])
+
+        # stale style check: if refs changed since style creation, recreate
+        snap_style_id = style_snap.get("recraft_style_id")
+        snap_hash = style_snap.get("recraft_style_hash")
+        if snap_style_id and snap_hash and refs and rc.refs_hash(refs) != snap_hash:
+            style_id = None  # stale — fall back to refs until recreated
         per_style_model = style_snap.get("recraft_model")
         model = (
             per_style_model

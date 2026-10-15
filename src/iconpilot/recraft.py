@@ -45,6 +45,16 @@ MODEL_PRICES: dict[str, float] = {
 STYLE_CREATE_PRICE = 0.005
 
 
+def refs_hash(refs: list[str]) -> str:
+    """Stable hash over ref contents — changes when any ref changes."""
+    import hashlib
+
+    h = hashlib.sha256()
+    for svg in sorted(refs):  # sorted = order-independent
+        h.update(svg.encode())
+    return h.hexdigest()[:16]
+
+
 def max_versions(grid: int) -> int:
     """How many icon versions fit in a grid: 1×1 = 6 (n-mode), NxN = grid²."""
     return 6 if grid == 1 else grid * grid
