@@ -336,9 +336,17 @@ def snapshot_style(pack: dict, style_id: str) -> None:
 
 
 def _style_from_dict(style_id: str, d: dict, base: Style | None) -> Style:
-    """Build a Style from a config/pack dict, merged over a base when given."""
+    """Build a Style from a config/pack dict, merged over a base when given.
+
+    Unknown keys (snapshot extras like recraft_style_id/recraft_style_hash,
+    extends lineage) are ignored — they live in the pack snapshot, not the
+    Style dataclass.
+    """
+    import dataclasses as _dc
+
+    fields = {f.name for f in _dc.fields(Style)}
     src = base.as_dict() if base else {"id": style_id}
-    src.update({k: v for k, v in d.items() if k != "id"})
+    src.update({k: v for k, v in d.items() if k != "id" and k in fields})
     src["id"] = style_id
     for tuple_key in ("style_words", "avoid", "render_sizes", "palette"):
         if tuple_key in src and isinstance(src[tuple_key], list):

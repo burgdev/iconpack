@@ -114,10 +114,8 @@
           "description": "Candidates per Recraft request (1-6)."
         }
       },
-      "required": [
-        "style_id",
-        "model"
-      ],
+      "additionalProperties": false,
+      "description": "Recraft seeder config: style_ids map is written automatically when styles are created; model/n are user defaults.",
       "additionalProperties": false
     },
     "description": {
