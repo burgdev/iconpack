@@ -634,14 +634,17 @@ footer { text-align:center; color:var(--muted); font-size:.75rem; padding:20px 0
               </label>
             </div>
           </div>
-          <div class="row"><label class="muted" title="freeform prose for the drafting agent">guidance</label><input v-model="S.styleEdit.guidance" style="flex:1"></div>
+          <div class="row"><label class="muted" title="Freeform instructions the drafting agent reads before drawing — e.g. 'if a detail needs a second stroke to read, drop it'">guidance</label><input v-model="S.styleEdit.guidance" style="flex:1"></div>
           <div class="row"><label class="muted" title="Curated V2 style name (cheaper: $0.044/img vs $0.05+ for V4)">V2 style name</label>
-            <input v-model="S.styleEdit.curatedStyle" placeholder="auto" style="flex:1">
+            <select v-model="S.styleEdit.curatedStyle" style="flex:1">
+              <option value="">auto (from style family)</option>
+              <option v-for="name in curatedNames()" :key="name" :value="name">{{ name }}</option>
+            </select>
           </div>
           <div class="row"><label class="muted" title="Recraft model preferred for this style (auto uses the suggestion)">Recraft model</label>
             <select v-model="S.styleEdit.recraftModel" style="flex:1">
-              <option value="">auto (suggestion)</option>
-              <option v-for="m in vectorModels()" :key="m" :value="m">{{ m }}</option>
+              <option value="">auto</option>
+              <option v-for="m in vectorModels()" :key="m" :value="m">{{ m }} (${{ (S.recraftModels.prices || {})[m] || '?' }}/img)</option>
             </select>
             <span v-if="S.recraftModels.suggestions?.[S.styleEdit.id]" class="muted">→ {{ S.recraftModels.suggestions[S.styleEdit.id] }}</span>
           </div>
@@ -1291,6 +1294,9 @@ function ruleTitle(ru) {
   if (ru.includes('nodes')) return 'path complexity budget';
   if (ru.endsWith(' off')) return 'gate check disabled for this style';
   return ru;
+}
+function curatedNames() {
+  return [...new Set(Object.values(S.recraftModels?.suggestions || {}))].sort();
 }
 function vectorModels() {
   const prices = S.recraftModels?.prices || {};
@@ -2141,7 +2147,7 @@ const App = {
       showDebug, debugCopy, openNextDlg, addVariantBulk, addCustomStyle, saveRecraftDefaults,
       GATE_HELP, styleRules, stylePalette, ruleTitle, styleUsageCount, isPostponed, togglePostpone, applyAndNext, colState, toggleCol, toggleAll, usedStyles, setTab, iconSuggest, pickSuggestion, addNewIcon, startRoundWithNew,
       styleSummary, isOwnRef, editStyle, toggleGate, saveStyleRules, removeStyle, addStyleToPack, pickRefFile, removeRef,
-      vectorModels, styleDetail, editCustomStyle, recraftGenerate, commitResults,
+      vectorModels, curatedNames, styleDetail, editCustomStyle, recraftGenerate, commitResults,
 
     };
   },

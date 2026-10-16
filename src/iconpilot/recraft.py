@@ -138,8 +138,8 @@ def draft_prompt(icon: dict, style, pack: dict, model: str | None = None) -> str
     limit = prompt_limit(model or "")
     # one field: the brief describes the icon for humans AND the agent
     parts = [
-        icon.get("brief") or icon.get("description") or "",
-        f"{style.label} style",
+        f"icon: {icon.get('brief') or icon.get('description') or ''}",
+        f"{style.label} icon style, simple scalable vector icon",
         ", ".join(style.style_words[:4]),
     ]
     if icon.get("main_color"):
