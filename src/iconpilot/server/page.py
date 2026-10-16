@@ -2517,6 +2517,7 @@ const App = {
     };
   },
 };
+window.__ip = S;  // console/debug access to the page state
 createApp(App).mount('#app');
 </script>
 </body></html>
