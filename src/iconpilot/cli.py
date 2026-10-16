@@ -754,7 +754,8 @@ def draft(
     else:
         run = runs[-1]
     viewbox = pack_data["spec"]["viewBox"]
-    normalized = [rc.normalize(raw, viewbox) for raw in raw_svgs]
+    _mono = style.color_mode == "mono"  # mono seeds → currentColor (theme-colorable)
+    normalized = [rc.normalize(raw, viewbox, mono=_mono) for raw in raw_svgs]
     wrote: list[Path] = []
     with pack_lock(pack_dir):  # count + write + cost under the lock (race-safe)
         cand_dir = runs_dir / run / variant / icon_id

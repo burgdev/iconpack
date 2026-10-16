@@ -1003,9 +1003,10 @@ class ReviewHandler(BaseHTTPRequestHandler):
 
         # normalize + gate each, return as data URLs for preview
         viewbox = pack["spec"]["viewBox"]
+        mono = styles[plan["style"]].color_mode == "mono"
         results = []
         for i, raw in enumerate(cells):
-            svg = rc.normalize(rc.strip_metadata(raw), viewbox)
+            svg = rc.normalize(rc.strip_metadata(raw), viewbox, mono=mono)
             b64 = _b64.b64encode(svg.encode()).decode()
             results.append(
                 {
@@ -1222,7 +1223,15 @@ class ReviewHandler(BaseHTTPRequestHandler):
         import json as _json
 
         viewbox = pack["spec"]["viewBox"]
-        normalized = [rc.normalize(raw, viewbox) for raw in svgs]
+        with pack_lock(self.pack_dir):
+            _pk, _styles = load_pack(self.pack_dir / "pack.json")
+        try:
+            _mono = (
+                _styles[_pk["icons"][icon_id]["variants"][variant]["style"]].color_mode == "mono"
+            )
+        except (KeyError, TypeError):
+            _mono = False
+        normalized = [rc.normalize(raw, viewbox, mono=_mono) for raw in svgs]
         with pack_lock(self.pack_dir):
             cand_dir = runs_dir / run / variant / icon_id
             cand_dir.mkdir(parents=True, exist_ok=True)
@@ -1464,7 +1473,9 @@ class ReviewHandler(BaseHTTPRequestHandler):
                     for ti, cells in enumerate(split_sheets):
                         if k >= len(cells):
                             continue
-                        svg = rc.normalize(rc.strip_metadata(cells[k]), viewbox)
+                        svg = rc.normalize(
+                            rc.strip_metadata(cells[k]), viewbox, mono=style.color_mode == "mono"
+                        )
                         b64 = _b64.b64encode(svg.encode()).decode()
                         results.append(
                             {

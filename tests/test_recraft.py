@@ -760,6 +760,50 @@ def test_pack_grid_fits_icons() -> None:
     assert rc.pack_grid(9) == 3
 
 
+def test_to_current_color_swaps_literal_paints() -> None:
+    svg = (
+        '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24">'
+        '<path fill="#4A251E" d="M0 0h1v1z"/>'
+        '<path fill="white" d="M1 1h1v1z"/>'
+        '<path fill="none" stroke="#B9561A" d="M2 2h1v1z"/>'
+        '<circle cx="3" cy="3" r="1" fill="rgb(40,39,39)"/>'
+        "</svg>"
+    )
+    out = rc.to_current_color(svg)
+    assert 'fill="currentColor"' in out
+    assert 'stroke="currentColor"' in out
+    assert 'fill="none"' in out  # none survives
+    assert "#4A251E" not in out and "#B9561A" not in out
+    assert "rgb(40,39,39)" not in out
+
+
+def test_normalize_mono_replaces_colors() -> None:
+    raw = (
+        '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024">'
+        '<path fill="#282727" d="M0 0h512v512z"/>'
+        "</svg>"
+    )
+    mono = rc.normalize(raw, "0 0 24 24", mono=True)
+    assert "currentColor" in mono and "#282727" not in mono
+    color = rc.normalize(raw, "0 0 24 24")
+    assert "#282727" in color and "currentColor" not in color
+
+
+def test_mono_styles_enforced_black_palette() -> None:
+    from iconpilot.styles import resolve_styles
+
+    rs = resolve_styles({})
+    mono_ids = [sid for sid, st in rs.items() if st.color_mode == "mono"]
+    assert mono_ids, "registry should have mono styles"
+    for sid in mono_ids:
+        assert rs[sid].palette == ("#000000",), f"{sid} should enforce black"
+    # color styles carry example palettes, not black
+    assert set(rs["flat-color"].palette) - {"#000000"}
+    # an explicit pack palette on a mono style still wins (styled different later)
+    custom = resolve_styles({"mono-line": {"extends": "mono-line", "palette": ["#2B6CB0"]}})
+    assert custom["mono-line"].palette == ("#2B6CB0",)
+
+
 def test_create_style_bakes_prompt_and_palette() -> None:
     import dataclasses
 

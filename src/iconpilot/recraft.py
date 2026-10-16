@@ -549,16 +549,30 @@ def strip_metadata(svg: str) -> str:
     return svg.strip()
 
 
-def normalize(svg: str, target_viewbox: str) -> str:
+def to_current_color(svg: str) -> str:
+    """Replace literal paint colors with currentColor; keep fill/stroke none.
+
+    Recraft always bakes hex colors into its SVGs. For mono styles the
+    final pack icon is theme-colorable currentColor — so seeds swap paints
+    right after generation ("simple replace": attribute-level).
+    """
+    svg = re.sub(r'fill="(?!none\b)[^"]*"', 'fill="currentColor"', svg)
+    return re.sub(r'stroke="(?!none\b)[^"]*"', 'stroke="currentColor"', svg)
+
+
+def normalize(svg: str, target_viewbox: str, mono: bool = False) -> str:
     """Rescale a Recraft SVG (native ~1024 grid) onto the pack's grid.
 
     Strips C2PA metadata first (Recraft embeds provenance watermarks that
     break renderers), then wraps content in ``<g transform="scale(k)">``
-    and rewrites the viewBox. Packed packs that forbid ``<g>`` in
-    allowed_elements will fail the gate — by design: seeds are redrawn
-    by the agent before certification.
+    and rewrites the viewBox. With ``mono=True`` literal fills/strokes
+    become currentColor (mono seeds → theme-colorable, gate lint clean).
+    Packed packs that forbid ``<g>`` in allowed_elements will fail the
+    gate — by design: seeds are redrawn by the agent before certification.
     """
     svg = strip_metadata(svg)
+    if mono:
+        svg = to_current_color(svg)
     tm = re.match(r"0 0 ([\d.]+) ([\d.]+)", target_viewbox.strip())
     if not tm:
         raise RecraftError(f"unsupported target viewBox: {target_viewbox!r}")

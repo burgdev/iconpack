@@ -12,7 +12,7 @@ prompts. LLMs may reference or extend styles; they never author thresholds.
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from pathlib import Path
 from tomllib import load as tomllib_load
 
@@ -153,6 +153,7 @@ BUILTIN_STYLES: dict[str, Style] = {
         _s(
             "duotone",
             label="Duotone",
+            palette=("#000000", "#8C8C8C"),
             construction="solid",
             color_mode="bicolor",
             detail="medium",
@@ -169,6 +170,7 @@ BUILTIN_STYLES: dict[str, Style] = {
         _s(
             "lineal-color",
             label="Lineal color",
+            palette=("#C05621", "#2B6CB0", "#4A5568", "#E2E8F0"),
             construction="outline+fill",
             color_mode="color",
             detail="high",
@@ -188,6 +190,7 @@ BUILTIN_STYLES: dict[str, Style] = {
         _s(
             "flat-color",
             label="Flat color",
+            palette=("#C05621", "#2B6CB0", "#2F855A", "#4A5568"),
             construction="solid",
             color_mode="color",
             detail="high",
@@ -214,6 +217,7 @@ BUILTIN_STYLES: dict[str, Style] = {
         _s(
             "colored-outline",
             label="Colored outline",
+            palette=("#2B6CB0", "#C05621", "#2F855A"),
             construction="outline+fill",
             color_mode="color",
             detail="medium",
@@ -227,6 +231,7 @@ BUILTIN_STYLES: dict[str, Style] = {
         _s(
             "isometric",
             label="Isometric",
+            palette=("#E8A87C", "#C05621", "#7B341E"),
             construction="solid",
             color_mode="color",
             detail="medium",
@@ -240,6 +245,7 @@ BUILTIN_STYLES: dict[str, Style] = {
         _s(
             "offset-fill",
             label="Offset fill",
+            palette=("#C05621", "#4A5568", "#E2E8F0"),
             construction="solid",
             color_mode="color",
             detail="medium",
@@ -279,6 +285,7 @@ BUILTIN_STYLES: dict[str, Style] = {
         _s(
             "gradient-color",
             label="Gradient color",
+            palette=("#2B6CB0", "#63B3ED"),
             construction="solid",
             color_mode="gradient",
             detail="high",
@@ -362,4 +369,10 @@ def resolve_styles(pack_local: dict | None = None) -> dict[str, Style]:
             raise ValueError(f"style '{style_id}': unknown extends '{extends}'")
         registry[style_id] = _style_from_dict(style_id, d, base)
 
+    # enforced default: mono styles always carry a black palette — Recraft
+    # styles bake it in at seed time; final pack icons use currentColor
+    # (theme-colorable) regardless. An explicit palette still wins.
+    for style_id, style in list(registry.items()):
+        if style.color_mode == "mono" and not style.palette:
+            registry[style_id] = replace(style, palette=("#000000",))
     return registry
