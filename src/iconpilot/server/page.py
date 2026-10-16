@@ -2277,7 +2277,7 @@ async function apply() {
     ok = true;
   } catch (e) {
     const detail = e.d?.errors ? e.d.errors.join(' · ') : e.message;
-    flash('✗ ' + detail.slice(0, 90), false);
+    flash('✗ ' + detail.slice(0, 220), false);
     S.msg = detail; S.msgClass = 'err';
   }
   S.applying = false;

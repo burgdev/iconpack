@@ -126,7 +126,14 @@ def parse_decision_text(text: str) -> dict[str, dict]:
     return result
 
 
-def _resolve_variant(icon: dict, requested: str | None) -> str:
+def _resolve_variant(
+    icon: dict,
+    requested: str | None,
+    probe_cands: list[str] | None = None,
+    pack_dir=None,
+    round_id: str = "",
+    icon_id: str = "",
+) -> str:
     if requested:
         if requested not in icon["variants"] or "style" not in icon["variants"][requested]:
             raise ValueError(f"variant '{requested}' is not an authored variant")
@@ -136,6 +143,25 @@ def _resolve_variant(icon: dict, requested: str | None) -> str:
     ]
     if len(authored) == 1:
         return authored[0]
+    # variant unspecified + several open: resolve by where the named
+    # candidate actually lives (candidate ids like r1 collide across
+    # variant dirs — picking "mono" blindly can approve the wrong one)
+    if probe_cands and pack_dir is not None:
+        for cand in probe_cands:
+            if not cand or cand == "*":
+                continue
+            homes = [
+                v
+                for v in authored
+                if (pack_dir / ".runs" / round_id / v / icon_id / f"{cand}.svg").is_file()
+            ]
+            if len(homes) == 1:
+                return homes[0]
+            if len(homes) > 1:
+                raise ValueError(
+                    f"candidate '{cand}' exists in several open variants {sorted(homes)} — "
+                    f"specify '<icon>/<variant>:'"
+                )
     if "mono" in icon["variants"] and "style" in icon["variants"]["mono"]:
         return "mono"
     raise ValueError("multiple candidate variants — specify '<icon>/<variant>:'")
@@ -218,7 +244,17 @@ def apply_decisions(
         icon = pack["icons"].get(icon_id)
         if icon is None:
             raise ValueError(f"unknown icon '{icon_id}'")
-        variant_id = _resolve_variant(icon, req_variant or None)
+        probe = [
+            str(it.get("cand") or it.get("rate_cand") or "") for it in payload.get("items", [])
+        ]
+        variant_id = _resolve_variant(
+            icon,
+            req_variant or None,
+            probe_cands=probe,
+            pack_dir=pack_dir,
+            round_id=round_id,
+            icon_id=icon_id,
+        )
         variant = icon["variants"][variant_id]
         cands = _find_candidates(pack_dir, round_id, icon_id, variant_id)
         for item in payload["items"]:

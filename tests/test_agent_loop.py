@@ -480,3 +480,31 @@ def test_wait_returns_on_rev_change(workpack: Path) -> None:
     assert result["changed"] is True
     assert result["rev"] == baseline + 1
     assert "hut" in result["summary"]
+
+
+def test_resolve_variant_by_candidate_home(tmp_path) -> None:
+    """Variant unspecified + several open: resolve by where the candidate lives."""
+    from iconpilot.decide import _resolve_variant
+
+    icon = {
+        "variants": {
+            "mono": {"style": "mono-line", "status": "todo"},
+            "lineal-color": {"style": "lineal-color", "status": "todo"},
+        }
+    }
+    # candidate r1 exists ONLY in lineal-color → resolves there, not mono
+    (tmp_path / ".runs" / "r1" / "lineal-color" / "sail").mkdir(parents=True)
+    (tmp_path / ".runs" / "r1" / "lineal-color" / "sail" / "r1.svg").write_text("<svg/>")
+    assert (
+        _resolve_variant(icon, None, ["r1"], pack_dir=tmp_path, round_id="r1", icon_id="sail")
+        == "lineal-color"
+    )
+    # candidate exists in BOTH open variants → ambiguous → error
+    (tmp_path / ".runs" / "r1" / "mono" / "sail").mkdir(parents=True)
+    (tmp_path / ".runs" / "r1" / "mono" / "sail" / "r1.svg").write_text("<svg/>")
+    import pytest
+
+    with pytest.raises(ValueError, match="several open variants"):
+        _resolve_variant(icon, None, ["r1"], pack_dir=tmp_path, round_id="r1", icon_id="sail")
+    # no probe info → legacy mono fallback still works
+    assert _resolve_variant(icon, None) == "mono"
