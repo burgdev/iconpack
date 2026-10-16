@@ -101,7 +101,9 @@ header .meta { color:var(--muted); font-size:.8rem; }
 @keyframes spin { to { transform: rotate(360deg); } }
 progress { flex:1; height:6px; accent-color: var(--accent); }
 .progressrow { display:flex; gap:10px; align-items:center; }
+.chip.fit { display:inline-block; width:auto; align-self:center; }
 .dropzone { outline: 2px dashed var(--accent); outline-offset: 4px; border-radius: 8px; }
+@media (max-width:480px) { .actionbar .statustext { display:none; } }
 .tabs button { border:none; border-bottom:2px solid transparent; border-radius:8px 8px 0 0; background:none;
                color:var(--muted); padding:8px 14px; font-weight:600; display:inline-flex; gap:6px; align-items:center; }
 .tabs button.on { color:var(--accent); border-bottom-color:var(--accent); }
@@ -141,6 +143,7 @@ progress { flex:1; height:6px; accent-color: var(--accent); }
 .chip.done { background:color-mix(in srgb, var(--accent) 18%, transparent); }
 .iconbtn.busy, button.busy { opacity:.45; pointer-events:none; }
 .banner.working { background:color-mix(in srgb, var(--warn) 15%, transparent); color:var(--warn); }
+:root[data-theme="dark"] .banner.working { background:color-mix(in srgb, var(--warn) 26%, transparent); color:color-mix(in srgb, var(--warn) 55%, white); }
 .banner.ready  { background:color-mix(in srgb, var(--accent) 14%, transparent); color:var(--accent); }
 .dot { width:8px; height:8px; border-radius:50%; background:currentColor; animation:pulse 1.6s infinite; }
 .banner.ready .dot { animation:none; }
@@ -235,13 +238,13 @@ footer { text-align:center; color:var(--muted); font-size:.75rem; padding:20px 0
 .gmeta .brief { flex:1 1 160px; cursor:text; min-width:120px; font-size:.85rem; }
 .brief-input { flex:1 1 160px; font:inherit; font-size:.85rem; padding:4px 8px; border-radius:8px;
                border:1px solid var(--accent); background:var(--card); color:var(--ink); min-width:120px; }
-.colorchip { width:30px; height:30px; flex:none; border-radius:99px; border:2px solid var(--line); cursor:pointer; }
+.colorchip { width:20px; height:20px; flex:none; border-radius:6px; border:1px solid var(--line); cursor:pointer; padding:0; background:none; }
 .gmeta select { font:inherit; font-size:.8rem; padding:4px 6px; border-radius:8px;
                 border:1px solid var(--line); background:var(--card); color:var(--ink); max-width:140px; }
 .vargrid { display:flex; flex-direction:column; gap:10px; }
 .vargroup { border:1px solid var(--line); background: color-mix(in oklab, var(--card-2) 55%, var(--card));
             border-radius:10px; padding:8px 10px; }
-.varhead { display:flex; align-items:center; gap:8px; margin-bottom:6px; }
+.varhead { column-gap: 6px;  display:flex; align-items:center; gap:8px; margin-bottom:6px; }
 .compare-grid { display:flex; gap:16px; }
 .compare-col { flex:1; text-align:center; }
 .compare-label { font-weight:600; margin-bottom:8px; }
@@ -288,7 +291,7 @@ footer { text-align:center; color:var(--muted); font-size:.75rem; padding:20px 0
 <div id="app" style="visibility:hidden">
   <header>
     <h1>{{ S.pack.name || 'iconpilot' }}</h1>
-    <span class="meta">rev {{ S.rev }} · S.round {{ S.round || '—' }}</span>
+    <span class="meta">rev {{ S.rev }} · round {{ S.round || '—' }}</span>
     <button class="subtle iconbtn-lg" @click="toggleTheme"
             :title="S.theme === 'dark' ? 'switch to light' : 'switch to dark'"
             :aria-label="S.theme === 'dark' ? 'Switch to light theme' : 'Switch to dark theme'">
@@ -305,11 +308,11 @@ footer { text-align:center; color:var(--muted); font-size:.75rem; padding:20px 0
     </button>
     <button class="subtle" @click="openNextDlg()"
             title="apply first, then start the next pass — history is kept">
-      <span class="ic" v-html="IC.plus"></span> next round</button>
+      <span class="ic" v-html="IC.plus"></span> next pass</button>
     <span class="spacer"></span>
     <span class="meta">{{ S.candidates.length }} candidates</span>
     <button class="subtle" @click="load(true)">refresh</button>
-    <div v-if="S.ai.text" class="banner" :class="S.ai.active ? 'working' : 'ready'">
+    <div v-if="S.ai.text && S.tab !== 'round'" class="banner" :class="S.ai.active ? 'working' : 'ready'">
       <span class="dot"></span>{{ S.ai.text }}
     </div>
   </header>
@@ -336,10 +339,12 @@ footer { text-align:center; color:var(--muted); font-size:.75rem; padding:20px 0
       </div>
     </section>
     <section v-if="S.grouped.length">
-      <h2>{{ S.viewRound && S.viewRound !== S.latest ? 'Archived pass ' + S.viewRound : 'Current pass — rate, then decide' }}
+      <div class="row" style="justify-content:space-between; align-items:baseline">
+        <h2 style="margin:0">{{ S.viewRound && S.viewRound !== S.latest ? 'Archived pass ' + S.viewRound : 'Current pass — rate, then decide' }}</h2>
         <button v-if="(S.recraftReady || S.debug) && !isViewing()" class="subtle" @click="openBatchDlg()"
                 title="Recraft pack draft: same icons on every sheet, one different take per sheet (≤9 icons per 3×3 sheet) — review before anything is written">
-          <span class="ic" v-html="IC.bolt"></span> draft pack</button></h2>
+          <span class="ic" v-html="IC.bolt"></span> draft pack</button>
+      </div>
       <div class="group" v-for="(g, gi) in S.grouped" :key="g.key">
         <div class="ghead">
           <b>{{ g.icon }}</b>
@@ -394,10 +399,12 @@ footer { text-align:center; color:var(--muted); font-size:.75rem; padding:20px 0
                       :title="S.debug && !S.recraftReady ? 'preview the Recraft request (no call)' : 'Recraft: seed 4 drafts for this variant (~$0.18-0.20)'" aria-label="Recraft draft"
                       @click="showDebug(g.icon, vg.variant)"><span class="ic" v-html="IC.bolt"></span></button>
             </div>
-            <div v-if="!vg.cands.length" class="card empty" style="border-style:dashed">
-              <span class="muted">open — no drafts yet</span>
-              <button v-if="S.recraftReady || S.debug" class="subtle" @click="showDebug(g.icon, vg.variant)"><span class="ic" v-html="IC.bolt"></span> seed</button>
-              <button class="subtle" @click="copyPrompt(g.icon, vg.variant)"><span class="ic" v-html="IC.spark"></span> LLM hint</button>
+            <div v-if="!vg.cands.length" class="card empty" style="border-style:dashed; display:flex; justify-content:space-between; align-items:center; gap:8px; padding:6px 10px">
+              <span class="muted" style="font-size:.8rem">open — no drafts yet</span>
+              <span class="row" style="gap:6px; flex:none">
+                <button v-if="S.recraftReady || S.debug" class="subtle" style="padding:3px 8px; font-size:.75rem" @click="showDebug(g.icon, vg.variant)"><span class="ic" v-html="IC.bolt"></span> seed</button>
+                <button class="subtle" style="padding:3px 8px; font-size:.75rem" @click="copyPrompt(g.icon, vg.variant)"><span class="ic" v-html="IC.spark"></span> LLM hint</button>
+              </span>
             </div>
             <div class="grid">
               <div class="card" v-for="(c, ci) in vg.cands" :key="c.cand"
@@ -426,7 +433,7 @@ footer { text-align:center; color:var(--muted); font-size:.75rem; padding:20px 0
     </section>
     <section v-else>
       <h2>Current round</h2>
-      <p class="muted">no candidates in the latest run — the status above shows agent progress.</p>
+      <p class="muted">no candidates in {{ S.viewRound || S.round || 'this pass' }} — the status above shows agent progress.</p>
     </section>
 
     <div class="composer">
@@ -496,7 +503,7 @@ footer { text-align:center; color:var(--muted); font-size:.75rem; padding:20px 0
       <div class="group" v-for="(icon, id) in S.pack.icons" :key="id">
         <div class="ghead">
           <b>{{ id }}</b>
-          <span v-if="icon.main_color" class="chip" :style="{background: icon.main_color}">{{ icon.main_color }}</span>
+          <i v-if="icon.main_color" class="paldot" :style="{background: icon.main_color}" :title="'main color ' + icon.main_color"></i>
           <span v-if="(icon.colors || []).length" class="row" style="gap:3px">
             <i v-for="c in icon.colors" :key="c" class="paldot" :style="{background:c}" :title="c"></i>
           </span>
@@ -524,14 +531,18 @@ footer { text-align:center; color:var(--muted); font-size:.75rem; padding:20px 0
                  @click="openIcon(id, vid, v)">
             <div v-else-if="!v.link" class="thumb missing" title="not drafted yet">—</div>
             <div class="name">{{ vid }}</div>
-            <span class="chip" :class="v.status">{{ v.link ? '→ ' + v.link : v.status }}</span>
-            <button v-if="v.status === 'approved' && !v.link" class="iconbtn"
-                    :class="{ on: isPinned(id, vid) }" :title="isPinned(id, vid) ? 'unpin' : 'pin as style reference'"
-                    @click="togglePin(id, vid)"><span class="ic" :class="{ filled: isPinned(id, vid) }" v-html="IC.pin"></span></button>
-            <button v-if="v.status === 'approved' && !v.link && !isViewing()" class="iconbtn"
-                    title="add to the next round again — the approved file stays in history" aria-label="add to next round"
-                    @click="reopen(id, vid)"><span class="ic" v-html="IC.unlock"></span></button>
-            <span v-if="v.status === 'stale' || edited(id, vid)" class="muted">needs re-review</span>
+            <span class="chip fit" :class="v.status">{{ v.link ? '→ ' + v.link : v.status }}</span>
+            <div v-if="(v.status === 'approved' && !v.link) || v.status === 'stale' || edited(id, vid)"
+                 class="row" style="justify-content:center; gap:4px; margin-top:2px">
+              <button v-if="v.status === 'approved' && !v.link" class="iconbtn"
+                      :class="{ on: isPinned(id, vid) }" :title="isPinned(id, vid) ? 'unpin' : 'pin as style reference'"
+                      aria-label="pin as style reference"
+                      @click="togglePin(id, vid)"><span class="ic" :class="{ filled: isPinned(id, vid) }" v-html="IC.pin"></span></button>
+              <button v-if="v.status === 'approved' && !v.link && !isViewing()" class="iconbtn"
+                      title="add to the next pass again — the approved file stays in history" aria-label="add to next pass"
+                      @click="reopen(id, vid)"><span class="ic" v-html="IC.unlock"></span></button>
+              <span v-if="v.status === 'stale' || edited(id, vid)" class="muted" style="font-size:.7rem">needs re-review</span>
+            </div>
           </div>
         </div>
       </div>
@@ -541,6 +552,7 @@ footer { text-align:center; color:var(--muted); font-size:.75rem; padding:20px 0
 <div v-show="S.tab === 'styles'">
     <section>
       <h2>Styles — the pack's look, references and rules</h2>
+      <p class="muted" style="margin:-6px 0 12px">references: bundled defaults + own uploads (own shown first)</p>
 
       <!-- used styles: cards with refs, rules, model -->
       <div class="group" v-for="sid in usedStyles()" :key="sid">
@@ -553,7 +565,6 @@ footer { text-align:center; color:var(--muted); font-size:.75rem; padding:20px 0
           <button class="iconbtn" @click="editStyle(sid)" title="edit style rules and model" aria-label="edit style"><span class="ic" v-html="IC.gear"></span></button>
           <button class="iconbtn" :class="{ on: S.removeArm === sid }" @click="removeStyle(sid)" title="remove from every glyph" aria-label="remove style"><span class="ic" v-html="IC.trash"></span></button>
         </div>
-        <p class="muted" style="margin:0 0 4px">references — bundled defaults + own uploads (own shown first)</p>
         <div class="row" style="flex-wrap:wrap">
           <figure v-for="ic in (S.styleRefs[sid]?.own || []).concat(S.styleRefs[sid]?.bundled || [])"
                   :key="sid + (ic.own ? 'o' : 'b') + ic.name" class="refcell"
@@ -637,13 +648,13 @@ footer { text-align:center; color:var(--muted); font-size:.75rem; padding:20px 0
       <div class="dialog" style="max-width:620px">
         <h3><span>edit · {{ S.styleEdit.id }}</span>
             <button class="subtle" @click="S.styleEdit = null" aria-label="Close">✕</button></h3>
-        <div class="row" style="flex-direction:column; align-items:stretch; gap:6px">
-          <div class="row"><label class="muted">label</label><input v-model="S.styleEdit.label" style="flex:1"></div>
-          <div class="row"><label class="muted" title="canvas size the icons are drawn on (24 or 48 typical)">grid px</label><input v-model="S.styleEdit.size" type="number" style="width:90px">
-            <label class="muted" title="outline stroke thickness">stroke width</label><input v-model="S.styleEdit.strokeWidth" type="number" step="0.5" style="width:90px"></div>
-          <div class="row"><label class="muted" title="minimum spacing between separate strokes — near-misses fail the gate">min gap</label><input v-model="S.styleEdit.minGap" type="number" step="0.5" style="width:90px">
-            <label class="muted" title="complexity budget: total path points">max nodes</label><input v-model="S.styleEdit.maxNodes" type="number" style="width:90px"></div>
-          <div class="row" style="align-items:flex-start"><label class="muted" title="allowed colors — only these pass the gate">palette</label>
+        <div class="stylegrid" style="display:flex; flex-direction:column; align-items:stretch; gap:6px">
+          <div class="row"><label class="muted" style="flex:0 0 96px">label</label><input v-model="S.styleEdit.label" style="flex:1"></div>
+          <div class="row"><label class="muted" style="flex:0 0 96px" title="canvas size the icons are drawn on (24 or 48 typical)">grid px</label><input v-model="S.styleEdit.size" type="number" style="flex:1; min-width:0">
+            <label class="muted" style="flex:0 0 96px" title="outline stroke thickness">stroke width</label><input v-model="S.styleEdit.strokeWidth" type="number" step="0.5" style="flex:1; min-width:0"></div>
+          <div class="row"><label class="muted" style="flex:0 0 96px" title="minimum spacing between separate strokes — near-misses fail the gate">min gap</label><input v-model="S.styleEdit.minGap" type="number" step="0.5" style="flex:1; min-width:0">
+            <label class="muted" style="flex:0 0 96px" title="complexity budget: total path points">max nodes</label><input v-model="S.styleEdit.maxNodes" type="number" style="flex:1; min-width:0"></div>
+          <div class="row" style="align-items:flex-start"><label class="muted" style="flex:0 0 96px" title="allowed colors — only these pass the gate">palette</label>
             <div class="row" style="flex:1; flex-wrap:wrap; gap:6px">
               <label v-for="(c, i) in S.styleEdit.paletteList" :key="i" class="palchip" :style="{background: c}">
                 <input type="color" :value="c" @input="S.styleEdit.paletteList[i] = $event.target.value" :aria-label="'color ' + (i+1)">
@@ -652,24 +663,24 @@ footer { text-align:center; color:var(--muted); font-size:.75rem; padding:20px 0
               <label class="palchip paladd"><input type="color" value="#2b6cb0" @input="S.styleEdit.paletteList.push($event.target.value)" aria-label="add color"><span>＋</span></label>
             </div>
           </div>
-          <div class="row"><label class="muted" title="vocabulary injected into every drafting brief">style words</label><input v-model="S.styleEdit.words" placeholder="comma separated" style="flex:1"></div>
-          <div class="row"><label class="muted" title="negative vocabulary — never appears in drafts">avoid</label><input v-model="S.styleEdit.avoid" placeholder="comma separated" style="flex:1"></div>
+          <div class="row"><label class="muted" style="flex:0 0 96px" title="vocabulary injected into every drafting brief">style words</label><input v-model="S.styleEdit.words" placeholder="comma separated" style="flex:1"></div>
+          <div class="row"><label class="muted" style="flex:0 0 96px" title="negative vocabulary — never appears in drafts">avoid</label><input v-model="S.styleEdit.avoid" placeholder="comma separated" style="flex:1"></div>
           <div class="row" style="align-items:flex-start"><label class="muted" title="deterministic gate checks — uncheck to disable per style">gate checks</label>
-            <div style="flex:1; display:flex; flex-direction:column; gap:4px">
+            <div style="flex:1; display:flex; flex-direction:column; gap:6px; font-size:.8rem">
               <label v-for="g in GATE_HELP" :key="g.k" style="display:flex; gap:8px; align-items:baseline">
                 <input type="checkbox" :checked="!(S.styleEdit.gateOff || []).includes(g.k)" @change="toggleGate(g.k)" style="min-height:0">
                 <span><b>{{ g.k }}</b> <span class="muted">— {{ g.h }}</span></span>
               </label>
             </div>
           </div>
-          <div class="row"><label class="muted" title="Freeform instructions the drafting agent reads before drawing — e.g. 'if a detail needs a second stroke to read, drop it'">guidance</label><input v-model="S.styleEdit.guidance" style="flex:1"></div>
-          <div class="row"><label class="muted" title="Curated V2 style name (cheaper: $0.044/img vs $0.05+ for V4)">V2 style name</label>
+          <div class="row"><label class="muted" style="flex:0 0 96px" title="Freeform instructions the drafting agent reads before drawing — e.g. 'if a detail needs a second stroke to read, drop it'">guidance</label><input v-model="S.styleEdit.guidance" style="flex:1"></div>
+          <div class="row"><label class="muted" style="flex:0 0 96px" title="Curated V2 style name (cheaper: $0.044/img vs $0.05+ for V4)">V2 style name</label>
             <select v-model="S.styleEdit.curatedStyle" style="flex:1">
               <option value="">auto (from style family)</option>
               <option v-for="name in curatedNames()" :key="name" :value="name">{{ name }}</option>
             </select>
           </div>
-          <div class="row"><label class="muted" title="Recraft model preferred for this style (auto uses the suggestion)">Recraft model</label>
+          <div class="row"><label class="muted" style="flex:0 0 96px" title="Recraft model preferred for this style (auto uses the suggestion)">Recraft model</label>
             <select v-model="S.styleEdit.recraftModel" style="flex:1">
               <option value="">auto</option>
               <option v-for="m in vectorModels()" :key="m" :value="m">{{ m }} (${{ (S.recraftModels.prices || {})[m] || '?' }}/img)</option>
@@ -702,13 +713,13 @@ footer { text-align:center; color:var(--muted); font-size:.75rem; padding:20px 0
         <div class="row" style="flex-direction:column; align-items:stretch; gap:4px">
           <div class="row"><input v-model="S.set.csId" placeholder="style id (e.g. outline-color)" style="flex:1">
           <select v-model="S.set.csBase"><option v-for="(st, sid) in S.styles" :key="sid" :value="sid">extends {{ sid }}</option></select></div>
-          <div class="row"><input v-model="S.set.csSize" type="number" placeholder="grid px (blank = inherit)" style="width:130px">
-          <input v-model="S.set.csPalette" placeholder="palette hex csv (optional)" style="flex:1"></div>
+          <div class="row"><input v-model="S.set.csSize" type="number" placeholder="grid px" style="width:110px">
+          <input v-model="S.set.csPalette" placeholder="palette hex, comma-separated" style="flex:1"></div>
           <button class="subtle" @click="addCustomStyle">define + add to every glyph</button>
         </div></div>
       <div class="controls"><label>Recraft</label>
         <div class="row">
-          <select v-model="S.set.rcModel"><option v-for="(pr, m) in S.recraftModels" :key="m" :value="m">{{ m }} (${{ pr }}/img)</option></select>
+          <select v-model="S.set.rcModel"><option v-for="m in vectorModels()" :key="m" :value="m">{{ m }} (${{ (S.recraftModels.prices || {})[m] || '?' }}/img)</option></select>
           <input v-model="S.set.rcN" type="number" min="1" max="6" style="width:64px" title="images per request">
           <button class="subtle" @click="saveRecraftDefaults(S.set.rcModel, +S.set.rcN)">save</button>
         </div></div>
@@ -743,7 +754,7 @@ footer { text-align:center; color:var(--muted); font-size:.75rem; padding:20px 0
         <span v-if="S.actionBar.working" class="dot amber"></span>
         <span v-else-if="S.actionBar.ready" class="dot green"></span>
         <span v-else class="dot gray"></span>
-        {{ S.actionBar.text }}
+        <span class="statustext">{{ S.actionBar.text }}</span>
       </template>
     </span>
     <button class="subtle" @click="undo" title="undo last apply" aria-label="undo"><span class="ic" v-html="IC.undo"></span></button>
@@ -876,7 +887,6 @@ footer { text-align:center; color:var(--muted); font-size:.75rem; padding:20px 0
             <option v-for="vd in S.debugDlg.variants" :key="vd" :value="vd">{{ vd }}</option>
           </select>
           <span class="chip">{{ S.debugDlg.style }}</span>
-          <span class="muted" style="font-size:.75rem; margin-left:4px">{{ S.debugDlg.grid }}×{{ S.debugDlg.grid }} grid → {{ S.debugDlg.grid * S.debugDlg.grid }} max</span>
         </div>
 
         <div class="row" style="justify-content:space-between; margin-bottom:8px">
@@ -891,7 +901,7 @@ footer { text-align:center; color:var(--muted); font-size:.75rem; padding:20px 0
 
         <div class="row">
           <button class="primary" @click="recraftGenerate()">
-            <span class="ic" v-html="IC.bolt"></span> generate {{ S.debugDlg.n }} versions · ~${{ S.debugDlg.cost }}
+            <span class="ic" v-html="IC.bolt"></span> generate {{ S.debugDlg.n }} versions
           </button>
           <button class="subtle" @click="debugCopy('full')" title="copy the full drafting hint">copy hint</button>
           <button class="subtle" @click="S.debugDlg = null" aria-label="Close">cancel</button>
@@ -934,9 +944,10 @@ footer { text-align:center; color:var(--muted); font-size:.75rem; padding:20px 0
           <button class="subtle" @click="S.batchDlg = null" aria-label="Close">close</button></h3>
       <p class="muted" style="margin:0 0 10px">One Recraft request per style: <b>same icons on every 3×3 sheet</b> (≤9 icons per sheet, one icon per cell), <b>one different take per sheet</b>. You review every take before anything is written.</p>
       <div v-for="grp in batchGroups()" :key="grp.style" style="margin-bottom:10px">
-        <div class="row" style="justify-content:space-between">
+        <div class="row" style="gap:8px; align-items:baseline">
           <b>{{ grp.style }}</b>
-          <button class="subtle" @click="toggleGrp(grp)">{{ grpAll(grp) ? 'select none' : 'select all' }}</button>
+          <button class="subtle" style="padding:1px 6px; font-size:.75rem" @click="toggleGrp(grp)">{{ grpAll(grp) ? 'none' : 'all' }}</button>
+          <span class="muted" style="font-size:.75rem">{{ grp.targets.length }}</span>
         </div>
         <div class="row" style="flex-wrap:wrap; gap:4px 14px">
           <label v-for="tg in grp.targets" :key="tg" style="display:flex; gap:5px; align-items:center; cursor:pointer">
@@ -974,7 +985,7 @@ footer { text-align:center; color:var(--muted); font-size:.75rem; padding:20px 0
       </div>
       <div class="row" style="margin-top:12px">
         <button class="primary" :class="{ busy: S.batchDlg.busy }" :disabled="!batchSelCount()" @click="batchGenerate()">
-          <span class="ic" v-html="IC.bolt"></span> generate {{ batchSelCount() * S.batchDlg.takes }} candidates · ~${{ batchEst() }}
+          <span class="ic" v-html="IC.bolt"></span> generate {{ batchSelCount() * S.batchDlg.takes }} candidates
         </button>
       </div>
       <p v-if="S.batchDlg.err" class="err">{{ S.batchDlg.err }}</p>
@@ -984,10 +995,11 @@ footer { text-align:center; color:var(--muted); font-size:.75rem; padding:20px 0
   <div v-if="S.resultDlg" class="overlay" @click.self="S.resultDlg = null">
     <div class="dialog" style="max-width:720px">
       <h3 v-if="!S.resultDlg.batch"><span><span class="ic-lg" v-html="IC.bolt"></span> {{ S.resultDlg.icon }}#{{ S.resultDlg.variant }} — {{ S.resultDlg.results.filter(r => r.keep).length }}/{{ S.resultDlg.results.length }} kept</span>
-          <button class="subtle" @click="S.resultDlg = null" aria-label="Close">discard all</button></h3>
+          <button class="subtle" @click="S.resultDlg = null" aria-label="Close">✕</button></h3>
       <h3 v-if="S.resultDlg.batch"><span><span class="ic-lg" v-html="IC.bolt"></span> pack draft — {{ S.resultDlg.items.length }} icons × {{ S.resultDlg.takes }} takes · {{ keptCount() }}/{{ totalCount() }} kept</span>
-          <button class="subtle" @click="S.resultDlg = null" aria-label="Close">discard all</button></h3>
-      <p class="muted" style="margin:0 0 10px">{{ S.resultDlg.model }} · ${{ S.resultDlg.cost }} · click to toggle, ✓ = keep · drag a take onto another icon of the same variant to reassign it</p>
+          <button class="subtle" @click="S.resultDlg = null" aria-label="Close">✕</button></h3>
+      <p class="muted" style="margin:0 0 10px">{{ S.resultDlg.model }} · ${{ S.resultDlg.cost }} · click to toggle, ✓ = keep</p>
+      <p class="muted" style="margin:-6px 0 10px; font-size:.75rem">drag a take onto another icon of the same variant to reassign it</p>
       <div v-if="S.resultDlg.batch">
         <div v-for="it in S.resultDlg.items" :key="it.icon + '#' + it.variant" style="margin-bottom:12px"
              :class="{ dropzone: S.resultDlg.drag && S.resultDlg.drag.variant === it.variant && S.resultDlg.drag.icon !== it.icon }"
@@ -1025,7 +1037,7 @@ footer { text-align:center; color:var(--muted); font-size:.75rem; padding:20px 0
         <button class="primary" @click="commitResults()">
           add {{ keptCount() }} to round
         </button>
-        <button class="subtle" @click="keepAll(true)">keep all</button>
+        <button class="subtle" @click="keepAll(true)">select all</button>
         <button class="subtle" @click="S.resultDlg = null">discard all</button>
       </div>
     </div>
