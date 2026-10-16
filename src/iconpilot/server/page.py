@@ -820,7 +820,7 @@ footer { text-align:center; color:var(--muted); font-size:.75rem; padding:20px 0
         <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="var(--accent)" stroke-width="2.5" stroke-linecap="round" style="animation:spin 1s linear infinite">
           <path d="M21 12a9 9 0 1 1-6.2-8.5"/>
         </svg>
-        <span class="muted">generating {{ S.debugDlg.n }} version(s) via {{ S.debugDlg.model }}…</span>
+        <span class="muted">generating {{ S.debugDlg.n }} versions via {{ S.debugDlg.model }}…</span>
       </div>
 
       <div v-if="S.debugDlg.error" class="err" style="margin-bottom:8px; padding:8px; border-radius:8px; background:color-mix(in oklab, var(--danger) 10%, var(--card))">
@@ -836,7 +836,7 @@ footer { text-align:center; color:var(--muted); font-size:.75rem; padding:20px 0
           <select v-model="S.debugDlg.grid" @change="showDebug(S.debugDlg.icon, S.debugDlg.variant, null, +S.debugDlg.n, +S.debugDlg.grid)">
             <option v-for="g in [1,2,3,4]" :key="g" :value="g">{{ g }}×{{ g }}</option>
           </select>
-          <label class="muted" style="margin-left:10px" title="how many versions">n</label>
+          <label class="muted" style="margin-left:10px" title="total number of icon versions to generate">versions</label>
           <input v-model.number="S.debugDlg.n" type="number" min="1"
                  :max="S.debugDlg.grid * S.debugDlg.grid === 1 ? 6 : S.debugDlg.grid * S.debugDlg.grid"
                  style="width:52px"
@@ -845,6 +845,7 @@ footer { text-align:center; color:var(--muted); font-size:.75rem; padding:20px 0
             <option v-for="vd in S.debugDlg.variants" :key="vd" :value="vd">{{ vd }}</option>
           </select>
           <span class="chip">{{ S.debugDlg.style }}</span>
+          <span class="muted" style="font-size:.75rem; margin-left:4px">{{ S.debugDlg.grid }}×{{ S.debugDlg.grid }} grid → {{ S.debugDlg.grid * S.debugDlg.grid }} max</span>
         </div>
 
         <div class="row" style="justify-content:space-between; margin-bottom:8px">
@@ -859,12 +860,37 @@ footer { text-align:center; color:var(--muted); font-size:.75rem; padding:20px 0
 
         <div class="row">
           <button class="primary" @click="recraftGenerate()">
-            <span class="ic" v-html="IC.bolt"></span> generate {{ S.debugDlg.n }} version(s) · ~${{ S.debugDlg.cost }}
+            <span class="ic" v-html="IC.bolt"></span> generate {{ S.debugDlg.n }} versions · ~${{ S.debugDlg.cost }}
           </button>
           <button class="subtle" @click="debugCopy('full')" title="copy the full drafting hint">copy hint</button>
           <button class="subtle" @click="S.debugDlg = null" aria-label="Close">cancel</button>
         </div>
       </template>
+    </div>
+  </div>
+
+  <div v-if="S.resultDlg" class="overlay" @click.self="S.resultDlg = null">
+    <div class="dialog" style="max-width:720px">
+      <h3><span><span class="ic-lg" v-html="IC.bolt"></span> {{ S.resultDlg.icon }}#{{ S.resultDlg.variant }} — {{ S.resultDlg.results.filter(r => r.keep).length }}/{{ S.resultDlg.results.length }} kept</span>
+          <button class="subtle" @click="S.resultDlg = null" aria-label="Close">discard all</button></h3>
+      <p class="muted" style="margin:0 0 10px">{{ S.resultDlg.model }} · {{ S.resultDlg.grid }}×{{ S.resultDlg.grid }} grid · ${{ S.resultDlg.cost }} · click to toggle, ✓ = keep</p>
+      <div class="row" style="flex-wrap:wrap; gap:10px">
+        <div v-for="r in S.resultDlg.results" :key="r.id"
+             @click="r.keep = !r.keep"
+             :style="{ cursor:'pointer', border: r.keep ? '2px solid var(--accent)' : '2px dashed var(--line)', borderRadius:'10px', padding:'6px', opacity: r.keep ? '1' : '.4' }">
+          <img :src="r.svg_data" width="72" height="72" style="border-radius:6px; background:#fff">
+          <div style="text-align:center; font-size:.7rem; margin-top:2px">
+            {{ r.keep ? '✓' : '✕' }} {{ r.gate_pass ? 'pass' : 'gate' }}
+          </div>
+        </div>
+      </div>
+      <div class="row" style="margin-top:12px">
+        <button class="primary" @click="commitResults()">
+          add {{ S.resultDlg.results.filter(r => r.keep).length }} to round
+        </button>
+        <button class="subtle" @click="S.resultDlg.results.forEach(r => r.keep = true)">keep all</button>
+        <button class="subtle" @click="S.resultDlg = null">discard all</button>
+      </div>
     </div>
   </div>
 
@@ -998,7 +1024,7 @@ const S = reactive({
   flash: '', flashOk: true, applying: false, instructions: '',
   tab: (location.hash || '#round').slice(1) || 'round',
   kbFocus: 0, kbVariant: 0, kbCand: 0, kbUsed: false, compare: null, histView: null,
-  recraftReady: false, debug: new URLSearchParams(location.search).has('debug'), debugDlg: null, nextDlg: null,
+  recraftReady: false, debug: new URLSearchParams(location.search).has('debug'), debugDlg: null, nextDlg: null, resultDlg: null,
   appliedRound: null,
   recraftModels: {}, styleRefs: {}, styleDetail: {}, styleEdit: null, styleView: null, removeArm: null, theme: 'light', iconHist: {}, svgFiles: {}, rejectArm: null,
   history: [], showHistory: false,
@@ -1513,16 +1539,36 @@ async function recraftGenerate() {
   try {
     const body = { icon: d.icon, variant: d.variant, n: d.n, model: d.model };
     if (d.grid >= 2) body.grid = d.grid;
-    const r = await api('/api/recraft', {
+    const r = await api('/api/recraft-preview', {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(body) });
-    flash(`⚡ ${d.icon}#${d.variant}: ${r.wrote.length} seeds (gate ${r.gate_passed}/${r.wrote.length}) ~$${r.cost_usd}`, true);
+    // show results for review before committing
     S.debugDlg = null;
-    await load();
+    S.resultDlg = {
+      icon: d.icon, variant: d.variant, model: r.model, grid: r.grid, cost: r.cost_usd,
+      results: r.results.map(x => ({ ...x, keep: true })),
+    };
   } catch (e) {
     d.generating = false;
     d.error = e.message || 'Recraft request failed';
   }
+}
+async function commitResults() {
+  const d = S.resultDlg;
+  if (!d) return;
+  const keep = d.results.filter(r => r.keep);
+  if (!keep.length) { flash('nothing selected', false); return; }
+  try {
+    const r = await api('/api/recraft-commit', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        icon: d.icon, variant: d.variant,
+        svgs: keep.map(x => atob(x.svg_data.split(',')[1])),
+      }) });
+    flash(`⚡ ${d.icon}#${d.variant}: ${r.wrote.length} added (gate ${r.gate_passed}/${r.wrote.length}) ~$${d.cost}`, true);
+    S.resultDlg = null;
+    await load();
+  } catch (e) { flash('commit: ' + e.message, false); }
 }
 async function recraftDraft(icon, variant, n = 4) {
   const key = icon + '/' + variant;
@@ -2095,7 +2141,7 @@ const App = {
       showDebug, debugCopy, openNextDlg, addVariantBulk, addCustomStyle, saveRecraftDefaults,
       GATE_HELP, styleRules, stylePalette, ruleTitle, styleUsageCount, isPostponed, togglePostpone, applyAndNext, colState, toggleCol, toggleAll, usedStyles, setTab, iconSuggest, pickSuggestion, addNewIcon, startRoundWithNew,
       styleSummary, isOwnRef, editStyle, toggleGate, saveStyleRules, removeStyle, addStyleToPack, pickRefFile, removeRef,
-      vectorModels, styleDetail, editCustomStyle, recraftGenerate,
+      vectorModels, styleDetail, editCustomStyle, recraftGenerate, commitResults,
 
     };
   },

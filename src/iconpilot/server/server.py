@@ -32,6 +32,27 @@ from iconpilot.pack import (
 from iconpilot.render.contact import contact_sheet
 from iconpilot.render.render import render_png_text
 
+
+def run_gate_svg(svg_text: str, pack: dict, styles: dict, icon_id: str, variant_id: str) -> bool:
+    """Quick gate check for a raw SVG string."""
+    import tempfile
+
+    from iconpilot.gate.run import run_gate as _gate
+
+    with tempfile.NamedTemporaryFile(suffix=".svg", mode="w", delete=False) as f:
+        f.write(svg_text)
+        path = f.name
+    try:
+        style_id = pack["icons"][icon_id]["variants"][variant_id]["style"]
+        return _gate(path, pack, styles[style_id]).passed
+    except (KeyError, Exception):
+        return False
+    finally:
+        import os
+
+        os.unlink(path)
+
+
 EDITABLE_FIELDS = ("brief", "prompt", "main_color", "note", "description")
 
 
@@ -360,8 +381,10 @@ class ReviewHandler(BaseHTTPRequestHandler):
             if plan["style_id"]:
                 req["style_id"] = plan["style_id"]
                 req["style_match"] = "precise"
-            elif plan["refs"]:
-                req["style_reference_urls"] = [rc._svg_data_url(s)[:60] + "…" for s in plan["refs"]]
+            elif plan.get("curated"):
+                req["style"] = plan["curated"]  # V2 curated style name
+            elif plan["refs"] and "v4" in plan["model"]:
+                req["style_reference_urls"] = [f"<{len(plan['refs'])} PNG refs>"]
             self._json(
                 200,
                 {
@@ -804,6 +827,129 @@ class ReviewHandler(BaseHTTPRequestHandler):
             "style": style,
         }
 
+    def _recraft_preview(self, data: dict) -> dict:
+        """Generate and return SVG contents WITHOUT writing to disk.
+
+        The page shows these in a review dialog; the user picks which to keep,
+        then /api/recraft-commit writes the selection.
+        """
+        import base64 as _b64
+
+        import iconpilot.recraft as rc
+
+        token = rc.resolve_token()
+        if not token:
+            raise ValueError("no Recraft token on the server")
+
+        plan = self._recraft_plan(
+            data.get("icon", ""), data.get("variant", ""), n_in=int(data.get("n") or 4)
+        )
+        if data.get("prompt"):
+            plan["prompt"] = (plan["prompt"] + ", " + str(data["prompt"]))[:1000]
+
+        style_id = plan["style_id"]
+        ref_urls = None
+        if plan["refs"] and "v4" in plan["model"] and not plan.get("curated") and not style_id:
+            # PNG conversion for V4 refs
+            from iconpilot.render.render import render_png_text
+
+            png_urls = []
+            for svg_text in plan["refs"]:
+                try:
+                    img = render_png_text(svg_text, 256)
+                    import io as _io
+
+                    buf = _io.BytesIO()
+                    img.save(buf, "PNG")
+                    png_urls.append(
+                        "data:image/png;base64," + _b64.b64encode(buf.getvalue()).decode()
+                    )
+                except (ValueError, OSError):
+                    pass
+            ref_urls = png_urls or None
+
+        grid = int(data.get("grid") or 0)
+        if grid >= 2:
+            sheet = rc.generate(
+                token,
+                rc.sheet_prompt(plan["prompt"], grid),
+                n=1,
+                style_id=style_id,
+                model=plan["model"],
+                reference_urls=ref_urls,
+                curated_style=plan.get("curated"),
+            )
+            cells = rc.split_sheet(sheet[0], grid)
+        else:
+            cells = rc.generate(
+                token,
+                plan["prompt"],
+                n=plan["n"],
+                style_id=style_id,
+                model=plan["model"],
+                reference_urls=ref_urls,
+                curated_style=plan.get("curated"),
+            )
+
+        # normalize + gate each, return as data URLs for preview
+        pack, styles = load_pack(self.pack_dir / "pack.json")
+        viewbox = pack["spec"]["viewBox"]
+        results = []
+        for i, raw in enumerate(cells):
+            svg = rc.normalize(rc.strip_metadata(raw), viewbox)
+            b64 = _b64.b64encode(svg.encode()).decode()
+            results.append(
+                {
+                    "id": i,
+                    "svg_data": f"data:image/svg+xml;base64,{b64}",
+                    "gate_pass": run_gate_svg(
+                        svg, pack, styles, data.get("icon"), data.get("variant")
+                    ),
+                }
+            )
+        return {
+            "results": results,
+            "model": plan["model"],
+            "grid": grid,
+            "cost_usd": round(rc.price_per_image(plan["model"]), 2),
+        }
+
+    def _recraft_commit(self, data: dict) -> dict:
+        """Write selected SVG candidates to the run directory (after user review)."""
+        from iconpilot.gate.run import run_gate
+
+        icon_id = data.get("icon", "")
+        variant = data.get("variant", "")
+        svgs = data.get("svgs", [])
+        if not icon_id or not variant or not svgs:
+            raise ValueError("need icon, variant, svgs")
+
+        with pack_lock(self.pack_dir):
+            pack, styles = load_pack(self.pack_dir / "pack.json")
+        icon = pack["icons"].get(icon_id)
+        if icon is None or "style" not in icon.get("variants", {}).get(variant, {}):
+            raise ValueError(f"no authored variant {icon_id}#{variant}")
+
+        style = styles[icon["variants"][variant]["style"]]
+        runs_dir = self.pack_dir / ".runs"
+        runs = sorted(p.name for p in runs_dir.glob("r*")) if runs_dir.is_dir() else []
+        run = runs[-1] if runs else None
+        if not run:
+            raise ValueError("no round yet — start a pass first")
+
+        cand_dir = runs_dir / run / variant / icon_id
+        cand_dir.mkdir(parents=True, exist_ok=True)
+        existing = len(list(cand_dir.glob("r*.svg")))
+        wrote = []
+        n_pass = 0
+        for i, svg_text in enumerate(svgs, start=1):
+            f = cand_dir / f"r{existing + i}.svg"
+            f.write_text(svg_text)
+            wrote.append(f.name)
+            if run_gate(f, pack, style).passed:
+                n_pass += 1
+        return {"round": run, "wrote": wrote, "gate_passed": n_pass}
+
     def _recraft_draft(self, data: dict) -> dict:
         """Seed Recraft candidates for one icon (+optional variant) into the latest run."""
         import iconpilot.recraft as rc
@@ -839,8 +985,8 @@ class ReviewHandler(BaseHTTPRequestHandler):
         plan = self._recraft_plan(icon_id, variant, n_in=n)
         if data.get("prompt"):
             plan["prompt"] = (plan["prompt"] + ", " + str(data["prompt"]))[:1000]
-        style = plan["style"]
         style_id = plan["style_id"]
+        style = plan["style"]
 
         # Recraft rejects SVG references — render to PNG first
         # auto-refresh stale Recraft styles ($0.005, cached until refs change)
@@ -866,7 +1012,7 @@ class ReviewHandler(BaseHTTPRequestHandler):
         # V2 without curated but with refs → upgrade to V4 (refs need V4)
         if plan["refs"] and "v4" not in plan["model"] and not plan.get("curated"):
             plan["model"] = rc.DEFAULT_MODEL
-        if plan["refs"] and "v4" in plan["model"] and not plan.get("curated"):
+        if plan["refs"] and "v4" in plan["model"] and not plan.get("curated") and not style_id:
             import base64 as _b64
             import io as _io
 
@@ -1352,6 +1498,26 @@ class ReviewHandler(BaseHTTPRequestHandler):
                         raise ValueError("; ".join(errors[:3]))
                     write_pack_atomic(self.pack_dir, pack)
                 self._json(200, {"rev": pack.get("rev", 0), "added": added})
+            except ValueError as exc:
+                self._json(400, {"error": str(exc)})
+            except Exception as exc:
+                self._json(500, {"error": str(exc)})
+            return
+        if url.path == "/api/recraft-preview":
+            data = self._body()
+            try:
+                self._json(200, self._recraft_preview(data))
+            except ValueError as exc:
+                self._json(400, {"error": str(exc)})
+            except Exception as exc:
+                import iconpilot.recraft as _rc0
+
+                self._json(502 if isinstance(exc, _rc0.RecraftError) else 500, {"error": str(exc)})
+            return
+        if url.path == "/api/recraft-commit":
+            data = self._body()
+            try:
+                self._json(200, self._recraft_commit(data))
             except ValueError as exc:
                 self._json(400, {"error": str(exc)})
             except Exception as exc:
