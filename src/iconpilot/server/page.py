@@ -1808,7 +1808,10 @@ async function batchGenerate() {
   const sheets = batchSheets();
   d.est = Math.max(10, sheets * 12);  // ~12s per paid image, rough
   d.phase = 'sending ' + sheets + ' sheet request' + (sheets > 1 ? 's' : '') + ' to Recraft';
-  batchTimer = setInterval(() => { d.phase = batchElapsed() > d.est * 0.6 ? 'splitting sheets into cells' : d.phase.replace(/^splitting.*$/, 'generating sheets at Recraft') || 'generating sheets at Recraft'; }, 1000);
+  batchTimer = setInterval(() => {
+    const s = batchElapsed();
+    d.phase = s < 3 ? d.phase : s > d.est * 0.6 ? 'splitting sheets into cells' : 'generating sheets at Recraft…';
+  }, 1000);
   try {
     const targets = Object.entries(d.sel).filter(([, on]) => on).map(([tg]) => tg);
     const r = await api('/api/recraft-batch', {
