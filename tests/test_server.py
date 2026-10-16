@@ -757,10 +757,6 @@ def test_style_rules_edit_and_remove(server: _Server, srvpack: Path) -> None:
 
 def test_api_run_filters_orphan_candidates(tmp_path) -> None:
     """Candidates whose variant is not authored in the pack are not served."""
-    import json
-
-    from iconpilot.server.server import Handler  # noqa: F401  (import sanity)
-
     from iconpilot.pack import write_pack_atomic
 
     pack = {
@@ -777,13 +773,7 @@ def test_api_run_filters_orphan_candidates(tmp_path) -> None:
         d = runs / var / icon
         d.mkdir(parents=True)
         (d / "a1.svg").write_text("<svg/>")
-    from iconpilot.server.server import serve  # ensure module import path
-
-    # direct call of the listing logic via the handler is heavy; instead
-    # mirror the filter contract through the run payload builder the
-    # endpoint uses (rglob + authored check)
-    import iconpilot.server.server as srv
-
+    # mirror the filter contract the endpoint uses (rglob + authored check)
     entries = []
     for svg in sorted((runs).rglob("*.svg")):
         rel = svg.relative_to(runs).parts
