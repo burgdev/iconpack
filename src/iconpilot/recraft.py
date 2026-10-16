@@ -139,10 +139,14 @@ def draft_prompt(
     # Recraft priority order (earlier = stronger): subject → color → style
     # → rules → layout → avoids
     parts = [f"vector icon of {icon.get('brief') or icon.get('description') or ''}"]
-    if icon.get("main_color"):
-        parts.append(f"dominant color {icon['main_color']}")
-    if style.palette:
-        parts.append("palette " + ", ".join(style.palette[:5]))
+    if icon.get("colors"):
+        # per-icon subset of the style palette — this icon's own colors
+        parts.append("colors " + ", ".join(icon["colors"][:5]))
+    else:
+        if icon.get("main_color"):
+            parts.append(f"dominant color {icon['main_color']}")
+        if style.palette:
+            parts.append("palette " + ", ".join(style.palette[:5]))
     parts += [f"{style.label} icon style", ", ".join(style.style_words[:4])]
     parts += pack.get("rules", [])[:3]
     parts.append("one centered icon, isolated on plain white background, no scene")
@@ -455,12 +459,15 @@ def generate(
     model: str | None = None,
     reference_urls: list[str] | None = None,
     curated_style: str | None = None,
+    colors: list[str] | None = None,
 ) -> list[str]:
     """Generate n SVG candidates; returns raw SVG texts (native Recraft grid).
 
     reference_urls: style references attached directly to the request
     (data URLs ok; +$0.005/request instead of a style_id). V4-only.
     curated_style: a curated style NAME for V2/V3 models (e.g. "Outline").
+    colors: per-request preferable colors (hex) — narrows the style's
+    palette to this icon's own subset (the Recraft `colors` control).
     """
     if not 1 <= n <= 6:
         raise RecraftError(f"n must be 1-6, got {n}")
@@ -491,6 +498,9 @@ def generate(
         payload["style_reference_urls"] = reference_urls
     elif curated_style and model and "v4" not in model:
         payload["style"] = curated_style
+    rgbs = [c for c in (hex_to_rgb(x) for x in (colors or [])[:10]) if c]
+    if rgbs:
+        payload["colors"] = [{"rgb": c} for c in rgbs]
     out = _request(token, "POST", "/images/generations/vector", payload)
     svgs: list[str] = []
     for item in out.get("data", []):

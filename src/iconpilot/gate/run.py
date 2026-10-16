@@ -86,7 +86,9 @@ def _viewbox(
     return parts[0], parts[1], parts[2], parts[3]
 
 
-def _lint(root, spec: dict, style: Style, report: GateReport) -> None:
+def _lint(
+    root, spec: dict, style: Style, report: GateReport, icon_colors: tuple | list | None = None
+) -> None:
     allowed = set(spec.get("allowed_elements", ["path"]))
     # gradient styles need <defs>/<linearGradient>/<stop>; their id is an
     # internal fill reference, not a CSS/JS hook — allowed on gradients only
@@ -124,8 +126,9 @@ def _lint(root, spec: dict, style: Style, report: GateReport) -> None:
     fill = style.fill or "none"
     if fill == "none" and root.get("fill") not in (None, "none"):
         report.fail(f"lint: fill must be none for outline styles (found '{root.get('fill')}')")
-    if style.palette:
-        allowed = {c.lower() for c in style.palette}
+    if icon_colors or style.palette:
+        source = list(icon_colors) if icon_colors else list(style.palette)
+        allowed = {c.lower() for c in source}
         used = {
             v.lower()
             for el in root.iter()
@@ -134,8 +137,9 @@ def _lint(root, spec: dict, style: Style, report: GateReport) -> None:
             if v.startswith("#")
         }
         rogue = used - allowed - {"#fff", "#ffffff"}  # white halo tolerated
+        scope = "icon colors" if icon_colors else "style palette"
         if rogue:
-            report.fail(f"lint: colors outside the style palette: {sorted(rogue)}")
+            report.fail(f"lint: colors outside the {scope}: {sorted(rogue)}")
     report.checks.append(f"lint: elements/attributes conform to style '{style.id}'")
 
 
@@ -368,11 +372,18 @@ def _min_distance(a: list[tuple[float, float]], b: list[tuple[float, float]]) ->
     return best
 
 
-def run_gate(svg_path: str | Path, pack: dict, style: Style) -> GateReport:
+def run_gate(
+    svg_path: str | Path,
+    pack: dict,
+    style: Style,
+    icon_colors: tuple[str, ...] | list[str] | None = None,
+) -> GateReport:
     """Run the deterministic gate on one SVG against a pack spec + style.
 
     Pack `strictness` (0-1) scales tolerances: low = forgiving (early rounds),
     high = strict (final polish). Defaults to 1 (full strictness).
+    icon_colors: per-icon subset — when set, colors must stay inside it
+    instead of the full style palette.
     """
     report = GateReport()
     strictness = pack.get("strictness", 1.0)
@@ -395,7 +406,7 @@ def run_gate(svg_path: str | Path, pack: dict, style: Style) -> GateReport:
         f"0 0 {style.size} {style.size}" if style.size else pack.get("spec", {}).get("viewBox")
     )
     viewbox = _viewbox(root, expected_vb, report)
-    _lint(root, pack.get("spec", {}), style, report)
+    _lint(root, pack.get("spec", {}), style, report, icon_colors=icon_colors)
     _geometry(root, pack.get("spec", {}), style, viewbox, report)
     _render(path, style, report)
     _apply_overrides(report, pack, style, path)

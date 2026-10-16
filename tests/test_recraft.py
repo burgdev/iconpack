@@ -760,6 +760,38 @@ def test_pack_grid_fits_icons() -> None:
     assert rc.pack_grid(9) == 3
 
 
+def test_generate_sends_per_icon_colors() -> None:
+    sent = {}
+
+    def fake(token, method, path, payload=None):
+        sent.update(payload or {})
+        return {"data": [{"b64_json": _b64_svg("<path/>")}]}
+
+    rc._request = fake
+    rc.generate("T", "a tent", n=1, colors=["#C05621", "notacolor", "#2B6CB0"])
+    assert sent["colors"] == [{"rgb": [192, 86, 33]}, {"rgb": [43, 108, 176]}]
+
+
+def test_draft_prompt_icon_colors_replace_palette() -> None:
+    icon = {"brief": "a tent", "main_color": "#2B6CB0", "colors": ["#C05621", "#2F855A"]}
+    import dataclasses
+
+    from iconpilot.styles import resolve_styles
+
+    style = dataclasses.replace(resolve_styles({})["flat-color"], palette=("#111111", "#222222"))
+    p = rc.draft_prompt(icon, style, {})
+    assert "colors #C05621, #2F855A" in p
+    assert "#111111" not in p and "#2B6CB0" not in p  # subset replaces both
+
+
+def _b64_svg(inner: str) -> str:
+    import base64
+
+    return base64.b64encode(
+        f'<svg xmlns="http://www.w3.org/2000/svg">{inner}</svg>'.encode()
+    ).decode()
+
+
 def test_to_current_color_swaps_literal_paints() -> None:
     svg = (
         '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24">'

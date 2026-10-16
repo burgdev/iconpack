@@ -387,3 +387,30 @@ def test_context_surfaces_palette_and_design_md(pack_dir: Path) -> None:
     ctx = build_context(pack_dir, pack_data, styles, "hut", "color")
     assert ctx["palette"] == ["#346751", "#9dd9d2"]
     assert ctx["design_md"] == "../../DESIGN.md"
+
+
+def test_gate_icon_colors_tighten_palette(tmp_path) -> None:
+    """Per-icon subset: in-world but outside the subset → fail."""
+    from iconpilot.gate.run import run_gate
+    from iconpilot.styles import resolve_styles
+
+    pack = {
+        "spec": {"viewBox": "0 0 24 24", "allowed_elements": ["path"]},
+        "strictness": 1.0,
+        "icons": {},
+    }
+    style = resolve_styles({})["flat-color"]  # palette has several colors
+    svg = tmp_path / "i.svg"
+    svg.write_text(
+        '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24">'
+        '<path fill="#2F855A" d="M4 4h16v16H4z"/></svg>'
+    )
+    # #2F855A is inside the style palette → no palette failure without subset
+    rep = run_gate(svg, pack, style)
+    assert not any("style palette" in f for f in rep.failures)
+    # outside the icon subset (only #C05621 allowed) → icon-colors failure
+    rep = run_gate(svg, pack, style, icon_colors=("#C05621",))
+    assert any("outside the icon colors" in f for f in rep.failures)
+    # inside the subset → no icon-colors failure
+    rep = run_gate(svg, pack, style, icon_colors=("#2F855A",))
+    assert not any("icon colors" in f for f in rep.failures)

@@ -442,6 +442,9 @@ class ReviewHandler(BaseHTTPRequestHandler):
                 req["style_reference_urls"] = [
                     f"<{len(plan['refs'])} PNG refs, ${rc.STYLE_REF_PRICE}/req>"
                 ]
+            _ic = (pack["icons"].get(icon_id) or {}).get("colors") or []
+            if _ic:
+                req["colors"] = list(_ic)  # per-icon subset (Recraft colors control)
             self._json(
                 200,
                 {
@@ -1075,7 +1078,12 @@ class ReviewHandler(BaseHTTPRequestHandler):
                     f.write_text(svg_text)
                     wrote_all.append(f"{icon_id}#{variant}:{f.name}")
                     n_all += 1
-                    if run_gate(f, pack, style).passed:
+                    if run_gate(
+                        f,
+                        pack,
+                        style,
+                        icon_colors=pack["icons"].get(icon_id, {}).get("colors") or None,
+                    ).passed:
                         pass_all += 1
             # cost bookkeeping
             if data.get("cost_usd"):
@@ -1242,7 +1250,9 @@ class ReviewHandler(BaseHTTPRequestHandler):
                 f = cand_dir / f"r{existing + i}.svg"
                 f.write_text(svg)
                 wrote.append(f.name)
-                if run_gate(f, pack, style).passed:
+                if run_gate(
+                    f, pack, style, icon_colors=pack["icons"].get(icon_id, {}).get("colors") or None
+                ).passed:
                     n_pass += 1
             round_json = runs_dir / run / "round.json"
             try:
@@ -1419,7 +1429,9 @@ class ReviewHandler(BaseHTTPRequestHandler):
                 for iid, vid in chunk:
                     icon = pack["icons"][iid]
                     b = icon.get("brief") or icon.get("description") or ""
-                    if icon.get("main_color") and not style_id_rc:
+                    if icon.get("colors"):
+                        b += ", colors " + " ".join(icon["colors"][:5])
+                    elif icon.get("main_color") and not style_id_rc:
                         b += f", dominant color {icon['main_color']}"
                     briefs.append(b)
                 prompt = rc.pack_sheet_prompt(briefs, style.label, grid, model=model)

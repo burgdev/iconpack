@@ -64,6 +64,8 @@ def build_context(
     }
     if icon.get("main_color"):
         ctx["main_color"] = icon["main_color"]
+    if icon.get("colors"):
+        ctx["icon_colors"] = list(icon["colors"])
     # pack docs (what this pack is for) — the icon BRIEF is the single
     # per-icon description, shared by humans and the agent
     if pack.get("description"):
@@ -274,6 +276,9 @@ def render_markdown(ctx: dict) -> str:
     ]
     if "main_color" in ctx:
         lines += [f"**Main color:** `{ctx['main_color']}`", ""]
+    if "icon_colors" in ctx:
+        joined = " ".join(f"`{c}`" for c in ctx["icon_colors"])
+        lines += [f"**Icon colors:** {joined} — use only these (subset of the style palette)", ""]
     if "pack_description" in ctx:
         lines += [f"**Pack (docs):** {ctx['pack_description']}", ""]
     for i, svg in enumerate(ctx.get("style_ref_svgs", [])[:3], 1):

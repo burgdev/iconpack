@@ -114,6 +114,8 @@ header .meta { color:var(--muted); font-size:.8rem; }
 .paladd { border-style:dashed; color:var(--muted); }
 .palrow { display:inline-flex; gap:3px; align-items:center; }
 .chip.rule { background:color-mix(in oklab, var(--accent) 10%, var(--card)); }
+.paldot.pick { cursor: pointer; outline: 2px solid transparent; outline-offset: 1px; }
+.paldot.pick.sel { outline-color: var(--accent); }
 .paldot { width:12px; height:12px; border-radius:50%; display:inline-block; border:1px solid var(--line); }
 .chat { max-height:300px; overflow-y:auto; border:1px solid var(--line); border-radius:10px; padding:10px; margin-bottom:10px;
        background:color-mix(in oklab, var(--bg) 60%, var(--card)); display:flex; flex-direction:column; gap:6px; }
@@ -488,12 +490,24 @@ footer { text-align:center; color:var(--muted); font-size:.75rem; padding:20px 0
         <div class="ghead">
           <b>{{ id }}</b>
           <span v-if="icon.main_color" class="chip" :style="{background: icon.main_color}">{{ icon.main_color }}</span>
+          <span v-if="(icon.colors || []).length" class="row" style="gap:3px">
+            <i v-for="c in icon.colors" :key="c" class="paldot" :style="{background:c}" :title="c"></i>
+          </span>
           <div v-if="S.editing === id" style="display:flex; gap:6px; flex:1">
             <input style="flex:1; min-width:100px" :value="icon.brief"
                    placeholder="describe the icon — human and agent read the same text"
                    @keydown.enter="saveIcon(id, $event.target.value)" @blur="saveIcon(id, $event.target.value)">
           </div>
           <span v-else class="muted" style="flex:1; cursor:text" @click="S.editing = id">{{ icon.brief }}</span>
+          <details style="margin-left:auto">
+            <summary class="muted" title="this icon's own colors — a subset of the style palette">colors</summary>
+            <div class="row" style="gap:5px; padding:6px 0">
+              <i v-for="c in iconStylePalette(id)" :key="c" class="paldot pick"
+                 :class="{ sel: (icon.colors || []).includes(c) }"
+                 :style="{background:c}" :title="c" @click="toggleIconColor(id, c)"></i>
+              <button v-if="(icon.colors || []).length" class="subtle" @click="toggleIconColor(id, null)">clear</button>
+            </div>
+          </details>
           <button class="subtle" @click="S.editing = S.editing === id ? null : id">edit</button>
         </div>
         <div class="grid">
@@ -1278,6 +1292,27 @@ function variantGroups(g) {
 }
 function packBriefIcon(g) {
   return S.pack.icons?.[g.icon]?.brief || '';
+}
+function iconStylePalette(iid) {
+  const icon = S.pack.icons?.[iid];
+  const vids = Object.keys(icon?.variants || {});
+  if (!vids.length) return [];
+  const st = icon.variants[vids[0]].style;
+  return (S.pack.styles?.[st]?.def?.palette) || [];
+}
+async function toggleIconColor(iid, c) {
+  const icon = S.pack.icons?.[iid];
+  if (!icon) return;
+  let colors = (icon.colors || []).slice();
+  if (c === null) colors = [];
+  else if (colors.includes(c)) colors = colors.filter(x => x !== c);
+  else if (colors.length >= 10) { flash('max 10 colors per icon', false); return; }
+  else colors.push(c);
+  try {
+    await api('/api/icon', { method: 'PUT', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ icon: iid, colors }) });
+    await load();
+  } catch (e) { flash('colors: ' + (e.d?.error || e.message), false); }
 }
 function mainColorIcon(g) {
   return S.pack.icons?.[g.icon]?.main_color;
@@ -2403,7 +2438,7 @@ const App = {
       showDebug, debugCopy, openNextDlg, addVariantBulk, addCustomStyle, saveRecraftDefaults,
       GATE_HELP, styleRules, stylePalette, ruleTitle, styleUsageCount, isPostponed, togglePostpone, applyAndNext, colState, toggleCol, toggleAll, usedStyles, setTab, iconSuggest, pickSuggestion, addNewIcon, startRoundWithNew,
       styleSummary, isOwnRef, editStyle, toggleGate, saveStyleRules, removeStyle, addStyleToPack, pickRefFile, removeRef,
-      vectorModels, curatedNames, styleDetail, editCustomStyle, recraftGenerate, commitResults, openStyleRc, styleRcCreate, styleRcSave, openBatchDlg, batchGroups, grpAll, toggleGrp, batchSelCount, batchTotal, batchSheets, batchDebug, batchEst, batchGenerate, keptCount, totalCount, keepAll,
+      vectorModels, curatedNames, styleDetail, editCustomStyle, recraftGenerate, commitResults, iconStylePalette, toggleIconColor, openStyleRc, styleRcCreate, styleRcSave, openBatchDlg, batchGroups, grpAll, toggleGrp, batchSelCount, batchTotal, batchSheets, batchDebug, batchEst, batchGenerate, keptCount, totalCount, keepAll,
 
     };
   },
