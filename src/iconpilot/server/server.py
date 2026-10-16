@@ -164,11 +164,20 @@ class ReviewHandler(BaseHTTPRequestHandler):
             wanted = (q.get("round") or [None])[0]
             active = wanted if wanted in runs else (runs[-1] if runs else None)
             entries = []
+            _pk: dict = {}
+            try:
+                _pk, _ = load_pack(self.pack_dir / "pack.json")
+            except Exception:  # orphan filter is best-effort
+                _pk = {"icons": {}}
             if active:
                 for svg in sorted((self.pack_dir / ".runs" / active).rglob("*.svg")):
                     rel = svg.relative_to(self.pack_dir / ".runs" / active).parts
-                    if len(rel) == 3:
-                        entries.append({"variant": rel[0], "icon": rel[1], "cand": rel[2][:-4]})
+                    if len(rel) != 3:
+                        continue
+                    var = _pk.get("icons", {}).get(rel[1], {}).get("variants", {}).get(rel[0])
+                    if var is None or "style" not in var:
+                        continue  # orphan: variant not authored in the pack
+                    entries.append({"variant": rel[0], "icon": rel[1], "cand": rel[2][:-4]})
             focus = None
             if active:
                 rj = self.pack_dir / ".runs" / active / "round.json"
