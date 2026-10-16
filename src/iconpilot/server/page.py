@@ -101,6 +101,7 @@ header .meta { color:var(--muted); font-size:.8rem; }
 @keyframes spin { to { transform: rotate(360deg); } }
 progress { flex:1; height:6px; accent-color: var(--accent); }
 .progressrow { display:flex; gap:10px; align-items:center; }
+.dropzone { outline: 2px dashed var(--accent); outline-offset: 4px; border-radius: 8px; }
 .tabs button { border:none; border-bottom:2px solid transparent; border-radius:8px 8px 0 0; background:none;
                color:var(--muted); padding:8px 14px; font-weight:600; display:inline-flex; gap:6px; align-items:center; }
 .tabs button.on { color:var(--accent); border-bottom-color:var(--accent); }
@@ -986,18 +987,23 @@ footer { text-align:center; color:var(--muted); font-size:.75rem; padding:20px 0
           <button class="subtle" @click="S.resultDlg = null" aria-label="Close">discard all</button></h3>
       <h3 v-if="S.resultDlg.batch"><span><span class="ic-lg" v-html="IC.bolt"></span> pack draft — {{ S.resultDlg.items.length }} icons × {{ S.resultDlg.takes }} takes · {{ keptCount() }}/{{ totalCount() }} kept</span>
           <button class="subtle" @click="S.resultDlg = null" aria-label="Close">discard all</button></h3>
-      <p class="muted" style="margin:0 0 10px">{{ S.resultDlg.model }} · ${{ S.resultDlg.cost }} · click to toggle, ✓ = keep</p>
+      <p class="muted" style="margin:0 0 10px">{{ S.resultDlg.model }} · ${{ S.resultDlg.cost }} · click to toggle, ✓ = keep · drag a take onto another icon of the same variant to reassign it</p>
       <div v-if="S.resultDlg.batch">
-        <div v-for="it in S.resultDlg.items" :key="it.icon + '#' + it.variant" style="margin-bottom:12px">
+        <div v-for="it in S.resultDlg.items" :key="it.icon + '#' + it.variant" style="margin-bottom:12px"
+             :class="{ dropzone: S.resultDlg.drag && S.resultDlg.drag.variant === it.variant && S.resultDlg.drag.icon !== it.icon }"
+             @dragover.prevent @drop="dropResult(it)">
           <div class="row" style="justify-content:space-between">
             <b>{{ it.icon }}#{{ it.variant }}</b>
             <span class="muted">{{ it.results.filter(r => r.keep).length }}/{{ it.results.length }}</span>
           </div>
           <div class="row" style="flex-wrap:wrap; gap:8px">
-            <div v-for="r in it.results" :key="r.id"
+            <div v-for="r in it.results" :key="r.uid"
+                 draggable="true"
+                 @dragstart="S.resultDlg.drag = { icon: it.icon, variant: it.variant, uid: r.uid }"
+                 @dragend="S.resultDlg.drag = null"
                  @click="r.keep = !r.keep"
-                 :style="{ cursor:'pointer', border: r.keep ? '2px solid var(--accent)' : '2px dashed var(--line)', borderRadius:'10px', padding:'6px', opacity: r.keep ? '1' : '.4' }">
-              <img :src="r.svg_data" width="64" height="64" style="border-radius:6px; background:#fff">
+                 :style="{ cursor:'grab', border: r.keep ? '2px solid var(--accent)' : '2px dashed var(--line)', borderRadius:'10px', padding:'6px', opacity: r.keep ? '1' : '.4' }">
+              <img :src="r.svg_data" width="64" height="64" style="border-radius:6px; background:#fff" draggable="false">
               <div style="text-align:center; font-size:.7rem; margin-top:2px">
                 {{ r.keep ? '✓' : '✕' }} {{ r.gate_pass ? 'pass' : 'gate' }}
               </div>
@@ -1819,8 +1825,10 @@ async function batchGenerate() {
       body: JSON.stringify({ targets, takes: d.takes, model: d.model || undefined }) });
     if (batchTimer) { clearInterval(batchTimer); batchTimer = null; }
     S.batchDlg = null;
+    let seq = 0;
     S.resultDlg = {
-      batch: true, items: r.items.map(it => ({ ...it, results: it.results.map(x => ({ ...x, keep: true })) })),
+      drag: null,
+      items: r.items.map(it => ({ ...it, results: it.results.map(x => ({ ...x, keep: true, uid: ++seq })) })),
       takes: r.takes, model: r.calls.map(c => c.model).filter((m, i, a) => a.indexOf(m) === i).join(', '),
       cost: r.cost_usd,
     };
@@ -1829,6 +1837,24 @@ async function batchGenerate() {
     d.busy = false;
     d.err = e.message || e.d?.error || 'Recraft request failed';
   }
+}
+function dropResult(target) {
+  const d = S.resultDlg;
+  const drag = d?.drag;
+  d.drag = null;
+  if (!drag || !target) return;
+  if (drag.icon === target.icon && drag.variant === target.variant) return;
+  if (drag.variant !== target.variant) {
+    flash('cannot move across variants — different style rules apply', false);
+    return;
+  }
+  const src = d.items.find(it => it.icon === drag.icon && it.variant === drag.variant);
+  if (!src) return;
+  const idx = src.results.findIndex(r => r.uid === drag.uid);
+  if (idx < 0) return;
+  const [moved] = src.results.splice(idx, 1);
+  target.results.push(moved);
+  flash('moved take → ' + target.icon + '#' + target.variant, true);
 }
 function keptCount() {
   const d = S.resultDlg; if (!d) return 0;
@@ -2486,7 +2512,7 @@ const App = {
       showDebug, debugCopy, openNextDlg, addVariantBulk, addCustomStyle, saveRecraftDefaults,
       GATE_HELP, styleRules, stylePalette, ruleTitle, styleUsageCount, isPostponed, togglePostpone, applyAndNext, colState, toggleCol, toggleAll, usedStyles, setTab, iconSuggest, pickSuggestion, addNewIcon, startRoundWithNew,
       styleSummary, isOwnRef, editStyle, toggleGate, saveStyleRules, removeStyle, addStyleToPack, pickRefFile, removeRef,
-      vectorModels, curatedNames, styleDetail, editCustomStyle, recraftGenerate, commitResults, iconStylePalette, toggleIconColor, openStyleRc, styleRcCreate, styleRcSave, openBatchDlg, batchGroups, grpAll, toggleGrp, batchSelCount, batchTotal, batchSheets, batchDebug, batchEst, batchGenerate, batchElapsed, batchProgress, keptCount, totalCount, keepAll,
+      vectorModels, curatedNames, styleDetail, editCustomStyle, recraftGenerate, commitResults, iconStylePalette, toggleIconColor, openStyleRc, styleRcCreate, styleRcSave, openBatchDlg, batchGroups, grpAll, toggleGrp, batchSelCount, batchTotal, batchSheets, batchDebug, batchEst, batchGenerate, batchElapsed, batchProgress, dropResult, keptCount, totalCount, keepAll,
 
     };
   },

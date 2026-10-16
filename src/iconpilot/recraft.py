@@ -330,7 +330,8 @@ def pack_sheet_prompt(
     cells = "; ".join(f"cell {i + 1}: {b}" for i, b in enumerate(briefs))
     body = (
         f"Icon set sheet: {len(briefs)} distinct icons in a {g} by {g} grid, "
-        f"one icon per cell — {cells}. Style: {style_phrase}; same stroke "
+        "one icon per cell, cells numbered left to right, top to bottom, "
+        f"starting at the top left — {cells}. Style: {style_phrase}; same stroke "
         "weight, corner treatment and color system across all cells. "
         "Generous clean margins between cells — no touching, no overlapping. "
         "Plain empty background, no grid lines, no borders, no labels, no text."
@@ -341,6 +342,33 @@ def pack_sheet_prompt(
 def pack_grid(n_icons: int) -> int:
     """Grid for a pack sheet: 2×2 for ≤4 icons, else 3×3 (chunk >9 upstream)."""
     return 2 if n_icons <= 4 else 3
+
+
+def _content_bbox(svg: str) -> tuple[float, float, float, float] | None:
+    """Union bbox of all drawn elements (source coordinates); None if empty."""
+    from xml.etree import ElementTree as _ET
+
+    try:
+        root = _ET.fromstring(svg)
+    except _ET.ParseError:
+        return None
+    xs0, ys0, xs1, ys1 = [], [], [], []
+    for el in root.iter():
+        if el is root:
+            continue
+        tag = el.tag.split("}")[-1]
+        if tag in ("defs", "linearGradient", "radialGradient", "stop", "g"):
+            continue
+        bb = _true_bbox(el)
+        if bb is None:
+            continue
+        xs0.append(bb[0])
+        ys0.append(bb[1])
+        xs1.append(bb[2])
+        ys1.append(bb[3])
+    if not xs0:
+        return None
+    return min(xs0), min(ys0), max(xs1), max(ys1)
 
 
 def _serialize(els) -> str:
@@ -428,9 +456,10 @@ def split_sheet(svg: str, grid: int, target: float = 24.0) -> list[str]:
         gy = min(g - 1, max(0, int((cy - y0) // cell)))
         cells.setdefault((gx, gy), []).append((el, bb))
 
-    # extract each cell
+    # extract each cell — row-major, matching the prompt's cell numbering
+    # (cell 1 = top-left, counting left→right, top→bottom)
     out = []
-    for gx, gy in sorted(cells):
+    for gx, gy in sorted(cells, key=lambda rc: (rc[1], rc[0])):
         entries = cells[(gx, gy)]
         bbs = [bb for _, bb in entries]
         ix0, iy0 = min(b[0] for b in bbs), min(b[1] for b in bbs)
@@ -591,7 +620,19 @@ def normalize(svg: str, target_viewbox: str, mono: bool = False) -> str:
     if source <= 0:
         raise RecraftError("cannot determine source grid size")
     k = round(target / source, 6)
+    # recenter: Recraft often leaves the icon off-center in its canvas —
+    # translate the content bbox into the middle of the pack grid
+    tx = ty = 0.0
+    bb = _content_bbox(svg)
+    if bb:
+        bx0, by0, bx1, by1 = bb
+        tx = (target - k * (bx1 - bx0)) / 2 - k * bx0
+        ty = (target - k * (by1 - by0)) / 2 - k * by0
+    if abs(tx) < 0.001 and abs(ty) < 0.001:
+        transform = f"scale({k})"
+    else:
+        transform = f"translate({round(tx, 3)} {round(ty, 3)}) scale({k})"
     return (
         f'<svg xmlns="http://www.w3.org/2000/svg" viewBox="{target_viewbox}">'
-        f'<g transform="scale({k})">{_inner(svg)}</g></svg>'
+        f'<g transform="{transform}">{_inner(svg)}</g></svg>'
     )

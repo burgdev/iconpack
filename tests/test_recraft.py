@@ -746,6 +746,35 @@ def test_sheet_prompt_has_clean_margins() -> None:
     assert "g id" not in p  # wrapper instruction removed
 
 
+def test_split_sheet_row_major_order() -> None:
+    """Cells map row-major: top-right comes before bottom-left."""
+    svg = (
+        '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 200">'
+        '<rect x="120" y="20" width="60" height="60" fill="#111111"/>'
+        '<rect x="20" y="120" width="60" height="60" fill="#222222"/>'
+        "</svg>"
+    )
+    cells = rc.split_sheet(svg, 2, target=24.0)
+    assert len(cells) == 2
+    assert "#111111" in cells[0]
+    assert "#222222" in cells[1]
+
+
+def test_normalize_recenters_offcenter_content() -> None:
+    raw = (
+        '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024">'
+        '<path fill="#282727" d="M100 100h200v200H100z"/>'
+        "</svg>"
+    )
+    out = rc.normalize(raw, "0 0 24 24")
+    assert "translate(" in out and "scale(" in out
+    k = 24 / 1024
+    tx = (24 - k * 200) / 2 - k * 100
+    assert "translate({:.3f}".format(tx) in out
+    full = rc.normalize(SRC, "0 0 24 24")
+    assert '<g transform="scale(' in full and "translate(" not in full
+
+
 def test_pack_sheet_prompt_different_icons_per_cell() -> None:
     p = rc.pack_sheet_prompt(["a tent", "a map", "a boot"], "Lineal color", 2)
     assert "distinct icons" in p and "one icon per cell" in p
