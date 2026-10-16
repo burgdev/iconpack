@@ -244,6 +244,13 @@ def apply_decisions(
         icon = pack["icons"].get(icon_id)
         if icon is None:
             raise ValueError(f"unknown icon '{icon_id}'")
+        if req_variant and (
+            req_variant not in icon["variants"] or "style" not in icon["variants"][req_variant]
+        ):
+            # self-heal: orphan decision (variant not authored — stale run
+            # data) — skip visibly instead of blocking the whole apply
+            log.append(f"skipped {icon_id}/{req_variant}: variant not authored")
+            continue
         probe = [
             str(it.get("cand") or it.get("rate_cand") or "") for it in payload.get("items", [])
         ]

@@ -2065,6 +2065,22 @@ function restoreDraft() {
     if (raw) S.decisions = JSON.parse(raw) || {};
   } catch {}
 }
+function healDraft() {
+  // self-heal: drop decision entries whose variant is not authored in the
+  // pack (orphan run data, removed variants) so stale ratings never block
+  const ok = {};
+  let dropped = 0;
+  for (const [k, v] of Object.entries(S.decisions || {})) {
+    const [iid, vid] = k.split('/');
+    if (S.pack.icons?.[iid]?.variants?.[vid]?.style) ok[k] = v;
+    else dropped++;
+  }
+  if (dropped) {
+    S.decisions = ok;
+    if (!editDirty) { S.decisionEdit = S.decisionText; }
+    saveDraft();
+  }
+}
 function clearDraft() {
   try { localStorage.removeItem(draftKey()); } catch {}
 }
@@ -2343,6 +2359,7 @@ async function load(manual) {
     api('/api/pack'), api(runUrl), api('/api/styles'), api('/api/ai-status'), api('/api/history'),
   ]);
   S.pack = p.pack; S.rev = p.rev; S.svgFiles = p.svg_files || {};
+  if (Object.keys(S.decisions || {}).length) healDraft();
   S.recraftReady = !!p.recraft_ready;
   S.round = run.round; S.latest = run.latest;
   S.locked = run.locked || {};
