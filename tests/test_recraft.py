@@ -760,6 +760,46 @@ def test_pack_grid_fits_icons() -> None:
     assert rc.pack_grid(9) == 3
 
 
+def test_create_style_bakes_prompt_and_palette() -> None:
+    import dataclasses
+
+    from iconpilot.recraft import create_style, style_prompt_text
+    from iconpilot.styles import resolve_styles
+
+    style = dataclasses.replace(resolve_styles({})["duotone"], palette=("#c05621", "#2b6cb0"))
+    sent = {}
+
+    def fake(token, method, path, payload=None):
+        sent.update(payload or {})
+        return {"id": "uuid-1"}
+
+    rc._request = fake
+    out = create_style(
+        "T", ["<svg/>"], prompt=style_prompt_text(style), palette=list(style.palette)
+    )
+    assert out["id"] == "uuid-1"
+    assert sent["prompt"].startswith("Duotone icon style")
+    assert sent["palette"] == {"colors": [{"rgb": [192, 86, 33]}, {"rgb": [43, 108, 176]}]}
+    assert sent["model"] == "recraftv4_styles"
+    assert "style" not in sent  # base 'icon' style is V2-only
+
+
+def test_draft_prompt_styled_false_subject_only() -> None:
+    # with a Recraft style_id attached, look + palette live in the style
+    icon = {"brief": "a tent", "main_color": "#2b6cb0"}
+    import dataclasses
+
+    from iconpilot.styles import resolve_styles
+
+    style = dataclasses.replace(
+        resolve_styles({})["flat-color"], palette=("#2b6cb0",), style_words=("flat fills",)
+    )
+    p = rc.draft_prompt(icon, style, {}, styled=False)
+    assert p.startswith("vector icon of a tent")
+    assert "#2b6cb0" not in p  # colors are baked into the style
+    assert "flat-color" not in p and "flat fills" not in p
+
+
 def test_draft_prompt_colors_before_style() -> None:
     # Recraft priority: earlier elements dominate — color must precede style
     icon = {"brief": "Two alpine peaks", "main_color": "#2b6cb0"}
