@@ -94,7 +94,13 @@ header .meta { color:var(--muted); font-size:.8rem; }
                       user-select:none; }
 .stylestrip summary:hover { color:var(--ink); border-color:var(--accent); }
 @keyframes spin { to { transform: rotate(360deg); } }
-.tabs { display:flex; gap:4px; margin: 0 0 14px; border-bottom:1px solid var(--line); }
+.tabs { display:flex; gap:4px; margin: 0 0 14px; border-bottom:1px solid var(--line);
+  position: sticky; top: 0; z-index: 30; background: var(--bg); }
+.spin { width:16px; height:16px; border:2px solid var(--line); border-top-color: var(--accent);
+  border-radius:50%; display:inline-block; animation: spin 0.9s linear infinite; }
+@keyframes spin { to { transform: rotate(360deg); } }
+progress { flex:1; height:6px; accent-color: var(--accent); }
+.progressrow { display:flex; gap:10px; align-items:center; }
 .tabs button { border:none; border-bottom:2px solid transparent; border-radius:8px 8px 0 0; background:none;
                color:var(--muted); padding:8px 14px; font-weight:600; display:inline-flex; gap:6px; align-items:center; }
 .tabs button.on { color:var(--accent); border-bottom-color:var(--accent); }
@@ -521,6 +527,9 @@ footer { text-align:center; color:var(--muted); font-size:.75rem; padding:20px 0
             <button v-if="v.status === 'approved' && !v.link" class="iconbtn"
                     :class="{ on: isPinned(id, vid) }" :title="isPinned(id, vid) ? 'unpin' : 'pin as style reference'"
                     @click="togglePin(id, vid)"><span class="ic" :class="{ filled: isPinned(id, vid) }" v-html="IC.pin"></span></button>
+            <button v-if="v.status === 'approved' && !v.link && !isViewing()" class="iconbtn"
+                    title="add to the next round again — the approved file stays in history" aria-label="add to next round"
+                    @click="reopen(id, vid)"><span class="ic" v-html="IC.unlock"></span></button>
             <span v-if="v.status === 'stale' || edited(id, vid)" class="muted">needs re-review</span>
           </div>
         </div>
@@ -957,6 +966,11 @@ footer { text-align:center; color:var(--muted); font-size:.75rem; padding:20px 0
         <button class="subtle" @click="batchDebug()">fetch from server</button>
         <pre v-if="S.batchDlg.reqs" style="max-height:260px; overflow:auto; font-size:.7rem; white-space:pre-wrap">{{ S.batchDlg.reqs }}</pre>
       </details>
+      <div v-if="S.batchDlg.busy" class="progressrow" style="margin-top:12px">
+        <span class="spin"></span>
+        <span>{{ S.batchDlg.phase }} · {{ batchElapsed() }}s</span>
+        <progress max="100" :value="batchProgress()"></progress>
+      </div>
       <div class="row" style="margin-top:12px">
         <button class="primary" :class="{ busy: S.batchDlg.busy }" :disabled="!batchSelCount()" @click="batchGenerate()">
           <span class="ic" v-html="IC.bolt"></span> generate {{ batchSelCount() * S.batchDlg.takes }} candidates · ~${{ batchEst() }}
@@ -1779,15 +1793,28 @@ function batchEst() {
   const price = (S.recraftModels.prices || {})[d.model] || 0.05;
   return (sheets * d.takes * price).toFixed(2);
 }
+let batchTimer = null;
+function batchElapsed() { return S.batchDlg?.t0 ? Math.round((Date.now() - S.batchDlg.t0) / 1000) : 0; }
+function batchProgress() {
+  const d = S.batchDlg;
+  if (!d || !d.est) return 0;
+  return Math.min(95, Math.round((batchElapsed() / d.est) * 100));
+}
 async function batchGenerate() {
   const d = S.batchDlg;
   if (!d || d.busy) return;
   d.busy = true; d.err = '';
+  d.t0 = Date.now();
+  const sheets = batchSheets();
+  d.est = Math.max(10, sheets * 12);  // ~12s per paid image, rough
+  d.phase = 'sending ' + sheets + ' sheet request' + (sheets > 1 ? 's' : '') + ' to Recraft';
+  batchTimer = setInterval(() => { d.phase = batchElapsed() > d.est * 0.6 ? 'splitting sheets into cells' : d.phase.replace(/^splitting.*$/, 'generating sheets at Recraft') || 'generating sheets at Recraft'; }, 1000);
   try {
     const targets = Object.entries(d.sel).filter(([, on]) => on).map(([tg]) => tg);
     const r = await api('/api/recraft-batch', {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ targets, takes: d.takes, model: d.model || undefined }) });
+    if (batchTimer) { clearInterval(batchTimer); batchTimer = null; }
     S.batchDlg = null;
     S.resultDlg = {
       batch: true, items: r.items.map(it => ({ ...it, results: it.results.map(x => ({ ...x, keep: true })) })),
@@ -1795,6 +1822,7 @@ async function batchGenerate() {
       cost: r.cost_usd,
     };
   } catch (e) {
+    if (batchTimer) { clearInterval(batchTimer); batchTimer = null; }
     d.busy = false;
     d.err = e.message || e.d?.error || 'Recraft request failed';
   }
@@ -2455,7 +2483,7 @@ const App = {
       showDebug, debugCopy, openNextDlg, addVariantBulk, addCustomStyle, saveRecraftDefaults,
       GATE_HELP, styleRules, stylePalette, ruleTitle, styleUsageCount, isPostponed, togglePostpone, applyAndNext, colState, toggleCol, toggleAll, usedStyles, setTab, iconSuggest, pickSuggestion, addNewIcon, startRoundWithNew,
       styleSummary, isOwnRef, editStyle, toggleGate, saveStyleRules, removeStyle, addStyleToPack, pickRefFile, removeRef,
-      vectorModels, curatedNames, styleDetail, editCustomStyle, recraftGenerate, commitResults, iconStylePalette, toggleIconColor, openStyleRc, styleRcCreate, styleRcSave, openBatchDlg, batchGroups, grpAll, toggleGrp, batchSelCount, batchTotal, batchSheets, batchDebug, batchEst, batchGenerate, keptCount, totalCount, keepAll,
+      vectorModels, curatedNames, styleDetail, editCustomStyle, recraftGenerate, commitResults, iconStylePalette, toggleIconColor, openStyleRc, styleRcCreate, styleRcSave, openBatchDlg, batchGroups, grpAll, toggleGrp, batchSelCount, batchTotal, batchSheets, batchDebug, batchEst, batchGenerate, batchElapsed, batchProgress, keptCount, totalCount, keepAll,
 
     };
   },
