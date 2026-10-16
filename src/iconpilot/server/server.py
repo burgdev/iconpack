@@ -1249,6 +1249,19 @@ class ReviewHandler(BaseHTTPRequestHandler):
                     rc.price_per_image(model) * takes + (rc.STYLE_REF_PRICE if ref_urls else 0),
                     4,
                 )
+                request: dict = {
+                    "model": model,
+                    "prompt": prompt,
+                    "size": "1:1",
+                    "response_format": "b64_json",
+                    "n": takes,
+                }
+                if style_id_rc:
+                    request["style_id"] = style_id_rc
+                elif curated:
+                    request["style"] = curated
+                elif ref_urls:
+                    request["style_reference_urls"] = [f"<{len(ref_urls)} PNG refs>"]
                 calls.append(
                     {
                         "style": style_id,
@@ -1260,6 +1273,8 @@ class ReviewHandler(BaseHTTPRequestHandler):
                         "style_refs": len(refs),
                         "style_id": style_id_rc or "",
                         "curated": curated or "",
+                        "endpoint": rc.API_BASE + "/images/generations/vector",
+                        "request": request,
                     }
                 )
                 if data.get("debug"):
@@ -1306,6 +1321,8 @@ class ReviewHandler(BaseHTTPRequestHandler):
                     "style_refs": c["style_refs"],
                     "style_id": c["style_id"],
                     "curated": c["curated"],
+                    "endpoint": c["endpoint"],
+                    "request": c["request"],
                 }
                 for c in calls
             ],

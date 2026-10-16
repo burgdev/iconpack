@@ -879,27 +879,41 @@ footer { text-align:center; color:var(--muted); font-size:.75rem; padding:20px 0
     <div class="dialog" style="max-width:680px">
       <h3><span><span class="ic-lg" v-html="IC.bolt"></span> draft pack — {{ batchSelCount() }} icons × {{ S.batchDlg.takes }} takes</span>
           <button class="subtle" @click="S.batchDlg = null" aria-label="Close">close</button></h3>
-      <p class="muted" style="margin:0 0 10px">Same icons on every 3×3 sheet (≤9 per sheet), one different take per sheet. POST <code>/v1/images/generations/vector</code> · n={{ S.batchDlg.takes }} sheets per style · review before anything is written.</p>
-      <div v-for="grp in batchGroups()" :key="grp.style" style="margin-bottom:8px">
+      <p class="muted" style="margin:0 0 10px">One Recraft request per style: <b>same icons on every 3×3 sheet</b> (≤9 icons per sheet, one icon per cell), <b>one different take per sheet</b>. You review every take before anything is written.</p>
+      <div v-for="grp in batchGroups()" :key="grp.style" style="margin-bottom:10px">
         <div class="row" style="justify-content:space-between">
-          <span class="chip">{{ grp.style }} · {{ grp.targets.length }}</span>
-          <button class="subtle" @click="toggleGrp(grp)">{{ grpAll(grp) ? 'none' : 'all' }}</button>
+          <b>{{ grp.style }}</b>
+          <button class="subtle" @click="toggleGrp(grp)">{{ grpAll(grp) ? 'select none' : 'select all' }}</button>
         </div>
-        <div class="row" style="flex-wrap:wrap; gap:6px">
-          <span v-for="tg in grp.targets" :key="tg" class="chip" style="cursor:pointer"
-                :class="{ done: S.batchDlg.sel[tg] }" @click="S.batchDlg.sel[tg] = !S.batchDlg.sel[tg]">{{ tg }}</span>
+        <div class="row" style="flex-wrap:wrap; gap:4px 14px">
+          <label v-for="tg in grp.targets" :key="tg" style="display:flex; gap:5px; align-items:center; cursor:pointer">
+            <input type="checkbox" v-model="S.batchDlg.sel[tg]"> <span>{{ tg }}</span>
+          </label>
         </div>
       </div>
-      <div class="row" style="margin-top:10px">
+      <div class="row" style="margin-top:8px; gap:8px">
         <label class="muted">takes per icon</label>
-        <select v-model.number="S.batchDlg.takes"><option v-for="tk in [2,3,4,5,6]" :key="tk" :value="tk">{{ tk }}</option></select>
+        <select v-model.number="S.batchDlg.takes"><option v-for="tk in [1,2,3,4,5,6]" :key="tk" :value="tk">{{ tk }}</option></select>
+        <span class="muted" style="font-size:.75rem">each take = one extra sheet with all selected icons</span>
+      </div>
+      <div class="row" style="margin-top:6px; gap:8px">
         <label class="muted">model</label>
         <select v-model="S.batchDlg.model">
           <option value="">auto</option>
           <option v-for="m in vectorModels()" :key="m" :value="m">{{ m }} (${{ (S.recraftModels.prices || {})[m] || '?' }}/img)</option>
         </select>
-        <span class="chip rule" title="estimated cost">≈ ${{ batchEst() }}</span>
       </div>
+      <p style="margin:10px 0 0; display:flex; gap:6px; flex-wrap:wrap">
+        <span class="chip">{{ batchSelCount() }}/{{ batchTotal() }} icons</span>
+        <span class="chip">{{ batchSheets() }} sheet(s) × {{ S.batchDlg.takes }} take(s)</span>
+        <span class="chip">{{ batchSelCount() * S.batchDlg.takes }} candidates</span>
+        <span class="chip rule" title="estimated cost">≈ ${{ batchEst() }}</span>
+      </p>
+      <details v-if="S.debug" style="margin-top:8px">
+        <summary class="muted">debug: exact request JSON</summary>
+        <button class="subtle" @click="batchDebug()">fetch from server</button>
+        <pre v-if="S.batchDlg.reqs" style="max-height:260px; overflow:auto; font-size:.7rem; white-space:pre-wrap">{{ S.batchDlg.reqs }}</pre>
+      </details>
       <div class="row" style="margin-top:12px">
         <button class="primary" :class="{ busy: S.batchDlg.busy }" :disabled="!batchSelCount()" @click="batchGenerate()">
           <span class="ic" v-html="IC.bolt"></span> generate {{ batchSelCount() * S.batchDlg.takes }} candidates · ~${{ batchEst() }}
@@ -1625,6 +1639,28 @@ function toggleGrp(grp) {
   grp.targets.forEach(tg => { S.batchDlg.sel[tg] = on; });
 }
 function batchSelCount() { return Object.values(S.batchDlg?.sel || {}).filter(Boolean).length; }
+function batchTotal() { return Object.keys(S.batchDlg?.sel || {}).length; }
+function batchSheets() {
+  const byStyle = {};
+  for (const [tg, on] of Object.entries(S.batchDlg?.sel || {})) {
+    if (!on) continue;
+    const [iid, vid] = tg.split('#');
+    const st = S.pack.icons?.[iid]?.variants?.[vid]?.style || '?';
+    byStyle[st] = (byStyle[st] || 0) + 1;
+  }
+  return Object.values(byStyle).reduce((a, n) => a + Math.ceil(n / 9), 0);
+}
+async function batchDebug() {
+  const d = S.batchDlg;
+  if (!d) return;
+  try {
+    const targets = Object.entries(d.sel).filter(([, on]) => on).map(([tg]) => tg);
+    const r = await api('/api/recraft-batch', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ targets, takes: d.takes, model: d.model || undefined, debug: true }) });
+    d.reqs = r.calls.map(c => 'POST ' + c.endpoint + String.fromCharCode(10) + JSON.stringify(c.request, null, 2)).join(String.fromCharCode(10) + String.fromCharCode(10));
+  } catch (e) { d.reqs = 'error: ' + (e.d?.error || e.message); }
+}
 function batchEst() {
   const d = S.batchDlg; if (!d) return '0.00';
   const byStyle = {};
@@ -2298,7 +2334,7 @@ const App = {
       showDebug, debugCopy, openNextDlg, addVariantBulk, addCustomStyle, saveRecraftDefaults,
       GATE_HELP, styleRules, stylePalette, ruleTitle, styleUsageCount, isPostponed, togglePostpone, applyAndNext, colState, toggleCol, toggleAll, usedStyles, setTab, iconSuggest, pickSuggestion, addNewIcon, startRoundWithNew,
       styleSummary, isOwnRef, editStyle, toggleGate, saveStyleRules, removeStyle, addStyleToPack, pickRefFile, removeRef,
-      vectorModels, curatedNames, styleDetail, editCustomStyle, recraftGenerate, commitResults, openBatchDlg, batchGroups, grpAll, toggleGrp, batchSelCount, batchEst, batchGenerate, keptCount, totalCount, keepAll,
+      vectorModels, curatedNames, styleDetail, editCustomStyle, recraftGenerate, commitResults, openBatchDlg, batchGroups, grpAll, toggleGrp, batchSelCount, batchTotal, batchSheets, batchDebug, batchEst, batchGenerate, keptCount, totalCount, keepAll,
 
     };
   },
