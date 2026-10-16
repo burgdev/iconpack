@@ -45,15 +45,6 @@ MODEL_PRICES: dict[str, float] = {
 STYLE_CREATE_PRICE = 0.005
 
 
-SHEET_PROMPT_SUFFIX = (
-    ", arranged as a {g} by {g} grid of {n} distinct icons on one canvas. "
-    "Equal square cells with generous clean margins between icons — no touching, "
-    "no overlapping, each icon fully inside its own cell area. "
-    "Plain empty background, no grid lines, no borders, no labels, no numbers, "
-    "no background color"
-)
-
-
 def refs_hash(refs: list[str]) -> str:
     """Stable hash over ref contents — changes when any ref changes."""
     import hashlib
@@ -136,20 +127,18 @@ def draft_prompt(icon: dict, style, pack: dict, model: str | None = None) -> str
     color world. Truncated to the model's prompt limit.
     """
     limit = prompt_limit(model or "")
-    # one field: the brief describes the icon for humans AND the agent
-    parts = [
-        f"icon: {icon.get('brief') or icon.get('description') or ''}",
-        f"{style.label} icon style, simple scalable vector icon",
-        ", ".join(style.style_words[:4]),
-    ]
+    # Recraft priority order (earlier = stronger): subject → color → style
+    # → rules → layout → avoids
+    parts = [f"vector icon of {icon.get('brief') or icon.get('description') or ''}"]
     if icon.get("main_color"):
         parts.append(f"dominant color {icon['main_color']}")
     if style.palette:
         parts.append("palette " + ", ".join(style.palette[:5]))
+    parts += [f"{style.label} icon style", ", ".join(style.style_words[:4])]
+    parts += pack.get("rules", [])[:3]
+    parts.append("one centered icon, isolated on plain white background, no scene")
     if style.avoid:
         parts.append("avoid: " + ", ".join(style.avoid[:3]))
-    parts += pack.get("rules", [])[:3]
-    parts.append("no background, transparent background, isolated icon on plain white")
     return ", ".join(p for p in parts if p)[:limit]
 
 
@@ -229,11 +218,29 @@ def create_style(token: str, svg_texts: list[str], match: str = "precise") -> di
 
 
 def sheet_prompt(prompt: str, grid: int, model: str | None = None) -> str:
-    """Wrap a drafting prompt so one image carries grid x grid variants."""
+    """One canvas, g×g cells: every cell a different take on the SAME icon.
+
+    Same-subject semantics lead the prompt (earlier = higher priority per
+    Recraft's guide); the draft prompt is embedded as the icon description;
+    layout constraints close.
+    """
     g = int(grid)
+    n = g * g
     lim = prompt_limit(model or "")
-    tail = SHEET_PROMPT_SUFFIX.format(g=g, n=g * g)
-    return (prompt[: lim - len(tail)] + tail)[:lim]
+    head = (
+        f"Icon design sheet: {n} different design variations of ONE icon — "
+        "every cell shows the same subject, each cell a different take on it "
+        "(vary composition, proportions and detail arrangement, keep the "
+        f"subject identical). {g} by {g} grid on one canvas, one variation "
+        "per cell. Icon: "
+    )
+    tail = (
+        " Generous clean margins between cells — no touching, no "
+        "overlapping, each icon fully inside its own cell. Plain empty "
+        "background, no grid lines, no borders, no labels, no numbers, "
+        "no background color."
+    )
+    return (head + prompt[: lim - len(head) - len(tail)] + tail)[:lim]
 
 
 def generate_refs_curated(
@@ -245,9 +252,8 @@ def generate_refs_curated(
     styles), then split — cheap brand-consistent refs for round 0.
     """
     n = grid * grid
-    prompt = batch_prompt(
+    prompt = pack_sheet_prompt(
         subjects[:n],
-        1,
         f"Recraft curated '{CURATED_STYLE_MAP.get(style_id, 'Icon')}' icon style",
         grid,
     )
@@ -266,64 +272,29 @@ def generate_refs_curated(
     return split_sheet(svg, grid, target=24.0)
 
 
-def batch_prompt(
-    icon_prompts: list[str], vpi: int, style_phrase: str, grid: int, model: str | None = None
+def pack_sheet_prompt(
+    briefs: list[str], style_phrase: str, grid: int, model: str | None = None
 ) -> str:
-    """One sheet prompt for several icons x variants per icon.
+    """One sheet of DIFFERENT icons, one per cell — the proven grid pattern.
 
-    Cell assignment is row-major: icon k occupies cells k*vpi+1 .. (k+1)*vpi.
-    The named-group request (<g id='iconN'>) matches the splitter.
+    Variation happens ACROSS the n generated sheets (same icons, different
+    takes), never within one image. Cell k of every sheet maps to icon k.
     """
-    n = grid * grid
-    assigns = []
-    for k, desc in enumerate(icon_prompts):
-        first, last = k * vpi + 1, (k + 1) * vpi
-        assigns.append(f"cells {first}-{last}: {desc}")
+    g = int(grid)
+    cells = "; ".join(f"cell {i + 1}: {b}" for i, b in enumerate(briefs))
     body = (
-        f"{n} icons in a {grid} by {grid} grid, {vpi} distinct variants per subject. "
-        + "; ".join(assigns)
-        + f". Style: {style_phrase}."
+        f"Icon set sheet: {len(briefs)} distinct icons in a {g} by {g} grid, "
+        f"one icon per cell — {cells}. Style: {style_phrase}; same stroke "
+        "weight, corner treatment and color system across all cells. "
+        "Generous clean margins between cells — no touching, no overlapping. "
+        "Plain empty background, no grid lines, no borders, no labels, no text."
     )
-    tail = SHEET_PROMPT_SUFFIX.format(g=grid, n=n)
-    lim = prompt_limit(model or "")
-    return (body[: lim - len(tail)] + tail)[:lim]
+    return body[: prompt_limit(model or "")]
 
 
-def plan_batch(calls_by_style: dict[str, list[str]], vpi: int) -> list[dict]:
-    """Pack (style -> icon prompts) into as few sheet calls as possible.
-
-    Rules: one call per style (refs/style_id differ); never split an icon's
-    variants across calls unless vpi alone exceeds the grid; grid is the
-    smallest that fits (2x2/3x3/4x4; vpi<=4 avoids splits up to 16 cells).
-    """
-    vpi = max(1, min(int(vpi), 6))
-    plans = []
-    for style_id, prompts in calls_by_style.items():
-        if not prompts:
-            continue
-        per_sheet = (
-            max(1, (grid * grid) // max(vpi, 1)) if (grid := _fit_grid(len(prompts) * vpi)) else 1
-        )
-        chunks = [prompts[i : i + per_sheet] for i in range(0, len(prompts), per_sheet)]
-        for chunk in chunks:
-            grid = _fit_grid(len(chunk) * vpi)
-            plans.append(
-                {
-                    "style": style_id,
-                    "icons": chunk,
-                    "vpi": vpi,
-                    "grid": grid,
-                    "cells": len(chunk) * vpi,
-                }
-            )
-    return plans
-
-
-def _fit_grid(cells: int) -> int:
-    for g in (1, 2, 3, 4):
-        if g * g >= cells:
-            return g
-    return 4
+def pack_grid(n_icons: int) -> int:
+    """Grid for a pack sheet: 2×2 for ≤4 icons, else 3×3 (chunk >9 upstream)."""
+    return 2 if n_icons <= 4 else 3
 
 
 def _serialize(els) -> str:

@@ -324,7 +324,10 @@ class ReviewHandler(BaseHTTPRequestHandler):
 
             self._json(
                 200,
-                {"prices": dict(_rc.MODEL_PRICES), "suggestions": dict(_rc.STYLE_MODEL_SUGGESTIONS)},
+                {
+                    "prices": dict(_rc.MODEL_PRICES),
+                    "suggestions": dict(_rc.STYLE_MODEL_SUGGESTIONS),
+                },
             )
             return
         if url.path == "/api/recraft-request":
@@ -390,7 +393,9 @@ class ReviewHandler(BaseHTTPRequestHandler):
             elif plan.get("curated") and "v4" not in plan["model"]:
                 req["style"] = plan["curated"]
             elif plan["refs"]:
-                req["style_reference_urls"] = [f"<{len(plan['refs'])} PNG refs, ${rc.STYLE_REF_PRICE}/req>"]
+                req["style_reference_urls"] = [
+                    f"<{len(plan['refs'])} PNG refs, ${rc.STYLE_REF_PRICE}/req>"
+                ]
             self._json(
                 200,
                 {
@@ -878,7 +883,7 @@ class ReviewHandler(BaseHTTPRequestHandler):
         if grid >= 2:
             sheet = rc.generate(
                 token,
-                rc.sheet_prompt(plan["prompt"], grid),
+                rc.sheet_prompt(plan["prompt"], grid, model=plan["model"]),
                 n=1,
                 style_id=style_id,
                 model=plan["model"],
@@ -909,7 +914,11 @@ class ReviewHandler(BaseHTTPRequestHandler):
                     "id": i,
                     "svg_data": f"data:image/svg+xml;base64,{b64}",
                     "gate_pass": run_gate_svg(
-                        svg, pack, styles, data.get("icon"), data.get("variant")
+                        svg,
+                        pack,
+                        styles,
+                        str(data.get("icon") or ""),
+                        str(data.get("variant") or ""),
                     ),
                 }
             )
@@ -921,40 +930,68 @@ class ReviewHandler(BaseHTTPRequestHandler):
         }
 
     def _recraft_commit(self, data: dict) -> dict:
-        """Write selected SVG candidates to the run directory (after user review)."""
+        """Write user-picked SVG candidates to the run directory.
+
+        Body: {icon, variant, svgs} for one icon, or {items: [{icon,
+        variant, svgs}], cost_usd?} for pack drafts. Nothing lands on disk
+        before this — generation endpoints only return previews.
+        """
+        import json as _json
+
         from iconpilot.gate.run import run_gate
 
-        icon_id = data.get("icon", "")
-        variant = data.get("variant", "")
-        svgs = data.get("svgs", [])
-        if not icon_id or not variant or not svgs:
-            raise ValueError("need icon, variant, svgs")
+        items = data.get("items") or [
+            {
+                "icon": data.get("icon", ""),
+                "variant": data.get("variant", ""),
+                "svgs": data.get("svgs", []),
+            }
+        ]
+        if not items or any(
+            not it.get("icon") or not it.get("variant") or not it.get("svgs") for it in items
+        ):
+            raise ValueError("need icon, variant, svgs (or items[])")
 
         with pack_lock(self.pack_dir):
             pack, styles = load_pack(self.pack_dir / "pack.json")
-        icon = pack["icons"].get(icon_id)
-        if icon is None or "style" not in icon.get("variants", {}).get(variant, {}):
-            raise ValueError(f"no authored variant {icon_id}#{variant}")
-
-        style = styles[icon["variants"][variant]["style"]]
         runs_dir = self.pack_dir / ".runs"
         runs = sorted(p.name for p in runs_dir.glob("r*")) if runs_dir.is_dir() else []
         run = runs[-1] if runs else None
         if not run:
             raise ValueError("no round yet — start a pass first")
 
-        cand_dir = runs_dir / run / variant / icon_id
-        cand_dir.mkdir(parents=True, exist_ok=True)
-        existing = len(list(cand_dir.glob("r*.svg")))
-        wrote = []
-        n_pass = 0
-        for i, svg_text in enumerate(svgs, start=1):
-            f = cand_dir / f"r{existing + i}.svg"
-            f.write_text(svg_text)
-            wrote.append(f.name)
-            if run_gate(f, pack, style).passed:
-                n_pass += 1
-        return {"round": run, "wrote": wrote, "gate_passed": n_pass}
+        wrote_all, pass_all, n_all = [], 0, 0
+        with pack_lock(self.pack_dir):
+            for it in items:
+                icon_id, variant, svgs = it["icon"], it["variant"], it["svgs"]
+                icon = pack["icons"].get(icon_id)
+                if icon is None or "style" not in icon.get("variants", {}).get(variant, {}):
+                    raise ValueError(f"no authored variant {icon_id}#{variant}")
+                style = styles[icon["variants"][variant]["style"]]
+                cand_dir = runs_dir / run / variant / icon_id
+                cand_dir.mkdir(parents=True, exist_ok=True)
+                existing = len(list(cand_dir.glob("r*.svg")))
+                for i, svg_text in enumerate(svgs, start=1):
+                    f = cand_dir / f"r{existing + i}.svg"
+                    f.write_text(svg_text)
+                    wrote_all.append(f"{icon_id}#{variant}:{f.name}")
+                    n_all += 1
+                    if run_gate(f, pack, style).passed:
+                        pass_all += 1
+            # cost bookkeeping
+            if data.get("cost_usd"):
+                round_json = runs_dir / run / "round.json"
+                try:
+                    rj = _json.loads(round_json.read_text()) if round_json.is_file() else {}
+                except ValueError:
+                    rj = {}
+                rj.setdefault("models_used", {})["seeder"] = "recraft"
+                rj["estimated_cost_usd"] = round(
+                    rj.get("estimated_cost_usd", 0) + float(data["cost_usd"]), 4
+                )
+                rj["candidates_generated"] = rj.get("candidates_generated", 0) + n_all
+                round_json.write_text(_json.dumps(rj, indent=2) + "\n")
+        return {"round": run, "wrote": wrote_all, "gate_passed": pass_all}
 
     def _recraft_draft(self, data: dict) -> dict:
         """Seed Recraft candidates for one icon (+optional variant) into the latest run."""
@@ -1056,7 +1093,7 @@ class ReviewHandler(BaseHTTPRequestHandler):
         if grid >= 2:
             sheet_svgs = rc.generate(
                 token,
-                rc.sheet_prompt(plan["prompt"], grid),
+                rc.sheet_prompt(plan["prompt"], grid, model=plan["model"]),
                 n=1,
                 style_id=style_id,
                 model=plan["model"],
@@ -1122,23 +1159,28 @@ class ReviewHandler(BaseHTTPRequestHandler):
         }
 
     def _recraft_batch(self, data: dict) -> dict:
-        """Smart Recraft seeding: fewest calls, one per style, icons packed.
+        """Pack draft: same icons on every sheet, takes vary ACROSS sheets.
 
-        Body: {targets: ["icon#variant", ...], vpi: 2, model?: "..."}
-        Cells map row-major: icon k of a call gets cells k*vpi+1..(k+1)*vpi.
+        Body: {targets: ["icon#variant", ...], takes: 4, model?: str,
+        debug?: bool}. Icons are grouped by style and chunked ≤9 per 3×3
+        sheet (different icons per cell — the proven grid pattern). ONE
+        request per chunk generates `takes` sheets; cell k of every sheet
+        is one take of icon k. Preview only — results are returned,
+        nothing is written until /api/recraft-commit.
         """
+        import base64 as _b64
+        import io as _io
+
         import iconpilot.recraft as rc
-        from iconpilot.gate.run import run_gate
 
         token = rc.resolve_token()
-        if not token:
+        if not token and not data.get("debug"):
             raise ValueError("no Recraft token on the server — set RECRAFT_API_TOKEN")
 
-        vpi = max(1, min(int(data.get("vpi") or 2), 6))
+        takes = max(1, min(int(data.get("takes") or 4), 6))
         with pack_lock(self.pack_dir):
             pack, styles = load_pack(self.pack_dir / "pack.json")
 
-        # group targets by style, preserving order; per-icon prompts
         by_style: dict[str, list[tuple[str, str]]] = {}
         for target in data.get("targets", []):
             iid, _, vid = str(target).partition("#")
@@ -1150,8 +1192,11 @@ class ReviewHandler(BaseHTTPRequestHandler):
             by_style.setdefault(var["style"], []).append((iid, vid))
 
         cfg = pack.get("recraft", {})
+        viewbox = pack["spec"]["viewBox"]
         model_override = data.get("model")
-        calls = []
+        items: list[dict] = []
+        calls: list[dict] = []
+        total_cost = 0.0
         for style_id, targets in by_style.items():
             style = styles[style_id]
             style_id_rc = cfg.get("style_ids", {}).get(style_id) or cfg.get("style_id")
@@ -1167,109 +1212,107 @@ class ReviewHandler(BaseHTTPRequestHandler):
             )
             if model not in rc.VECTOR_MODELS:
                 raise ValueError(f"model must be a vector model, got '{model}'")
-            icon_prompts = []
-            for iid, vid in targets:
-                icon = pack["icons"][iid]
-                icon_prompts.append(
-                    rc.draft_prompt(icon, styles[icon["variants"][vid]["style"]], pack)
-                )
-            for plan in rc.plan_batch({style_id: icon_prompts}, vpi):
-                plan.update(
-                    model=model,
-                    style_id=style_id_rc,
-                    refs=refs,
-                    targets=targets,
-                    prompt=rc.batch_prompt(plan["icons"], plan["vpi"], style.label, plan["grid"]),
-                    cost=round(
-                        rc.price_per_image(model)
-                        + (rc.STYLE_REF_PRICE if refs and not style_id_rc else 0),
-                        4,
-                    ),
-                )
-                calls.append(plan)
+            # Recraft generations endpoint only accepts raster refs
+            ref_urls = None
+            if refs and "v4" in model and not style_id_rc:
+                from iconpilot.render.render import render_png_text
 
-        # debug mode: return the planned requests without calling
-        if data.get("debug"):
-            return {
-                "calls": [
+                pngs = []
+                for svg_text in refs:
+                    try:
+                        img = render_png_text(svg_text, 256)
+                        buf = _io.BytesIO()
+                        img.save(buf, "PNG")
+                        pngs.append(
+                            "data:image/png;base64," + _b64.b64encode(buf.getvalue()).decode()
+                        )
+                    except (ValueError, OSError):
+                        pass
+                ref_urls = pngs or None
+            curated = (
+                rc.CURATED_STYLE_MAP.get(style_id)
+                if not style_id_rc and not ref_urls and "v4" not in model
+                else None
+            )
+            for i0 in range(0, len(targets), 9):
+                chunk = targets[i0 : i0 + 9]
+                grid = rc.pack_grid(len(chunk))
+                briefs = []
+                for iid, vid in chunk:
+                    icon = pack["icons"][iid]
+                    b = icon.get("brief") or icon.get("description") or ""
+                    if icon.get("main_color"):
+                        b += f", dominant color {icon['main_color']}"
+                    briefs.append(b)
+                prompt = rc.pack_sheet_prompt(briefs, style.label, grid, model=model)
+                cost = round(
+                    rc.price_per_image(model) * takes + (rc.STYLE_REF_PRICE if ref_urls else 0),
+                    4,
+                )
+                calls.append(
                     {
-                        "style": c["style"],
-                        "grid": c["grid"],
-                        "vpi": c["vpi"],
-                        "model": c["model"],
-                        "cost": c["cost"],
-                        "prompt": c["prompt"][:300] + "…",
-                        "style_refs": len(c["refs"]),
+                        "style": style_id,
+                        "grid": grid,
+                        "takes": takes,
+                        "model": model,
+                        "cost": cost,
+                        "prompt": prompt,
+                        "style_refs": len(refs),
+                        "style_id": style_id_rc or "",
+                        "curated": curated or "",
                     }
-                    for c in calls
-                ],
-                "est_total_usd": round(sum(c["cost"] for c in calls), 4),
-            }
-
-        runs_dir = self.pack_dir / ".runs"
-        runs = sorted(p.name for p in runs_dir.glob("r*")) if runs_dir.is_dir() else []
-        run = runs[-1] if runs else None
-        if not run:
-            raise ValueError("no round yet — start a pass first")
-
-        results = []
-        total_cost = 0.0
-        with pack_lock(self.pack_dir):
-            for c in calls:
-                sheet = rc.generate(
-                    token,
-                    c["prompt"],
-                    n=1,
-                    style_id=c["style_id"],
-                    model=c["model"],
-                    reference_urls=[rc._svg_data_url(s) for s in c["refs"]] or None,
                 )
-                cells = rc.split_sheet(sheet[0], c["grid"], target=24.0)
-                # row-major assignment: icon k -> cells k*vpi .. k*vpi+vpi-1
-                viewbox = pack["spec"]["viewBox"]
-                for k, (iid, vid) in enumerate(c["targets"]):
-                    got, passed = [], 0
-                    cell_svgs = cells[k * c["vpi"] : (k + 1) * c["vpi"]]
-                    # len may fall short if the model dropped cells
-                    cand_dir = runs_dir / run / vid / iid
-                    cand_dir.mkdir(parents=True, exist_ok=True)
-                    existing = len(list(cand_dir.glob("r*.svg")))
-                    for j, cell in enumerate(cell_svgs):
-                        f = cand_dir / f"r{existing + j + 1}.svg"
-                        f.write_text(rc.normalize(cell, viewbox))
-                        got.append(f.name)
-                        if run_gate(
-                            f, pack, styles[pack["icons"][iid]["variants"][vid]["style"]]
-                        ).passed:
-                            passed += 1
-                    results.append(
-                        {"icon": iid, "variant": vid, "seeds": got, "gate_passed": passed}
-                    )
-                total_cost += c["cost"]
-            # cost bookkeeping
-            import json as _json
+                if data.get("debug"):
+                    continue
+                assert token is not None  # debug-only path skips generation
+                sheets = rc.generate(
+                    token,
+                    prompt,
+                    n=takes,
+                    style_id=style_id_rc,
+                    model=model,
+                    reference_urls=ref_urls,
+                    curated_style=curated,
+                )
+                split_sheets = [rc.split_sheet(s, grid, target=24.0) for s in sheets]
+                for k, (iid, vid) in enumerate(chunk):
+                    results = []
+                    for ti, cells in enumerate(split_sheets):
+                        if k >= len(cells):
+                            continue
+                        svg = rc.normalize(rc.strip_metadata(cells[k]), viewbox)
+                        b64 = _b64.b64encode(svg.encode()).decode()
+                        results.append(
+                            {
+                                "id": ti,
+                                "svg_data": f"data:image/svg+xml;base64,{b64}",
+                                "gate_pass": run_gate_svg(svg, pack, styles, iid, vid),
+                            }
+                        )
+                    items.append({"icon": iid, "variant": vid, "results": results})
+                total_cost += cost
 
-            round_json = runs_dir / run / "round.json"
-            try:
-                rj = _json.loads(round_json.read_text()) if round_json.is_file() else {}
-            except ValueError:
-                rj = {}
-            rj.setdefault("models_used", {})["seeder"] = calls[0]["model"] if calls else "-"
-            rj["estimated_cost_usd"] = round(rj.get("estimated_cost_usd", 0) + total_cost, 4)
-            seeds_total = 0
-            for x in results:
-                sv = x.get("seeds")
-                if isinstance(sv, list):
-                    seeds_total += len(sv)
-            rj["candidates_generated"] = rj.get("candidates_generated", 0) + seeds_total
-            round_json.write_text(_json.dumps(rj, indent=2) + "\n")
-
-        return {
-            "round": run,
-            "calls": len(calls),
-            "results": results,
+        out: dict = {
+            "takes": takes,
             "cost_usd": round(total_cost, 4),
+            "calls": [
+                {
+                    "style": c["style"],
+                    "grid": c["grid"],
+                    "takes": c["takes"],
+                    "model": c["model"],
+                    "cost": c["cost"],
+                    "prompt": c["prompt"],
+                    "style_refs": c["style_refs"],
+                    "style_id": c["style_id"],
+                    "curated": c["curated"],
+                }
+                for c in calls
+            ],
         }
+        if not data.get("debug"):
+            out["items"] = items
+        return out
 
     def _feedback_write(self, op: str, data: dict) -> dict:
         """add / resolve / promote feedback items (lock + atomic)."""

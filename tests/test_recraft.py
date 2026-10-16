@@ -670,11 +670,16 @@ def _sheet_svg(grid: int = 3) -> str:
     )
 
 
-def test_sheet_prompt_wraps_grid_instruction() -> None:
+def test_sheet_prompt_leads_with_same_subject_semantics() -> None:
     p = rc.sheet_prompt("a sailboat", 3)
-    assert "3 by 3 grid of 9 distinct icons" in p
+    # same-subject variations FIRST (highest priority), not a suffix
+    assert p.startswith("Icon design sheet: 9 different design variations of ONE icon")
+    assert "same subject" in p and "keep the subject identical" in p
+    assert "3 by 3 grid" in p
     assert "a sailboat" in p
     assert len(p) <= 1000
+    # and the icon description follows the semantics, not precedes them
+    assert p.index("a sailboat") > p.index("ONE icon")
 
 
 def test_split_sheet_3x3() -> None:
@@ -739,6 +744,33 @@ def test_sheet_prompt_has_clean_margins() -> None:
     p = rc.sheet_prompt("a sailboat", 3)
     assert "clean margins" in p and "no touching" in p
     assert "g id" not in p  # wrapper instruction removed
+
+
+def test_pack_sheet_prompt_different_icons_per_cell() -> None:
+    p = rc.pack_sheet_prompt(["a tent", "a map", "a boot"], "Lineal color", 2)
+    assert "distinct icons" in p and "one icon per cell" in p
+    assert "cell 1: a tent" in p and "cell 3: a boot" in p
+    assert "same stroke weight" in p  # cross-cell consistency demand
+    assert "variations of ONE" not in p  # different pattern than sheet_prompt
+
+
+def test_pack_grid_fits_icons() -> None:
+    assert rc.pack_grid(4) == 2
+    assert rc.pack_grid(5) == 3
+    assert rc.pack_grid(9) == 3
+
+
+def test_draft_prompt_colors_before_style() -> None:
+    # Recraft priority: earlier elements dominate — color must precede style
+    icon = {"brief": "Two alpine peaks", "main_color": "#2b6cb0"}
+    import dataclasses
+
+    from iconpilot.styles import resolve_styles
+
+    style = dataclasses.replace(resolve_styles({})["flat-color"], palette=("#2b6cb0",))
+    p = rc.draft_prompt(icon, style, {})
+    assert p.startswith("vector icon of Two alpine peaks")
+    assert p.index("#2b6cb0") < p.index("icon style")
 
 
 def test_curated_style_map_covers_registry() -> None:

@@ -327,7 +327,10 @@ footer { text-align:center; color:var(--muted); font-size:.75rem; padding:20px 0
       </div>
     </section>
     <section v-if="S.grouped.length">
-      <h2>{{ S.viewRound && S.viewRound !== S.latest ? 'Archived pass ' + S.viewRound : 'Current pass — rate, then decide' }}</h2>
+      <h2>{{ S.viewRound && S.viewRound !== S.latest ? 'Archived pass ' + S.viewRound : 'Current pass — rate, then decide' }}
+        <button v-if="(S.recraftReady || S.debug) && !isViewing()" class="subtle" @click="openBatchDlg()"
+                title="Recraft pack draft: same icons on every sheet, one different take per sheet (≤9 icons per 3×3 sheet) — review before anything is written">
+          <span class="ic" v-html="IC.bolt"></span> draft pack</button></h2>
       <div class="group" v-for="(g, gi) in S.grouped" :key="g.key">
         <div class="ghead">
           <b>{{ g.icon }}</b>
@@ -872,12 +875,66 @@ footer { text-align:center; color:var(--muted); font-size:.75rem; padding:20px 0
     </div>
   </div>
 
+  <div v-if="S.batchDlg" class="overlay" @click.self="S.batchDlg = null">
+    <div class="dialog" style="max-width:680px">
+      <h3><span><span class="ic-lg" v-html="IC.bolt"></span> draft pack — {{ batchSelCount() }} icons × {{ S.batchDlg.takes }} takes</span>
+          <button class="subtle" @click="S.batchDlg = null" aria-label="Close">close</button></h3>
+      <p class="muted" style="margin:0 0 10px">Same icons on every 3×3 sheet (≤9 per sheet), one different take per sheet. POST <code>/v1/images/generations/vector</code> · n={{ S.batchDlg.takes }} sheets per style · review before anything is written.</p>
+      <div v-for="grp in batchGroups()" :key="grp.style" style="margin-bottom:8px">
+        <div class="row" style="justify-content:space-between">
+          <span class="chip">{{ grp.style }} · {{ grp.targets.length }}</span>
+          <button class="subtle" @click="toggleGrp(grp)">{{ grpAll(grp) ? 'none' : 'all' }}</button>
+        </div>
+        <div class="row" style="flex-wrap:wrap; gap:6px">
+          <span v-for="tg in grp.targets" :key="tg" class="chip" style="cursor:pointer"
+                :class="{ done: S.batchDlg.sel[tg] }" @click="S.batchDlg.sel[tg] = !S.batchDlg.sel[tg]">{{ tg }}</span>
+        </div>
+      </div>
+      <div class="row" style="margin-top:10px">
+        <label class="muted">takes per icon</label>
+        <select v-model.number="S.batchDlg.takes"><option v-for="tk in [2,3,4,5,6]" :key="tk" :value="tk">{{ tk }}</option></select>
+        <label class="muted">model</label>
+        <select v-model="S.batchDlg.model">
+          <option value="">auto</option>
+          <option v-for="m in vectorModels()" :key="m" :value="m">{{ m }} (${{ (S.recraftModels.prices || {})[m] || '?' }}/img)</option>
+        </select>
+        <span class="chip rule" title="estimated cost">≈ ${{ batchEst() }}</span>
+      </div>
+      <div class="row" style="margin-top:12px">
+        <button class="primary" :class="{ busy: S.batchDlg.busy }" :disabled="!batchSelCount()" @click="batchGenerate()">
+          <span class="ic" v-html="IC.bolt"></span> generate {{ batchSelCount() * S.batchDlg.takes }} candidates · ~${{ batchEst() }}
+        </button>
+      </div>
+      <p v-if="S.batchDlg.err" class="err">{{ S.batchDlg.err }}</p>
+    </div>
+  </div>
+
   <div v-if="S.resultDlg" class="overlay" @click.self="S.resultDlg = null">
     <div class="dialog" style="max-width:720px">
-      <h3><span><span class="ic-lg" v-html="IC.bolt"></span> {{ S.resultDlg.icon }}#{{ S.resultDlg.variant }} — {{ S.resultDlg.results.filter(r => r.keep).length }}/{{ S.resultDlg.results.length }} kept</span>
+      <h3 v-if="!S.resultDlg.batch"><span><span class="ic-lg" v-html="IC.bolt"></span> {{ S.resultDlg.icon }}#{{ S.resultDlg.variant }} — {{ S.resultDlg.results.filter(r => r.keep).length }}/{{ S.resultDlg.results.length }} kept</span>
           <button class="subtle" @click="S.resultDlg = null" aria-label="Close">discard all</button></h3>
-      <p class="muted" style="margin:0 0 10px">{{ S.resultDlg.model }} · {{ S.resultDlg.grid }}×{{ S.resultDlg.grid }} grid · ${{ S.resultDlg.cost }} · click to toggle, ✓ = keep</p>
-      <div class="row" style="flex-wrap:wrap; gap:10px">
+      <h3 v-if="S.resultDlg.batch"><span><span class="ic-lg" v-html="IC.bolt"></span> pack draft — {{ S.resultDlg.items.length }} icons × {{ S.resultDlg.takes }} takes · {{ keptCount() }}/{{ totalCount() }} kept</span>
+          <button class="subtle" @click="S.resultDlg = null" aria-label="Close">discard all</button></h3>
+      <p class="muted" style="margin:0 0 10px">{{ S.resultDlg.model }} · ${{ S.resultDlg.cost }} · click to toggle, ✓ = keep</p>
+      <div v-if="S.resultDlg.batch">
+        <div v-for="it in S.resultDlg.items" :key="it.icon + '#' + it.variant" style="margin-bottom:12px">
+          <div class="row" style="justify-content:space-between">
+            <b>{{ it.icon }}#{{ it.variant }}</b>
+            <span class="muted">{{ it.results.filter(r => r.keep).length }}/{{ it.results.length }}</span>
+          </div>
+          <div class="row" style="flex-wrap:wrap; gap:8px">
+            <div v-for="r in it.results" :key="r.id"
+                 @click="r.keep = !r.keep"
+                 :style="{ cursor:'pointer', border: r.keep ? '2px solid var(--accent)' : '2px dashed var(--line)', borderRadius:'10px', padding:'6px', opacity: r.keep ? '1' : '.4' }">
+              <img :src="r.svg_data" width="64" height="64" style="border-radius:6px; background:#fff">
+              <div style="text-align:center; font-size:.7rem; margin-top:2px">
+                {{ r.keep ? '✓' : '✕' }} {{ r.gate_pass ? 'pass' : 'gate' }}
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div v-else class="row" style="flex-wrap:wrap; gap:10px">
         <div v-for="r in S.resultDlg.results" :key="r.id"
              @click="r.keep = !r.keep"
              :style="{ cursor:'pointer', border: r.keep ? '2px solid var(--accent)' : '2px dashed var(--line)', borderRadius:'10px', padding:'6px', opacity: r.keep ? '1' : '.4' }">
@@ -889,9 +946,9 @@ footer { text-align:center; color:var(--muted); font-size:.75rem; padding:20px 0
       </div>
       <div class="row" style="margin-top:12px">
         <button class="primary" @click="commitResults()">
-          add {{ S.resultDlg.results.filter(r => r.keep).length }} to round
+          add {{ keptCount() }} to round
         </button>
-        <button class="subtle" @click="S.resultDlg.results.forEach(r => r.keep = true)">keep all</button>
+        <button class="subtle" @click="keepAll(true)">keep all</button>
         <button class="subtle" @click="S.resultDlg = null">discard all</button>
       </div>
     </div>
@@ -1027,7 +1084,7 @@ const S = reactive({
   flash: '', flashOk: true, applying: false, instructions: '',
   tab: (location.hash || '#round').slice(1) || 'round',
   kbFocus: 0, kbVariant: 0, kbCand: 0, kbUsed: false, compare: null, histView: null,
-  recraftReady: false, debug: new URLSearchParams(location.search).has('debug'), debugDlg: null, nextDlg: null, resultDlg: null,
+  recraftReady: false, debug: new URLSearchParams(location.search).has('debug'), debugDlg: null, nextDlg: null, resultDlg: null, batchDlg: null,
   appliedRound: null,
   recraftModels: {}, styleRefs: {}, styleDetail: {}, styleEdit: null, styleView: null, removeArm: null, theme: 'light', iconHist: {}, svgFiles: {}, rejectArm: null,
   history: [], showHistory: false,
@@ -1538,6 +1595,85 @@ async function saveRecraftDefaults(model, n) {
     await load();
   } catch (e) { flash('defaults: ' + (e.d?.error || e.message), false); }
 }
+function openBatchDlg() {
+  const sel = {};
+  let any = false;
+  for (const [iid, icon] of Object.entries(S.pack.icons || {})) {
+    for (const [vid, v] of Object.entries(icon.variants || {})) {
+      if (v.link || v.postponed || isLocked(iid, vid)) continue;
+      sel[iid + '#' + vid] = true; any = true;
+    }
+  }
+  if (!any) { flash('no open icons to draft — everything approved or postponed', false); return; }
+  S.batchDlg = { sel, takes: 4, model: '', busy: false, err: '' };
+  focusDialog();
+}
+function batchGroups() {
+  const groups = [];
+  const byStyle = {};
+  for (const tg of Object.keys(S.batchDlg?.sel || {})) {
+    const [iid, vid] = tg.split('#');
+    const st = S.pack.icons?.[iid]?.variants?.[vid]?.style || '?';
+    (byStyle[st] = byStyle[st] || []).push(tg);
+  }
+  for (const [style, targets] of Object.entries(byStyle)) groups.push({ style, targets });
+  return groups;
+}
+function grpAll(grp) { return grp.targets.every(tg => S.batchDlg.sel[tg]); }
+function toggleGrp(grp) {
+  const on = !grpAll(grp);
+  grp.targets.forEach(tg => { S.batchDlg.sel[tg] = on; });
+}
+function batchSelCount() { return Object.values(S.batchDlg?.sel || {}).filter(Boolean).length; }
+function batchEst() {
+  const d = S.batchDlg; if (!d) return '0.00';
+  const byStyle = {};
+  for (const [tg, on] of Object.entries(d.sel)) {
+    if (!on) continue;
+    const [iid, vid] = tg.split('#');
+    const st = S.pack.icons?.[iid]?.variants?.[vid]?.style || '?';
+    byStyle[st] = (byStyle[st] || 0) + 1;
+  }
+  let sheets = 0;
+  for (const n of Object.values(byStyle)) sheets += Math.ceil(n / 9);
+  const price = (S.recraftModels.prices || {})[d.model] || 0.05;
+  return (sheets * d.takes * price).toFixed(2);
+}
+async function batchGenerate() {
+  const d = S.batchDlg;
+  if (!d || d.busy) return;
+  d.busy = true; d.err = '';
+  try {
+    const targets = Object.entries(d.sel).filter(([, on]) => on).map(([tg]) => tg);
+    const r = await api('/api/recraft-batch', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ targets, takes: d.takes, model: d.model || undefined }) });
+    S.batchDlg = null;
+    S.resultDlg = {
+      batch: true, items: r.items.map(it => ({ ...it, results: it.results.map(x => ({ ...x, keep: true })) })),
+      takes: r.takes, model: r.calls.map(c => c.model).filter((m, i, a) => a.indexOf(m) === i).join(', '),
+      cost: r.cost_usd,
+    };
+  } catch (e) {
+    d.busy = false;
+    d.err = e.message || e.d?.error || 'Recraft request failed';
+  }
+}
+function keptCount() {
+  const d = S.resultDlg; if (!d) return 0;
+  if (d.batch) return d.items.reduce((a, it) => a + it.results.filter(r => r.keep).length, 0);
+  return d.results.filter(r => r.keep).length;
+}
+function totalCount() {
+  const d = S.resultDlg; if (!d) return 0;
+  if (d.batch) return d.items.reduce((a, it) => a + it.results.length, 0);
+  return d.results.length;
+}
+function keepAll(on) {
+  const d = S.resultDlg; if (!d) return;
+  if (d.batch) d.items.forEach(it => it.results.forEach(r => { r.keep = on; }));
+  else d.results.forEach(r => { r.keep = on; });
+}
 async function recraftGenerate() {
   const d = S.debugDlg;
   if (!d || d.generating) return;
@@ -1562,6 +1698,21 @@ async function recraftGenerate() {
 async function commitResults() {
   const d = S.resultDlg;
   if (!d) return;
+  if (d.batch) {
+    const items = d.items
+      .map(it => ({ icon: it.icon, variant: it.variant, svgs: it.results.filter(r => r.keep).map(x => atob(x.svg_data.split(',')[1])) }))
+      .filter(it => it.svgs.length);
+    if (!items.length) { flash('nothing selected', false); return; }
+    try {
+      const r = await api('/api/recraft-commit', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ items, cost_usd: d.cost }) });
+      flash(`⚡ pack: ${r.wrote.length} candidates added across ${items.length} icons (gate ${r.gate_passed}/${r.wrote.length}) ~$${d.cost}`, true);
+      S.resultDlg = null;
+      await load();
+    } catch (e) { flash('commit: ' + (e.d?.error || e.message), false); }
+    return;
+  }
   const keep = d.results.filter(r => r.keep);
   if (!keep.length) { flash('nothing selected', false); return; }
   try {
@@ -2147,7 +2298,7 @@ const App = {
       showDebug, debugCopy, openNextDlg, addVariantBulk, addCustomStyle, saveRecraftDefaults,
       GATE_HELP, styleRules, stylePalette, ruleTitle, styleUsageCount, isPostponed, togglePostpone, applyAndNext, colState, toggleCol, toggleAll, usedStyles, setTab, iconSuggest, pickSuggestion, addNewIcon, startRoundWithNew,
       styleSummary, isOwnRef, editStyle, toggleGate, saveStyleRules, removeStyle, addStyleToPack, pickRefFile, removeRef,
-      vectorModels, curatedNames, styleDetail, editCustomStyle, recraftGenerate, commitResults,
+      vectorModels, curatedNames, styleDetail, editCustomStyle, recraftGenerate, commitResults, openBatchDlg, batchGroups, grpAll, toggleGrp, batchSelCount, batchEst, batchGenerate, keptCount, totalCount, keepAll,
 
     };
   },
