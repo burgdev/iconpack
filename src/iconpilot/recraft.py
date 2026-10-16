@@ -119,7 +119,9 @@ VECTOR_MODELS = (
 )
 
 
-def draft_prompt(icon: dict, style, pack: dict, model: str | None = None) -> str:
+def draft_prompt(
+    icon: dict, style, pack: dict, model: str | None = None, styled: bool = True
+) -> str:
     """Rich text-to-image prompt: icon brief, color world, style, rules.
 
     The brief is the single icon description (humans and agent share it);
@@ -127,6 +129,13 @@ def draft_prompt(icon: dict, style, pack: dict, model: str | None = None) -> str
     color world. Truncated to the model's prompt limit.
     """
     limit = prompt_limit(model or "")
+    if not styled:
+        # a Recraft style_id carries the look AND palette (stored on the
+        # style) — the prompt only names what THIS icon looks like
+        return (
+            f"vector icon of {icon.get('brief') or icon.get('description') or ''}, "
+            "one centered icon, isolated on plain white background"
+        )[:limit]
     # Recraft priority order (earlier = stronger): subject → color → style
     # → rules → layout → avoids
     parts = [f"vector icon of {icon.get('brief') or icon.get('description') or ''}"]
@@ -197,24 +206,57 @@ def _request(token: str, method: str, path: str, payload: dict | None = None) ->
         raise RecraftError(f"recraft request failed ({path}): {exc}") from exc
 
 
-def create_style(token: str, svg_texts: list[str], match: str = "precise") -> dict:
-    """Create a custom style from 1-10 reference SVGs; returns the style dict."""
+def hex_to_rgb(h: str) -> list[int] | None:
+    """'#c05621' → [192, 86, 33]; None when unparsable."""
+    h = (h or "").strip().lstrip("#")
+    if len(h) == 3:
+        h = "".join(c * 2 for c in h)
+    if len(h) != 6:
+        return None
+    try:
+        return [int(h[i : i + 2], 16) for i in (0, 2, 4)]
+    except ValueError:
+        return None
+
+
+def create_style(
+    token: str,
+    svg_texts: list[str],
+    match: str = "precise",
+    prompt: str | None = None,
+    palette: list[str] | None = None,
+) -> dict:
+    """Create a custom style from 1-10 reference SVGs; returns the style dict.
+
+    The style can bake in a text `prompt` (the look, in words) and a
+    `palette` (hex colors) — both stored ON the style and applied to every
+    generation using it, so icon prompts stay minimal.
+    """
     if not 1 <= len(svg_texts) <= 10:
         raise RecraftError(f"styles need 1-10 references, got {len(svg_texts)}")
-    out = _request(
-        token,
-        "POST",
-        "/styles",
-        {
-            "image_urls": [_data_url(s) for s in svg_texts],
-            "model": "recraftv2_vector" if match == "regular" else "recraftv4_styles",
-            "style": "icon",  # tell Recraft this style is for icons
-            "match": match,
-        },
-    )
+    model = "recraftv2_vector" if match == "regular" else "recraftv4_styles"
+    body: dict = {
+        "image_urls": [_data_url(s) for s in svg_texts],
+        "model": model,
+        "match": match,
+    }
+    if model.startswith("recraftv2"):
+        body["style"] = "icon"  # base style 'icon' is V2-only per API docs
+    if prompt:
+        body["prompt"] = prompt[:1000]
+    colors = [c for c in (hex_to_rgb(x) for x in (palette or [])[:10]) if c]
+    if colors:
+        body["palette"] = {"colors": [{"rgb": c} for c in colors]}
+    out = _request(token, "POST", "/styles", body)
     if not out.get("id"):
         raise RecraftError(f"recraft returned no style id: {out}")
     return out
+
+
+def style_prompt_text(style) -> str:
+    """The text prompt stored on a Recraft style: the look, in words."""
+    words = ", ".join(getattr(style, "style_words", []) or [])
+    return f"{style.label} icon style: {words}".strip()[:1000]
 
 
 def sheet_prompt(prompt: str, grid: int, model: str | None = None) -> str:

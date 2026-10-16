@@ -578,6 +578,7 @@ footer { text-align:center; color:var(--muted); font-size:.75rem; padding:20px 0
       <div class="dialog" style="max-width:640px">
         <h3><span>{{ S.styleView.id }}</span>
             <span class="row" style="gap:4px">
+              <button v-if="S.recraftReady || S.debug" class="iconbtn" @click="openStyleRc(S.styleView.id)" title="Recraft style: create the custom style (bakes look + palette), inspect the exact request, or paste a UUID" aria-label="recraft style"><span class="ic" v-html="IC.bolt"></span></button>
               <button class="iconbtn" @click="editStyle(S.styleView.id)" title="edit rules and model" aria-label="edit"><span class="ic" v-html="IC.gear"></span></button>
               <button class="subtle" @click="S.styleView = null" aria-label="Close">✕</button>
             </span></h3>
@@ -875,6 +876,34 @@ footer { text-align:center; color:var(--muted); font-size:.75rem; padding:20px 0
     </div>
   </div>
 
+  <div v-if="S.styleRc" class="overlay" @click.self="S.styleRc = null">
+    <div class="dialog" style="max-width:640px">
+      <h3><span><span class="ic-lg" v-html="IC.bolt"></span> Recraft style — {{ S.styleRc.id }}</span>
+          <button class="subtle" @click="S.styleRc = null" aria-label="Close">✕</button></h3>
+      <div class="kv">
+        <b>cached style id</b><span>{{ S.styleRc.cached || '—' }} <span v-if="S.styleRc.fresh" class="chip done">fresh</span><span v-else-if="S.styleRc.cached" class="chip rule">stale refs</span></span>
+        <b>references</b><span>{{ S.styleRc.refs }} SVG → data URLs</span>
+        <b>cost</b><span>${{ S.styleRc.cost }} one-time · cached until refs change</span>
+      </div>
+      <details open style="margin-top:8px">
+        <summary class="muted">exact request (look + palette baked into the style)</summary>
+        <pre style="max-height:240px; overflow:auto; font-size:.72rem; white-space:pre-wrap">POST {{ S.styleRc.endpoint }}
+{{ S.styleRc.reqs }}</pre>
+      </details>
+      <div class="row" style="margin-top:10px">
+        <button class="primary" :class="{ busy: S.styleRc.busy }" @click="styleRcCreate()">
+          <span class="ic" v-html="IC.bolt"></span> create style · ${{ S.styleRc.cost }}
+        </button>
+        <button class="subtle" @click="copyText('POST ' + S.styleRc.endpoint + String.fromCharCode(10) + S.styleRc.reqs, '')">copy request</button>
+      </div>
+      <div class="row" style="margin-top:8px">
+        <input v-model="S.styleRc.uuid" placeholder="or paste a Recraft style UUID (created manually)" style="flex:1">
+        <button class="subtle" @click="styleRcSave()">save uuid</button>
+      </div>
+      <p v-if="S.styleRc.err" class="err">{{ S.styleRc.err }}</p>
+    </div>
+  </div>
+
   <div v-if="S.batchDlg" class="overlay" @click.self="S.batchDlg = null">
     <div class="dialog" style="max-width:680px">
       <h3><span><span class="ic-lg" v-html="IC.bolt"></span> draft pack — {{ batchSelCount() }} icons × {{ S.batchDlg.takes }} takes</span>
@@ -1098,7 +1127,7 @@ const S = reactive({
   flash: '', flashOk: true, applying: false, instructions: '',
   tab: (location.hash || '#round').slice(1) || 'round',
   kbFocus: 0, kbVariant: 0, kbCand: 0, kbUsed: false, compare: null, histView: null,
-  recraftReady: false, debug: new URLSearchParams(location.search).has('debug'), debugDlg: null, nextDlg: null, resultDlg: null, batchDlg: null,
+  recraftReady: false, debug: new URLSearchParams(location.search).has('debug'), debugDlg: null, nextDlg: null, resultDlg: null, batchDlg: null, styleRc: null,
   appliedRound: null,
   recraftModels: {}, styleRefs: {}, styleDetail: {}, styleEdit: null, styleView: null, removeArm: null, theme: 'light', iconHist: {}, svgFiles: {}, rejectArm: null,
   history: [], showHistory: false,
@@ -1608,6 +1637,46 @@ async function saveRecraftDefaults(model, n) {
     flash('Recraft defaults saved: ' + model + ' · ' + n + '/request', true);
     await load();
   } catch (e) { flash('defaults: ' + (e.d?.error || e.message), false); }
+}
+async function openStyleRc(sid) {
+  try {
+    const r = await api('/api/recraft-style-request?style=' + encodeURIComponent(sid));
+    S.styleRc = {
+      id: sid, cached: r.cached_id, fresh: r.fresh, refs: r.refs_count,
+      cost: r.cost_usd, endpoint: r.endpoint,
+      reqs: JSON.stringify(r.request, null, 2),
+      uuid: '', busy: false, err: '',
+    };
+    focusDialog();
+  } catch (e) { flash('style: ' + (e.d?.error || e.message), false); }
+}
+async function styleRcCreate() {
+  const d = S.styleRc;
+  if (!d || d.busy) return;
+  d.busy = true; d.err = '';
+  try {
+    const r = await api('/api/recraft-style-create', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ style: d.id }) });
+    flash('style created · ' + r.style_id + ' ($' + r.cost_usd + ')', true);
+    S.styleRc = null;
+    await load();
+  } catch (e) {
+    d.busy = false;
+    d.err = e.d?.error || e.message || 'create failed';
+  }
+}
+async function styleRcSave() {
+  const d = S.styleRc;
+  if (!d || !d.uuid.trim()) { d.err = 'paste a UUID first'; return; }
+  try {
+    await api('/api/recraft-style-save', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ style: d.id, style_id: d.uuid.trim() }) });
+    flash('style uuid saved — drafts will use it', true);
+    S.styleRc = null;
+    await load();
+  } catch (e) { d.err = e.d?.error || e.message || 'save failed'; }
 }
 function openBatchDlg() {
   const sel = {};
@@ -2334,7 +2403,7 @@ const App = {
       showDebug, debugCopy, openNextDlg, addVariantBulk, addCustomStyle, saveRecraftDefaults,
       GATE_HELP, styleRules, stylePalette, ruleTitle, styleUsageCount, isPostponed, togglePostpone, applyAndNext, colState, toggleCol, toggleAll, usedStyles, setTab, iconSuggest, pickSuggestion, addNewIcon, startRoundWithNew,
       styleSummary, isOwnRef, editStyle, toggleGate, saveStyleRules, removeStyle, addStyleToPack, pickRefFile, removeRef,
-      vectorModels, curatedNames, styleDetail, editCustomStyle, recraftGenerate, commitResults, openBatchDlg, batchGroups, grpAll, toggleGrp, batchSelCount, batchTotal, batchSheets, batchDebug, batchEst, batchGenerate, keptCount, totalCount, keepAll,
+      vectorModels, curatedNames, styleDetail, editCustomStyle, recraftGenerate, commitResults, openStyleRc, styleRcCreate, styleRcSave, openBatchDlg, batchGroups, grpAll, toggleGrp, batchSelCount, batchTotal, batchSheets, batchDebug, batchEst, batchGenerate, keptCount, totalCount, keepAll,
 
     };
   },

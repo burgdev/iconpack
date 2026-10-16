@@ -319,6 +319,52 @@ class ReviewHandler(BaseHTTPRequestHandler):
                     return
             self._json(404, {"error": "no such reference"})
             return
+        if url.path == "/api/recraft-style-request":
+            import iconpilot.recraft as _rcs
+
+            sid = (q.get("style") or [""])[0]
+            try:
+                pack, styles = load_pack(self.pack_dir / "pack.json")
+            except Exception as exc:
+                self._json(500, {"error": str(exc)})
+                return
+            if sid not in styles:
+                self._json(404, {"error": f"unknown style {sid}"})
+                return
+            style = styles[sid]
+            from iconpilot.styles import style_refs as _sr
+
+            refs = [f.read_text() for f in _sr(self.pack_dir, sid)][:10]
+            cfg = pack.get("recraft", {})
+            cached = (cfg.get("style_ids", {}) or {}).get(sid) or cfg.get("style_id")
+            snap = pack.get("styles", {}).get(sid, {}) or {}
+            h = _rcs.refs_hash(refs) if refs else None
+            fresh = bool(cached and (not refs or not h or h == snap.get("recraft_style_hash")))
+            match = snap.get("recraft_match") or "precise"
+            model = "recraftv2_vector" if match == "regular" else "recraftv4_styles"
+            request: dict = {"model": model, "match": match}
+            if refs:
+                request["image_urls"] = [f"<{len(refs)} SVG data URLs>"]
+            if model.startswith("recraftv2"):
+                request["style"] = "icon"
+            ptxt = _rcs.style_prompt_text(style)
+            if ptxt:
+                request["prompt"] = ptxt
+            cols = [c for c in (_rcs.hex_to_rgb(x) for x in list(style.palette or [])[:10]) if c]
+            if cols:
+                request["palette"] = {"colors": [{"rgb": c} for c in cols]}
+            self._json(
+                200,
+                {
+                    "endpoint": _rcs.API_BASE + "/styles",
+                    "request": request,
+                    "refs_count": len(refs),
+                    "cached_id": cached or "",
+                    "fresh": fresh,
+                    "cost_usd": _rcs.STYLE_CREATE_PRICE,
+                },
+            )
+            return
         if url.path == "/api/recraft-models":
             import iconpilot.recraft as _rc
 
@@ -744,6 +790,42 @@ class ReviewHandler(BaseHTTPRequestHandler):
         )
         return {"round": run, "open": open_, "feedback_carried": carried}
 
+    def _ensure_style_id(self, token: str, style_key: str, style, refs: list[str]) -> str | None:
+        """Cached Recraft style for `style_key`, creating it when missing/stale.
+
+        The style bakes in the look (prompt) and the color world (palette),
+        so generations with it need neither in the icon prompt. $0.005,
+        cached until refs change (hash). Returns None when there are no
+        refs to build a style from.
+        """
+        import iconpilot.recraft as rc
+
+        with pack_lock(self.pack_dir):
+            pack, _ = load_pack(self.pack_dir / "pack.json")
+        cfg = pack.get("recraft", {})
+        cached = (cfg.get("style_ids", {}) or {}).get(style_key) or cfg.get("style_id")
+        h = rc.refs_hash(refs) if refs else None
+        snap_h = (pack.get("styles", {}).get(style_key, {}) or {}).get("recraft_style_hash")
+        if cached and (not refs or not h or h == snap_h):
+            return cached
+        if not refs:
+            return cached  # manual/curated id without refs: trust as-is
+        out = rc.create_style(
+            token,
+            refs,
+            prompt=rc.style_prompt_text(style),
+            palette=list(getattr(style, "palette", None) or []),
+        )
+        new_id = out["id"]
+        with pack_lock(self.pack_dir):
+            pk, _ = load_pack(self.pack_dir / "pack.json")
+            snap = pk.setdefault("styles", {}).setdefault(style_key, {})
+            snap["recraft_style_id"] = new_id
+            snap["recraft_style_hash"] = h
+            pk.setdefault("recraft", {}).setdefault("style_ids", {})[style_key] = new_id
+            write_pack_atomic(self.pack_dir, pk)
+        return new_id
+
     def _recraft_plan(self, icon_id: str, variant: str, n_in: int | None = None) -> dict:
         """Everything a Recraft call needs: prompt, style target, model, n, cost.
 
@@ -852,6 +934,7 @@ class ReviewHandler(BaseHTTPRequestHandler):
         if not token:
             raise ValueError("no Recraft token on the server")
 
+        pack, styles = load_pack(self.pack_dir / "pack.json")
         plan = self._recraft_plan(
             data.get("icon", ""), data.get("variant", ""), n_in=int(data.get("n") or 4)
         )
@@ -859,6 +942,22 @@ class ReviewHandler(BaseHTTPRequestHandler):
             plan["prompt"] = (plan["prompt"] + ", " + str(data["prompt"]))[:1000]
 
         style_id = plan["style_id"]
+        if not style_id and plan["refs"]:
+            # no cached style yet → create it now ($0.005, cached after)
+            try:
+                style_id = self._ensure_style_id(
+                    token, plan["style"], styles[plan["style"]], plan["refs"]
+                )
+            except rc.RecraftError:
+                style_id = None
+        if style_id:
+            # look + palette live in the style: prompt names only the subject
+            icon = pack["icons"][data.get("icon", "")]
+            plan["prompt"] = rc.draft_prompt(
+                icon, styles[plan["style"]], pack, model=plan["model"], styled=False
+            )
+            if data.get("prompt"):
+                plan["prompt"] = (plan["prompt"] + ", " + str(data["prompt"]))[:10000]
         ref_urls = None
         if plan["refs"] and "v4" in plan["model"] and not plan.get("curated") and not style_id:
             # PNG conversion for V4 refs
@@ -903,7 +1002,6 @@ class ReviewHandler(BaseHTTPRequestHandler):
             )
 
         # normalize + gate each, return as data URLs for preview
-        pack, styles = load_pack(self.pack_dir / "pack.json")
         viewbox = pack["spec"]["viewBox"]
         results = []
         for i, raw in enumerate(cells):
@@ -1158,6 +1256,71 @@ class ReviewHandler(BaseHTTPRequestHandler):
             "grid": grid,
         }
 
+    def _recraft_style_create(self, data: dict) -> dict:
+        """Create the Recraft custom style for a pack style ($0.005, cached)."""
+        import iconpilot.recraft as rc
+
+        token = rc.resolve_token()
+        if not token:
+            raise ValueError("no Recraft token on the server — set RECRAFT_API_TOKEN")
+        sid = str(data.get("style") or "")
+        with pack_lock(self.pack_dir):
+            pack, styles = load_pack(self.pack_dir / "pack.json")
+        if sid not in styles:
+            raise ValueError(f"unknown style {sid}")
+        style = styles[sid]
+        from iconpilot.styles import style_refs as _sr
+
+        refs = [f.read_text() for f in _sr(self.pack_dir, sid)][:10]
+        if not refs:
+            raise ValueError(f"style {sid} has no reference icons — add refs first")
+        snap = pack.get("styles", {}).get(sid, {}) or {}
+        match = snap.get("recraft_match") or "precise"
+        out = rc.create_style(
+            token,
+            refs,
+            match=match,
+            prompt=rc.style_prompt_text(style),
+            palette=list(style.palette or []),
+        )
+        new_id = out["id"]
+        h = rc.refs_hash(refs)
+        with pack_lock(self.pack_dir):
+            pk, _ = load_pack(self.pack_dir / "pack.json")
+            snap = pk.setdefault("styles", {}).setdefault(sid, {})
+            snap["recraft_style_id"] = new_id
+            snap["recraft_style_hash"] = h
+            pk.setdefault("recraft", {}).setdefault("style_ids", {})[sid] = new_id
+            write_pack_atomic(self.pack_dir, pk)
+        return {"style_id": new_id, "cost_usd": rc.STYLE_CREATE_PRICE}
+
+    def _recraft_style_save(self, data: dict) -> dict:
+        """Save a manually created Recraft style UUID onto a pack style."""
+        import re as _re
+
+        import iconpilot.recraft as rc
+
+        sid = str(data.get("style") or "")
+        rid = str(data.get("style_id") or "").strip()
+        if not _re.fullmatch(r"[0-9a-fA-F-]{32,36}", rid):
+            raise ValueError("style_id must be a Recraft UUID")
+        with pack_lock(self.pack_dir):
+            _, styles = load_pack(self.pack_dir / "pack.json")
+        if sid not in styles:
+            raise ValueError(f"unknown style {sid}")
+        from iconpilot.styles import style_refs as _sr
+
+        refs = [f.read_text() for f in _sr(self.pack_dir, sid)][:10]
+        with pack_lock(self.pack_dir):
+            pk, _ = load_pack(self.pack_dir / "pack.json")
+            snap = pk.setdefault("styles", {}).setdefault(sid, {})
+            snap["recraft_style_id"] = rid
+            if refs:
+                snap["recraft_style_hash"] = rc.refs_hash(refs)
+            pk.setdefault("recraft", {}).setdefault("style_ids", {})[sid] = rid
+            write_pack_atomic(self.pack_dir, pk)
+        return {"style_id": rid}
+
     def _recraft_batch(self, data: dict) -> dict:
         """Pack draft: same icons on every sheet, takes vary ACROSS sheets.
 
@@ -1205,6 +1368,12 @@ class ReviewHandler(BaseHTTPRequestHandler):
                 from iconpilot.styles import style_refs as _sr
 
                 refs = [f.read_text() for f in _sr(self.pack_dir, style_id)[:3]]
+            if not style_id_rc and refs and not data.get("debug"):
+                # no cached style yet → create it now ($0.005, cached after)
+                try:
+                    style_id_rc = self._ensure_style_id(token or "", style_id, style, refs)
+                except rc.RecraftError:
+                    style_id_rc = None
             model = (
                 model_override
                 or cfg.get("model")
@@ -1241,7 +1410,7 @@ class ReviewHandler(BaseHTTPRequestHandler):
                 for iid, vid in chunk:
                     icon = pack["icons"][iid]
                     b = icon.get("brief") or icon.get("description") or ""
-                    if icon.get("main_color"):
+                    if icon.get("main_color") and not style_id_rc:
                         b += f", dominant color {icon['main_color']}"
                     briefs.append(b)
                 prompt = rc.pack_sheet_prompt(briefs, style.label, grid, model=model)
@@ -1405,6 +1574,28 @@ class ReviewHandler(BaseHTTPRequestHandler):
 
     def do_POST(self) -> None:
         url = urlparse(self.path)
+        if url.path == "/api/recraft-style-create":
+            data = self._body()
+            import iconpilot.recraft as _rcc
+
+            try:
+                self._json(200, self._recraft_style_create(data))
+            except ValueError as exc:
+                self._json(400, {"error": str(exc)})
+            except _rcc.RecraftError as exc:
+                self._json(502, {"error": str(exc)})
+            except Exception as exc:
+                self._json(500, {"error": str(exc)})
+            return
+        if url.path == "/api/recraft-style-save":
+            data = self._body()
+            try:
+                self._json(200, self._recraft_style_save(data))
+            except ValueError as exc:
+                self._json(400, {"error": str(exc)})
+            except Exception as exc:
+                self._json(500, {"error": str(exc)})
+            return
         if url.path == "/api/recraft-batch":
             data = self._body()
             try:
