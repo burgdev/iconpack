@@ -25,6 +25,7 @@ from iconpilot.pack import (
     advance_feedback,
     load_pack,
     next_run_id,
+    prune_runs,
     revalidate,
     write_pack_atomic,
 )
@@ -1259,6 +1260,10 @@ def decide(
             round_id,
             source="text" if text is not None else "file",
         )
+        try:
+            log += prune_runs(pack_dir, pack_data)
+        except OSError:
+            pass
     except ValueError as exc:
         typer.secho(f"rejected: {exc}", fg=typer.colors.RED, err=True)
         raise typer.Exit(code=2) from exc

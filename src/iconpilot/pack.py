@@ -135,6 +135,51 @@ def file_sha256(path: Path) -> str:
     return hashlib.sha256(path.read_bytes()).hexdigest()
 
 
+def prune_runs(pack_dir: Path, pack: dict, keep_latest: int = 1) -> list[str]:
+    """Auto-prune run history: empty rounds + orphan candidate dirs.
+
+    Empty round = no candidates and no decisions.json (aborted starts).
+    Orphan dir = .runs/<round>/<variant>/<icon> whose variant is not
+    authored in the pack. The newest `keep_latest` rounds are never
+    touched (the live round may legitimately be empty while drafting).
+    Returns log lines describing what was pruned.
+    """
+    import shutil
+
+    runs_dir = pack_dir / ".runs"
+    if not runs_dir.is_dir():
+        return []
+    log: list[str] = []
+    authored = {
+        iid: set(ic.get("variants", {}).keys()) for iid, ic in pack.get("icons", {}).items()
+    }
+    rounds = sorted(p.name for p in runs_dir.glob("r*") if p.is_dir())
+    protected = set(rounds[-keep_latest:] if keep_latest else [])
+    for run in rounds:
+        rdir = runs_dir / run
+        # orphan icon dirs (variant not authored) — pruned in every round
+        for icon_dir in list(rdir.iterdir() if rdir.is_dir() else []):
+            if not icon_dir.is_dir():
+                continue
+            variant = icon_dir.name
+            for target in list(icon_dir.iterdir()):
+                if not target.is_dir():
+                    continue
+                iid = target.name
+                if iid not in authored or variant not in authored[iid]:
+                    shutil.rmtree(target, ignore_errors=True)
+                    log.append(f"pruned orphan {run}/{variant}/{iid}")
+            if icon_dir.is_dir() and not any(icon_dir.iterdir()):
+                icon_dir.rmdir()
+        # empty rounds (no candidates, no decisions) — never the live one
+        has_svg = any(rdir.rglob("*.svg")) if rdir.is_dir() else False
+        has_decisions = (rdir / "decisions.json").is_file()
+        if run not in protected and rdir.is_dir() and not has_svg and not has_decisions:
+            shutil.rmtree(rdir, ignore_errors=True)
+            log.append(f"pruned empty round {run}")
+    return log
+
+
 def write_pack_atomic(pack_dir: Path, pack: dict) -> None:
     """Atomic pack.json write (tmp + rename). Callers hold the pack lock."""
     pack["rev"] = pack.get("rev", 0) + 1

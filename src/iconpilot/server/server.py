@@ -26,6 +26,7 @@ from iconpilot.pack import (
     advance_feedback,
     load_pack,
     next_run_id,
+    prune_runs,
     revalidate,
     write_pack_atomic,
 )
@@ -1674,7 +1675,15 @@ class ReviewHandler(BaseHTTPRequestHandler):
         if url.path == "/api/round/new":
             data = self._body()
             try:
-                self._json(200, self._start_round(only=data.get("only")))
+                out = self._start_round(only=data.get("only"))
+                # auto-prune old clutter once a new round opens
+                try:
+                    with pack_lock(self.pack_dir):
+                        pack, _ = load_pack(self.pack_dir / "pack.json")
+                    out["pruned"] = prune_runs(self.pack_dir, pack, keep_latest=2)
+                except OSError:
+                    out["pruned"] = []
+                self._json(200, out)
             except ValueError as exc:
                 self._json(400, {"error": str(exc)})
             except Exception as exc:
@@ -1866,6 +1875,11 @@ class ReviewHandler(BaseHTTPRequestHandler):
                     source="server",
                     instructions=(data.get("instructions") or None),
                 )
+            # auto-prune: empty rounds + orphan candidate dirs
+            try:
+                log += prune_runs(self.pack_dir, pack)
+            except OSError:
+                pass
             self._json(200, {"rev": pack.get("rev", 0), "log": log})
         except (ValueError, KeyError) as exc:
             self._json(400, {"error": str(exc)})

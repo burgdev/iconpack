@@ -223,6 +223,19 @@ def hex_to_rgb(h: str) -> list[int] | None:
         return None
 
 
+def _png_data_url(svg_text: str, size: int = 512) -> str:
+    """Render an SVG ref to a PNG data URL — Recraft /styles needs raster."""
+    import base64 as _b64
+    import io as _io
+
+    from iconpilot.render.render import render_png_text
+
+    img = render_png_text(svg_text, size)
+    buf = _io.BytesIO()
+    img.save(buf, "PNG")
+    return "data:image/png;base64," + _b64.b64encode(buf.getvalue()).decode()
+
+
 def create_style(
     token: str,
     svg_texts: list[str],
@@ -232,15 +245,20 @@ def create_style(
 ) -> dict:
     """Create a custom style from 1-10 reference SVGs; returns the style dict.
 
-    The style can bake in a text `prompt` (the look, in words) and a
-    `palette` (hex colors) — both stored ON the style and applied to every
-    generation using it, so icon prompts stay minimal.
+    Refs are rasterized to PNG first — the /styles endpoint rejects SVG
+    for V4 style creation (invalid_image_format). The style can bake in a
+    text `prompt` (the look, in words) and a `palette` (hex colors) — both
+    stored ON the style and applied to every generation using it.
     """
     if not 1 <= len(svg_texts) <= 10:
         raise RecraftError(f"styles need 1-10 references, got {len(svg_texts)}")
+    try:
+        image_urls = [_png_data_url(s) for s in svg_texts]
+    except Exception as exc:  # rasterization failure (broken ref, no cairo)
+        raise RecraftError(f"cannot rasterize style refs to PNG: {exc}") from exc
     model = "recraftv2_vector" if match == "regular" else "recraftv4_styles"
     body: dict = {
-        "image_urls": [_data_url(s) for s in svg_texts],
+        "image_urls": image_urls,
         "model": model,
         "match": match,
     }

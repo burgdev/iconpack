@@ -77,12 +77,12 @@ def test_create_style_payload(monkeypatch: pytest.MonkeyPatch) -> None:
         return {"id": "st-42"}
 
     monkeypatch.setattr(rc, "_request", fake_request)
+    monkeypatch.setattr(rc, "_png_data_url", lambda s, size=512: "data:image/png;base64,VEVTVA==")
     out = rc.create_style("tok", ["<svg/>"])
     assert out["id"] == "st-42"
     assert captured["path"] == "/styles"
     urls = captured["payload"]["image_urls"]
-    assert urls[0].startswith("data:image/svg+xml;base64,")
-    assert base64.b64decode(urls[0].split(",", 1)[1]).decode() == "<svg/>"
+    assert urls[0].startswith("data:image/png;base64,")  # /styles needs raster
     assert captured["payload"]["model"] == "recraftv4_styles"
     assert captured["payload"]["match"] == "precise"
 
@@ -879,6 +879,7 @@ def test_create_style_bakes_prompt_and_palette() -> None:
         return {"id": "uuid-1"}
 
     rc._request = fake
+    rc._png_data_url = lambda s, size=512: "data:image/png;base64,VEVTVA=="  # raster stub
     out = create_style(
         "T", ["<svg/>"], prompt=style_prompt_text(style), palette=list(style.palette)
     )

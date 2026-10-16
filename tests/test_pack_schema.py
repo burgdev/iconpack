@@ -414,3 +414,39 @@ def test_gate_icon_colors_tighten_palette(tmp_path) -> None:
     # inside the subset → no icon-colors failure
     rep = run_gate(svg, pack, style, icon_colors=("#2F855A",))
     assert not any("icon colors" in f for f in rep.errors)
+
+
+def test_prune_runs_removes_empty_and_orphans(tmp_path) -> None:
+    from iconpilot.pack import prune_runs, write_pack_atomic
+
+    pack = {
+        "version": "0.1.0a1",
+        "spec": {"viewBox": "0 0 24 24"},
+        "icons": {
+            "sail": {"brief": "s", "variants": {"mono": {"style": "mono-line"}}},
+            "campfire": {"brief": "c", "variants": {"flat": {"style": "flat-color"}}},
+        },
+    }
+    write_pack_atomic(tmp_path, pack)
+    runs = tmp_path / ".runs"
+    # r001: decided round with an orphan dir (campfire/mono not authored)
+    d = runs / "r001" / "mono" / "campfire"
+    d.mkdir(parents=True)
+    (d / "a1.svg").write_text("<svg/>")
+    (runs / "r001" / "decisions.json").write_text("{}")
+    keep = runs / "r001" / "mono" / "sail"
+    keep.mkdir(parents=True)
+    (keep / "a1.svg").write_text("<svg/>")
+    # r002: empty round, not latest → pruned
+    (runs / "r002").mkdir()
+    (runs / "r002" / "round.json").write_text("{}")
+    # r003: empty but latest → kept (live round while drafting)
+    (runs / "r003").mkdir()
+    (runs / "r003" / "round.json").write_text("{}")
+
+    log = prune_runs(tmp_path, json.loads((tmp_path / "pack.json").read_text()))
+    assert not (runs / "r001" / "mono" / "campfire").exists()  # orphan gone
+    assert (keep / "a1.svg").exists()  # authored candidate kept
+    assert not (runs / "r002").exists()  # empty non-latest pruned
+    assert (runs / "r003").exists()  # live round never pruned
+    assert any("orphan" in l for l in log) and any("empty round r002" in l for l in log)
