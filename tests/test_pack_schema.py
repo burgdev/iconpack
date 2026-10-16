@@ -407,10 +407,10 @@ def test_gate_icon_colors_tighten_palette(tmp_path) -> None:
     )
     # #2F855A is inside the style palette → no palette failure without subset
     rep = run_gate(svg, pack, style)
-    assert not any("style palette" in f for f in rep.failures)
+    assert not any("style palette" in f for f in rep.errors)
     # outside the icon subset (only #C05621 allowed) → icon-colors failure
     rep = run_gate(svg, pack, style, icon_colors=("#C05621",))
-    assert any("outside the icon colors" in f for f in rep.failures)
+    assert any("outside the icon colors" in f for f in rep.errors)
     # inside the subset → no icon-colors failure
     rep = run_gate(svg, pack, style, icon_colors=("#2F855A",))
-    assert not any("icon colors" in f for f in rep.failures)
+    assert not any("icon colors" in f for f in rep.errors)
