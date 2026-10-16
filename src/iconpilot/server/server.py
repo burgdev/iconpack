@@ -322,7 +322,10 @@ class ReviewHandler(BaseHTTPRequestHandler):
         if url.path == "/api/recraft-models":
             import iconpilot.recraft as _rc
 
-            self._json(200, dict(_rc.MODEL_PRICES))
+            self._json(
+                200,
+                {"prices": dict(_rc.MODEL_PRICES), "suggestions": dict(_rc.STYLE_MODEL_SUGGESTIONS)},
+            )
             return
         if url.path == "/api/recraft-request":
             icon_id = (q.get("icon") or [""])[0]
@@ -366,25 +369,28 @@ class ReviewHandler(BaseHTTPRequestHandler):
                     + (_rc3.STYLE_REF_PRICE if plan["refs"] else 0),
                     4,
                 )
+            # build the EXACT request that will be sent
+            if grid >= 2:
+                actual_prompt = rc.sheet_prompt(plan["prompt"], grid, model=plan["model"])
+            else:
+                actual_prompt = plan["prompt"]
             req = {
                 "model": plan["model"],
-                "prompt": plan["prompt"],
+                "prompt": actual_prompt,
                 "size": "1:1",
                 "response_format": "b64_json",
             }
             if grid == 1:
-                req["n"] = plan["n"]  # separate images via n-parameter (max 6)
+                req["n"] = plan["n"]
             else:
                 req["n"] = 1  # one sheet image
-                req["_grid"] = grid
-                req["_versions"] = plan["n"]
             if plan["style_id"]:
                 req["style_id"] = plan["style_id"]
-                req["style_match"] = "precise"
-            elif plan.get("curated"):
-                req["style"] = plan["curated"]  # V2 curated style name
-            elif plan["refs"] and "v4" in plan["model"]:
-                req["style_reference_urls"] = [f"<{len(plan['refs'])} PNG refs>"]
+                req["style_match"] = "precise" if "v4" in plan["model"] else "regular"
+            elif plan.get("curated") and "v4" not in plan["model"]:
+                req["style"] = plan["curated"]
+            elif plan["refs"]:
+                req["style_reference_urls"] = [f"<{len(plan['refs'])} PNG refs, ${rc.STYLE_REF_PRICE}/req>"]
             self._json(
                 200,
                 {
