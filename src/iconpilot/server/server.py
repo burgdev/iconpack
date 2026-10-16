@@ -982,6 +982,8 @@ class ReviewHandler(BaseHTTPRequestHandler):
             ref_urls = png_urls or None
 
         grid = int(data.get("grid") or 0)
+        icon = pack["icons"][data.get("icon", "")]
+        icon_colors = icon.get("colors") or None
         if grid >= 2:
             sheet = rc.generate(
                 token,
@@ -991,6 +993,7 @@ class ReviewHandler(BaseHTTPRequestHandler):
                 model=plan["model"],
                 reference_urls=ref_urls,
                 curated_style=plan.get("curated"),
+                colors=icon_colors,
             )
             cells = rc.split_sheet(sheet[0], grid)
         else:
@@ -998,6 +1001,7 @@ class ReviewHandler(BaseHTTPRequestHandler):
                 token,
                 plan["prompt"],
                 n=plan["n"],
+                colors=icon_colors,
                 style_id=style_id,
                 model=plan["model"],
                 reference_urls=ref_urls,
