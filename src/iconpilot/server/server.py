@@ -1294,7 +1294,7 @@ class ReviewHandler(BaseHTTPRequestHandler):
 
         out: dict = {
             "takes": takes,
-            "cost_usd": round(total_cost, 4),
+            "cost_usd": round(sum(c["cost"] for c in calls) or total_cost, 4),
             "calls": [
                 {
                     "style": c["style"],
