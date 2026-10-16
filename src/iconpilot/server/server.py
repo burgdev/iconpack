@@ -43,8 +43,9 @@ def run_gate_svg(svg_text: str, pack: dict, styles: dict, icon_id: str, variant_
         f.write(svg_text)
         path = f.name
     try:
-        style_id = pack["icons"][icon_id]["variants"][variant_id]["style"]
-        return _gate(path, pack, styles[style_id]).passed
+        icon = pack["icons"][icon_id]
+        style_id = icon["variants"][variant_id]["style"]
+        return _gate(path, pack, styles[style_id], icon_colors=icon.get("colors") or None).passed
     except (KeyError, Exception):
         return False
     finally:
@@ -53,7 +54,7 @@ def run_gate_svg(svg_text: str, pack: dict, styles: dict, icon_id: str, variant_
         os.unlink(path)
 
 
-EDITABLE_FIELDS = ("brief", "prompt", "main_color", "note", "description")
+EDITABLE_FIELDS = ("brief", "prompt", "main_color", "colors", "note", "description")
 
 
 _HEX_RE = __import__("re").compile(r"^#[0-9a-fA-F]{6}$")
