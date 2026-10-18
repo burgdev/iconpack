@@ -179,8 +179,8 @@ BUILTIN_STYLES: dict[str, Style] = {
         ),
         # ── geometric / kept styles ──
         _s(
-            "isometric",
-            label="Isometric",
+            "color-isometric",
+            label="Color isometric",
             size=48,
             render_sizes=(48,),
             construction="solid",
@@ -194,8 +194,8 @@ BUILTIN_STYLES: dict[str, Style] = {
             avoid=("perspective", "curved volumes"),
         ),
         _s(
-            "offset-fill",
-            label="Offset fill",
+            "color-offset-fill",
+            label="Color offset fill",
             size=48,
             render_sizes=(24, 48),
             construction="outline+fill",
@@ -210,8 +210,8 @@ BUILTIN_STYLES: dict[str, Style] = {
             avoid=("aligned fill", "more than two colors"),
         ),
         _s(
-            "primitive",
-            label="Primitive",
+            "mono-primitive",
+            label="Mono primitive",
             size=24,
             render_sizes=(24,),
             construction="solid",

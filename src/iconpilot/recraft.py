@@ -74,9 +74,9 @@ STYLE_MODEL_SUGGESTIONS = {
     "color-flat": "recraftv4_1_vector",
     "color-broken-line": "recraftv4_1_vector",
     "color-gradient": "recraftv4_1_vector",
-    "isometric": "recraftv4_1_vector",
-    "offset-fill": "recraftv4_1_vector",
-    "primitive": "recraftv2_vector",
+    "color-isometric": "recraftv4_1_vector",
+    "color-offset-fill": "recraftv4_1_vector",
+    "mono-primitive": "recraftv2_vector",
 }
 
 CURATED_STYLE_MAP = {
@@ -85,9 +85,9 @@ CURATED_STYLE_MAP = {
     "color-flat": "Colored shape",
     "color-broken-line": "Broken line",
     "color-gradient": "Gradient shape",
-    "isometric": "Colored shape",
-    "offset-fill": "Offset fill",
-    "primitive": "Pictogram",
+    "color-isometric": "Colored shape",
+    "color-offset-fill": "Offset fill",
+    "mono-primitive": "Pictogram",
 }
 STYLE_REF_PRICE = 0.005  # per request attaching style_reference_urls instead of style_id
 

@@ -52,7 +52,7 @@ def test_add_multi_variant_and_unknown_style(tmp_path: Path) -> None:
             "--brief",
             "Mountain lake",
             "--variant",
-            "primitive:primitive",
+            "primitive:mono-primitive",
             "--variant",
             "mono:mono-line",
             "--variant",

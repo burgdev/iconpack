@@ -39,7 +39,7 @@ def example_pack() -> dict:
                 "prompt": "gable roof slightly asymmetric",
                 "main_color": "#346751",
                 "variants": {
-                    "primitive": {"style": "primitive", "status": "todo", "anchor": True},
+                    "primitive": {"style": "mono-primitive", "status": "todo", "anchor": True},
                     "mono": {"style": "mono-line", "status": "approved"},
                     "color": {
                         "style": "color-flat",
@@ -258,14 +258,14 @@ def test_builtin_styles_complete() -> None:
         "color-gradient",
         "mono-filled",
         "mono-line",
-        "primitive",
+        "mono-primitive",
     }
     advanced = {
         "color-broken-line",
         "color-flat",
-        "isometric",
-        "offset-fill",
-        "primitive",
+        "color-isometric",
+        "color-offset-fill",
+        "mono-primitive",
         "mono-line",
     }
     assert core <= set(BUILTIN_STYLES)
@@ -319,7 +319,7 @@ def test_resolve_default_variant_single_rule() -> None:
 
     icon = {
         "variants": {
-            "primitive": {"style": "primitive", "status": "approved"},
+            "primitive": {"style": "mono-primitive", "status": "approved"},
             "mono": {"style": "mono-line", "status": "approved"},
             "color": {"style": "color-flat", "status": "todo"},
         }
