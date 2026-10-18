@@ -214,9 +214,18 @@ def _png_data_url(svg_text: str, size: int = 512) -> str:
     import base64 as _b64
     import io as _io
 
+    from PIL import Image
+
     from iconpilot.render.render import render_png_text
 
     img = render_png_text(svg_text, size)
+    # flatten onto white: RGBA transparency renders as a white wash in
+    # Recraft's ingestion — the style would learn "white" and every
+    # generation comes back blank
+    if img.mode in ("RGBA", "LA", "P"):
+        base = Image.new("RGB", img.size, (255, 255, 255))
+        base.paste(img, mask=img.convert("RGBA").split()[-1])
+        img = base
     buf = _io.BytesIO()
     img.save(buf, "PNG")
     return "data:image/png;base64," + _b64.b64encode(buf.getvalue()).decode()

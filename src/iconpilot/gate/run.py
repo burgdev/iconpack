@@ -140,6 +140,9 @@ def _lint(
         scope = "icon colors" if icon_colors else "style palette"
         if rogue:
             report.fail(f"lint: colors outside the {scope}: {sorted(rogue)}")
+        elif used and not (used - {"#fff", "#ffffff"}):
+            # every fill is tolerated-white → a blank icon would pass silently
+            report.fail("lint: all-white icon — no ink color at all")
     report.checks.append(f"lint: elements/attributes conform to style '{style.id}'")
 
 

@@ -1022,6 +1022,12 @@ class ReviewHandler(BaseHTTPRequestHandler):
                     img = render_png_text(svg_text, 256)
                     import io as _io
 
+                    if img.mode in ("RGBA", "LA", "P"):
+                        from PIL import Image as _PIL
+
+                        _flat = _PIL.new("RGB", img.size, (255, 255, 255))
+                        _flat.paste(img, mask=img.convert("RGBA").split()[-1])
+                        img = _flat
                     buf = _io.BytesIO()
                     img.save(buf, "PNG")
                     png_urls.append(
@@ -1463,6 +1469,12 @@ class ReviewHandler(BaseHTTPRequestHandler):
                 for svg_text in refs:
                     try:
                         img = render_png_text(svg_text, 256)
+                        if img.mode in ("RGBA", "LA", "P"):
+                            from PIL import Image as _PIL
+
+                            _base = _PIL.new("RGB", img.size, (255, 255, 255))
+                            _base.paste(img, mask=img.convert("RGBA").split()[-1])
+                            img = _base
                         buf = _io.BytesIO()
                         img.save(buf, "PNG")
                         pngs.append(
