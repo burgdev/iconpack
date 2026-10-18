@@ -130,18 +130,33 @@ def _lint(
         source = list(icon_colors) if icon_colors else list(style.palette)
         allowed = {c.lower() for c in source}
         used = set()
+        named = {
+            "white": "#ffffff",
+            "black": "#000000",
+            "red": "#ff0000",
+            "green": "#008000",
+            "blue": "#0000ff",
+            "gray": "#808080",
+        }
         for el in root.iter():
-            for attr in ("fill", "stroke"):
+            for attr in ("fill", "stroke", "stop-color"):
                 v = (el.get(attr) or "").strip().lower()
-                if v.startswith("#"):
+                if not v or v in ("none", "currentcolor"):
+                    continue
+                if v.startswith("#") and len(v) in (4, 7):
                     used.add(v)
-                elif v.startswith("rgb("):
-                    # Recraft v4 returns rgb(r,g,b) — normalize to hex
+                elif v.startswith(("rgb(", "rgba(")):
+                    # Recraft v4 returns rgb(r,g,b) / rgba(r,g,b,a) — normalize
                     try:
-                        parts = [int(p) for p in v[4:-1].split(",")[:3]]
-                        used.add("#%02x%02x%02x" % tuple(parts))
-                    except ValueError:
+                        parts = [
+                            min(255, max(0, int(p))) for p in v[v.index("(") + 1 : -1].split(",")
+                        ]
+                        if len(parts) >= 3:
+                            used.add("#{:02x}{:02x}{:02x}".format(*parts[:3]))
+                    except (ValueError, TypeError):
                         pass
+                elif v in named:
+                    used.add(named[v])
         rogue = used - allowed - {"#fff", "#ffffff"}  # white halo tolerated
         scope = "icon colors" if icon_colors else "style palette"
         if rogue:

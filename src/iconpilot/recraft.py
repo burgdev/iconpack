@@ -209,7 +209,7 @@ def hex_to_rgb(h: str) -> list[int] | None:
         return None
 
 
-def _png_data_url(svg_text: str, size: int = 512) -> str:
+def png_data_url(svg_text: str, size: int = 512) -> str:
     """Render an SVG ref to a PNG data URL — Recraft /styles needs raster."""
     import base64 as _b64
     import io as _io
@@ -248,7 +248,7 @@ def create_style(
     if not 1 <= len(svg_texts) <= 10:
         raise RecraftError(f"styles need 1-10 references, got {len(svg_texts)}")
     try:
-        image_urls = [_png_data_url(s) for s in svg_texts]
+        image_urls = [png_data_url(s) for s in svg_texts]
     except Exception as exc:  # rasterization failure (broken ref, no cairo)
         raise RecraftError(f"cannot rasterize style refs to PNG: {exc}") from exc
     model = "recraftv2_vector" if match == "regular" else "recraftv4_styles"
@@ -359,34 +359,9 @@ def pack_grid(n_icons: int) -> int:
     return 2 if n_icons <= 4 else 3
 
 
-def _content_bbox(svg: str) -> tuple[float, float, float, float] | None:
-    """Union bbox of all drawn elements (source coordinates); None if empty."""
-    from xml.etree import ElementTree as _ET
-
-    try:
-        root = _ET.fromstring(svg)
-    except _ET.ParseError:
-        return None
-    xs0, ys0, xs1, ys1 = [], [], [], []
-    for el in root.iter():
-        if el is root:
-            continue
-        tag = el.tag.split("}")[-1]
-        if tag in ("defs", "linearGradient", "radialGradient", "stop", "g"):
-            continue
-        bb = _true_bbox(el)
-        if bb is None:
-            continue
-        xs0.append(bb[0])
-        ys0.append(bb[1])
-        xs1.append(bb[2])
-        ys1.append(bb[3])
-    if not xs0:
-        return None
-    return min(xs0), min(ys0), max(xs1), max(ys1)
-
-
-def _ink_bbox(svg: str, source: float, probe: int = 96) -> tuple[float, float, float, float] | None:
+def _ink_bbox(
+    svg: str, source: float, probe: int = 256
+) -> tuple[float, float, float, float] | None:
     """Rendered ink bbox in SOURCE coordinates; None when blank.
 
     A coordinate-space bbox is wrong for anything inside <g transform=…>
@@ -398,7 +373,10 @@ def _ink_bbox(svg: str, source: float, probe: int = 96) -> tuple[float, float, f
 
         img = render_png_text(svg, probe)  # transparent background
         bb = img.getchannel("A").getbbox()
-    except Exception:
+    except Exception as exc:  # noqa: BLE001 — degrade to no-centering, keep the icon
+        import sys
+
+        print(f"ink-bbox probe failed: {exc}", file=sys.stderr)
         return None
     if not bb:
         return None

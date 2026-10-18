@@ -77,7 +77,7 @@ def test_create_style_payload(monkeypatch: pytest.MonkeyPatch) -> None:
         return {"id": "st-42"}
 
     monkeypatch.setattr(rc, "_request", fake_request)
-    monkeypatch.setattr(rc, "_png_data_url", lambda s, size=512: "data:image/png;base64,VEVTVA==")
+    monkeypatch.setattr(rc, "png_data_url", lambda s, size=512: "data:image/png;base64,VEVTVA==")
     out = rc.create_style("tok", ["<svg/>"])
     assert out["id"] == "st-42"
     assert captured["path"] == "/styles"
@@ -773,7 +773,10 @@ def test_normalize_recenters_offcenter_content() -> None:
     assert "translate(" in out and "scale(" in out
     k = 24 / 1024
     tx = (24 - k * 200) / 2 - k * 100
-    assert f"translate({tx:.3f}" in out or "translate(7.25" in out
+    # probe=256 quantizes bbox edges to 4 source units → tx within ±0.06
+    assert any(f"translate({tx + d:.3f}" in out for d in (-0.06, -0.03, 0.0, 0.03, 0.06)), (
+        f"centering off: expected ~{tx:.3f}"
+    )
     full = rc.normalize(SRC, "0 0 24 24")
     assert '<g transform="scale(' in full and "translate(" not in full
 
@@ -884,7 +887,7 @@ def test_create_style_bakes_prompt_and_palette() -> None:
         return {"id": "uuid-1"}
 
     rc._request = fake
-    rc._png_data_url = lambda s, size=512: "data:image/png;base64,VEVTVA=="  # raster stub
+    rc.png_data_url = lambda s, size=512: "data:image/png;base64,VEVTVA=="  # raster stub
     out = create_style(
         "T", ["<svg/>"], prompt=style_prompt_text(style), palette=list(style.palette)
     )

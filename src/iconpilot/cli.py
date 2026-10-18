@@ -705,19 +705,11 @@ def draft(
     # Recraft rejects SVG refs — render to PNG
     _ref_urls = None
     if refs:
-        import base64 as _b64
-        import io as _io
-
-        from iconpilot.render.render import render_png_text
-
         ref_pngs = []
         for svg_text in refs:
             try:
-                img = render_png_text(svg_text, 256)
-                buf = _io.BytesIO()
-                img.save(buf, "PNG")
-                ref_pngs.append("data:image/png;base64," + _b64.b64encode(buf.getvalue()).decode())
-            except (ValueError, OSError):  # skip unrenderable
+                ref_pngs.append(rc.png_data_url(svg_text, 256))
+            except (ValueError, OSError):
                 pass
         _ref_urls = ref_pngs or None
     try:

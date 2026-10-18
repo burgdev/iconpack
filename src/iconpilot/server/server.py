@@ -810,32 +810,26 @@ class ReviewHandler(BaseHTTPRequestHandler):
         vector base, return the fresh id (or None)."""
         import iconpilot.recraft as rc
 
-        with pack_lock(self.pack_dir):
-            pack, _ = load_pack(self.pack_dir / "pack.json")
-        bad = (pack.get("recraft", {}).get("style_ids", {}) or {}).get(style_key)
-        # purge locally first (snap + cfg)
-        with pack_lock(self.pack_dir):
-            pk, _ = load_pack(self.pack_dir / "pack.json")
-            pk.setdefault("recraft", {}).get("style_ids", {}).pop(style_key, None)
-            pk.get("styles", {}).get(style_key, {}).pop("recraft_style_id", None)
-            pk.get("styles", {}).get(style_key, {}).pop("recraft_style_hash", None)
-            write_pack_atomic(self.pack_dir, pk)
-        if bad:
-            try:
-                rc._request(token, "DELETE", f"/styles/{bad}")
-            except Exception:  # noqa: S110 — remote cleanup is best-effort
-                pass
         if not refs:
             return None
-        out = rc.create_style(
-            token,
-            refs,
-            prompt=rc.style_prompt_text(style),
-            palette=list(getattr(style, "palette", None) or []),
-        )
-        new_id = out["id"]
+        # one lock across purge + recreate: concurrent drafts can't both
+        # recreate (duplicate styles + double cost) and none can read the
+        # purged cache mid-heal
         with pack_lock(self.pack_dir):
             pk, _ = load_pack(self.pack_dir / "pack.json")
+            bad = (pk.get("recraft", {}).get("style_ids", {}) or {}).get(style_key)
+            if bad:
+                try:
+                    rc._request(token, "DELETE", f"/styles/{bad}")
+                except Exception:  # noqa: S110 — remote cleanup is best-effort
+                    pass
+            out = rc.create_style(
+                token,
+                refs,
+                prompt=rc.style_prompt_text(style),
+                palette=list(getattr(style, "palette", None) or []),
+            )
+            new_id = out["id"]
             snap = pk.setdefault("styles", {}).setdefault(style_key, {})
             snap["recraft_style_id"] = new_id
             snap["recraft_style_hash"] = rc.refs_hash(refs)
@@ -1014,25 +1008,11 @@ class ReviewHandler(BaseHTTPRequestHandler):
         ref_urls = None
         if plan["refs"] and "v4" in plan["model"] and not plan.get("curated") and not style_id:
             # PNG conversion for V4 refs
-            from iconpilot.render.render import render_png_text
 
             png_urls = []
             for svg_text in plan["refs"]:
                 try:
-                    img = render_png_text(svg_text, 256)
-                    import io as _io
-
-                    if img.mode in ("RGBA", "LA", "P"):
-                        from PIL import Image as _PIL
-
-                        _flat = _PIL.new("RGB", img.size, (255, 255, 255))
-                        _flat.paste(img, mask=img.convert("RGBA").split()[-1])
-                        img = _flat
-                    buf = _io.BytesIO()
-                    img.save(buf, "PNG")
-                    png_urls.append(
-                        "data:image/png;base64," + _b64.b64encode(buf.getvalue()).decode()
-                    )
+                    png_urls.append(rc.png_data_url(svg_text, 256))
                 except (ValueError, OSError):
                     pass
             ref_urls = png_urls or None
@@ -1223,28 +1203,16 @@ class ReviewHandler(BaseHTTPRequestHandler):
         if plan["refs"] and "v4" not in plan["model"] and not plan.get("curated"):
             plan["model"] = rc.DEFAULT_MODEL
         if plan["refs"] and "v4" in plan["model"] and not plan.get("curated") and not style_id:
-            import base64 as _b64
-            import io as _io
-
-            from iconpilot.render.render import render_png_text
-
             png_urls = []
             for svg_text in plan["refs"]:
                 try:
-                    img = render_png_text(svg_text, 256)
-                    buf = _io.BytesIO()
-                    img.save(buf, "PNG")
-                    png_urls.append(
-                        "data:image/png;base64," + _b64.b64encode(buf.getvalue()).decode()
-                    )
+                    png_urls.append(rc.png_data_url(svg_text, 256))
                 except (ValueError, OSError):
                     pass  # skip unrenderable refs
             ref_urls = png_urls or None
             # auto-upgrade: refs need V4 — don't send them to V2 models
             if ref_urls and "v4" not in plan["model"]:
                 plan["model"] = rc.DEFAULT_MODEL  # v4_styles_vector
-                ref_urls = png_urls or None
-            # DEBUG: log what we're sending
             import sys as _sys
 
             print(
@@ -1411,7 +1379,6 @@ class ReviewHandler(BaseHTTPRequestHandler):
         nothing is written until /api/recraft-commit.
         """
         import base64 as _b64
-        import io as _io
 
         import iconpilot.recraft as rc
 
@@ -1463,23 +1430,10 @@ class ReviewHandler(BaseHTTPRequestHandler):
             # Recraft generations endpoint only accepts raster refs
             ref_urls = None
             if refs and "v4" in model and not style_id_rc:
-                from iconpilot.render.render import render_png_text
-
                 pngs = []
                 for svg_text in refs:
                     try:
-                        img = render_png_text(svg_text, 256)
-                        if img.mode in ("RGBA", "LA", "P"):
-                            from PIL import Image as _PIL
-
-                            _base = _PIL.new("RGB", img.size, (255, 255, 255))
-                            _base.paste(img, mask=img.convert("RGBA").split()[-1])
-                            img = _base
-                        buf = _io.BytesIO()
-                        img.save(buf, "PNG")
-                        pngs.append(
-                            "data:image/png;base64," + _b64.b64encode(buf.getvalue()).decode()
-                        )
+                        pngs.append(rc.png_data_url(svg_text, 256))
                     except (ValueError, OSError):
                         pass
                 ref_urls = pngs or None
@@ -1549,9 +1503,11 @@ class ReviewHandler(BaseHTTPRequestHandler):
                 except rc.RecraftError as exc:
                     if style_id_rc and "not a vector style" in str(exc):
                         # poisoned cached style (wrong base) — heal + retry once
-                        style_id_rc = (
-                            self._heal_bad_style(token, style_id, style, refs) or style_id_rc
-                        )
+                        healed = self._heal_bad_style(token, style_id, style, refs)
+                        if not healed or healed == style_id_rc:
+                            raise  # nothing better to retry with
+                        style_id_rc = healed
+                        cost += rc.STYLE_CREATE_PRICE  # heal is a paid create
                         sheets = rc.generate(
                             token, prompt, n=takes, style_id=style_id_rc, model=model
                         )
