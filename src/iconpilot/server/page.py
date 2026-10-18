@@ -412,7 +412,7 @@ footer { text-align:center; color:var(--muted); font-size:.75rem; padding:20px 0
         <p class="muted" style="font-size:.8rem">candidates appear here automatically — rate them when they land. The tabs above stay usable.</p>
       </div>
     </section>
-    <section v-show="!waitingForAgent() && S.grouped.length">
+    <section v-else-if="S.grouped.length">
       <div class="row" style="justify-content:space-between; align-items:baseline">
         <h2 style="margin:0">{{ S.viewRound && S.viewRound !== S.latest ? 'Archived pass ' + S.viewRound : 'Current pass — rate, then decide' }}</h2>
         <button v-if="(S.recraftReady || S.debug) && !isViewing()" class="subtle" @click="openBatchDlg()"
