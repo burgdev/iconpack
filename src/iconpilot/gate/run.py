@@ -129,13 +129,19 @@ def _lint(
     if icon_colors or style.palette:
         source = list(icon_colors) if icon_colors else list(style.palette)
         allowed = {c.lower() for c in source}
-        used = {
-            v.lower()
-            for el in root.iter()
-            for attr in ("fill", "stroke")
-            for v in [el.get(attr) or ""]
-            if v.startswith("#")
-        }
+        used = set()
+        for el in root.iter():
+            for attr in ("fill", "stroke"):
+                v = (el.get(attr) or "").strip().lower()
+                if v.startswith("#"):
+                    used.add(v)
+                elif v.startswith("rgb("):
+                    # Recraft v4 returns rgb(r,g,b) — normalize to hex
+                    try:
+                        parts = [int(p) for p in v[4:-1].split(",")[:3]]
+                        used.add("#%02x%02x%02x" % tuple(parts))
+                    except ValueError:
+                        pass
         rogue = used - allowed - {"#fff", "#ffffff"}  # white halo tolerated
         scope = "icon colors" if icon_colors else "style palette"
         if rogue:
