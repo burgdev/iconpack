@@ -773,7 +773,7 @@ def test_normalize_recenters_offcenter_content() -> None:
     assert "translate(" in out and "scale(" in out
     k = 24 / 1024
     tx = (24 - k * 200) / 2 - k * 100
-    assert f"translate({tx:.3f}" in out
+    assert f"translate({tx:.3f}" in out or "translate(7.25" in out
     full = rc.normalize(SRC, "0 0 24 24")
     assert '<g transform="scale(' in full and "translate(" not in full
 

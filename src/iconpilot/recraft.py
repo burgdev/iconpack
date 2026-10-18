@@ -386,6 +386,26 @@ def _content_bbox(svg: str) -> tuple[float, float, float, float] | None:
     return min(xs0), min(ys0), max(xs1), max(ys1)
 
 
+def _ink_bbox(svg: str, source: float, probe: int = 96) -> tuple[float, float, float, float] | None:
+    """Rendered ink bbox in SOURCE coordinates; None when blank.
+
+    A coordinate-space bbox is wrong for anything inside <g transform=…>
+    (split-sheet cells, nested groups): raw path coords ignore ancestor
+    transforms. Rasterizing and reading the alpha box is transform-true.
+    """
+    try:
+        from iconpilot.render.render import render_png_text
+
+        img = render_png_text(svg, probe)  # transparent background
+        bb = img.getchannel("A").getbbox()
+    except Exception:
+        return None
+    if not bb:
+        return None
+    u = source / probe
+    return bb[0] * u, bb[1] * u, bb[2] * u, bb[3] * u
+
+
 def _serialize(els) -> str:
     """Serialize elements without namespace prefixes (svg:rect → rect)."""
     import re as _re2
@@ -636,9 +656,11 @@ def normalize(svg: str, target_viewbox: str, mono: bool = False) -> str:
         raise RecraftError("cannot determine source grid size")
     k = round(target / source, 6)
     # recenter: Recraft often leaves the icon off-center in its canvas —
-    # translate the content bbox into the middle of the pack grid
+    # translate the RENDERED ink bbox into the middle of the pack grid.
+    # Pixel-true (rasterize, read the alpha box) so ancestor transforms,
+    # nested groups and split-sheet cells are all handled correctly.
     tx = ty = 0.0
-    bb = _content_bbox(svg)
+    bb = _ink_bbox(svg, source)
     if bb:
         bx0, by0, bx1, by1 = bb
         tx = (target - k * (bx1 - bx0)) / 2 - k * bx0
