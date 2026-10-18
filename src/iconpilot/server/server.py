@@ -804,6 +804,45 @@ class ReviewHandler(BaseHTTPRequestHandler):
         )
         return {"round": run, "open": open_, "feedback_carried": carried}
 
+    def _heal_bad_style(self, token: str, style_key: str, style, refs: list[str]) -> str | None:
+        """A cached style with the wrong base (Recraft 'any') poisons every
+        generation. Delete it remotely + locally, recreate with the correct
+        vector base, return the fresh id (or None)."""
+        import iconpilot.recraft as rc
+
+        with pack_lock(self.pack_dir):
+            pack, _ = load_pack(self.pack_dir / "pack.json")
+        bad = (pack.get("recraft", {}).get("style_ids", {}) or {}).get(style_key)
+        # purge locally first (snap + cfg)
+        with pack_lock(self.pack_dir):
+            pk, _ = load_pack(self.pack_dir / "pack.json")
+            pk.setdefault("recraft", {}).get("style_ids", {}).pop(style_key, None)
+            pk.get("styles", {}).get(style_key, {}).pop("recraft_style_id", None)
+            pk.get("styles", {}).get(style_key, {}).pop("recraft_style_hash", None)
+            write_pack_atomic(self.pack_dir, pk)
+        if bad:
+            try:
+                rc._request(token, "DELETE", f"/styles/{bad}")
+            except Exception:  # noqa: S110 — remote cleanup is best-effort
+                pass
+        if not refs:
+            return None
+        out = rc.create_style(
+            token,
+            refs,
+            prompt=rc.style_prompt_text(style),
+            palette=list(getattr(style, "palette", None) or []),
+        )
+        new_id = out["id"]
+        with pack_lock(self.pack_dir):
+            pk, _ = load_pack(self.pack_dir / "pack.json")
+            snap = pk.setdefault("styles", {}).setdefault(style_key, {})
+            snap["recraft_style_id"] = new_id
+            snap["recraft_style_hash"] = rc.refs_hash(refs)
+            pk.setdefault("recraft", {}).setdefault("style_ids", {})[style_key] = new_id
+            write_pack_atomic(self.pack_dir, pk)
+        return new_id
+
     def _ensure_style_id(self, token: str, style_key: str, style, refs: list[str]) -> str | None:
         """Cached Recraft style for `style_key`, creating it when missing/stale.
 
@@ -1485,15 +1524,27 @@ class ReviewHandler(BaseHTTPRequestHandler):
                 if data.get("debug"):
                     continue
                 assert token is not None  # debug-only path skips generation
-                sheets = rc.generate(
-                    token,
-                    prompt,
-                    n=takes,
-                    style_id=style_id_rc,
-                    model=model,
-                    reference_urls=ref_urls,
-                    curated_style=curated,
-                )
+                try:
+                    sheets = rc.generate(
+                        token,
+                        prompt,
+                        n=takes,
+                        style_id=style_id_rc,
+                        model=model,
+                        reference_urls=ref_urls,
+                        curated_style=curated,
+                    )
+                except rc.RecraftError as exc:
+                    if style_id_rc and "not a vector style" in str(exc):
+                        # poisoned cached style (wrong base) — heal + retry once
+                        style_id_rc = (
+                            self._heal_bad_style(token, style_id, style, refs) or style_id_rc
+                        )
+                        sheets = rc.generate(
+                            token, prompt, n=takes, style_id=style_id_rc, model=model
+                        )
+                    else:
+                        raise
                 split_sheets = [rc.split_sheet(s, grid, target=24.0) for s in sheets]
                 for k, (iid, vid) in enumerate(chunk):
                     results = []
