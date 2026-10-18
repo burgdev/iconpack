@@ -85,7 +85,8 @@ body { margin:0; font:15px/1.45 system-ui,-apple-system,Segoe UI,Roboto,sans-ser
 /* centered tabs — full-height, underline flush with the bar's bottom border */
 .tabs { display:flex; gap:4px; flex:0 0 auto; align-items:stretch; }
 .tabs button { border:none; border-bottom:2px solid transparent; border-radius:0; background:none;
-               color:var(--muted); padding:0 14px; font-weight:600; display:inline-flex; gap:6px; align-items:center; }
+               color:var(--muted); padding:0 14px; font-weight:600; display:inline-flex; gap:6px; align-items:center;
+               height:auto; align-self:stretch; }  /* exempt from the 32px cap — reach the bar bottom */
 .tabs button:hover { color:var(--ink); }
 .tabs button.on { color:var(--accent); border-bottom-color:var(--accent); }
 
@@ -106,12 +107,23 @@ body { margin:0; font:15px/1.45 system-ui,-apple-system,Segoe UI,Roboto,sans-ser
           color:color-mix(in srgb, var(--warn) 55%, white); }
 
 /* full-area waiting state (pick tab, agent drafting, nothing to rate yet) */
-.waitstate { display:flex; justify-content:center; padding:64px 16px; }
-.waitcard { text-align:center; max-width:460px; }
-.waitcard h2 { margin:12px 0 6px; }
+.waitstate { display:flex; justify-content:center; padding:48px 16px 64px; }
+.waitcard { text-align:center; max-width:520px; background:var(--card); border:1px solid var(--line);
+            border-radius:14px; box-shadow:var(--shadow); padding:28px 24px 24px; }
+.waitcard h2 { margin:14px 0 6px; font-size:1.15rem; }
 .waitcard p { margin:4px 0; }
+.waiticon { width:48px; height:48px; margin:0 auto; border-radius:12px;
+            background:color-mix(in srgb, var(--warn) 14%, transparent);
+            display:flex; align-items:center; justify-content:center; }
 .waitpulse { animation:pulse 1.6s infinite; color:var(--warn); }
-.waitpulse svg { width:28px; height:28px; }
+.waitpulse svg { width:24px; height:24px; }
+.waittargets { display:flex; flex-wrap:wrap; gap:5px; justify-content:center; margin:12px 0 4px; }
+.waitskeleton { display:flex; gap:8px; justify-content:center; margin:14px 0 6px; }
+.skcell { width:56px; height:56px; border-radius:10px; border:1px dashed var(--line);
+          background:var(--card-2); animation:pulse 2.2s infinite; }
+.skcell:nth-child(2) { animation-delay:.2s; } .skcell:nth-child(3) { animation-delay:.4s; }
+.skcell:nth-child(4) { animation-delay:.6s; } .skcell:nth-child(5) { animation-delay:.8s; }
+.skcell:nth-child(6) { animation-delay:1s; }
 
 /* breakpoint ladder */
 @media (max-width:1199px) { .tb-left .meta.rev { display:none; } .aistat { max-width:160px; } }
@@ -403,10 +415,22 @@ footer { text-align:center; color:var(--muted); font-size:.75rem; padding:20px 0
     </section>
     <section v-if="waitingForAgent()" class="waitstate">
       <div class="waitcard">
-        <span class="ic-lg waitpulse" v-html="IC.spark"></span>
+        <div class="waiticon"><span class="ic-lg waitpulse" v-html="IC.spark"></span></div>
         <h2>agent is drafting pass {{ S.round || '—' }}</h2>
         <p class="muted">{{ S.ai.text }}</p>
-        <p class="muted" style="font-size:.8rem">candidates appear here automatically — rate them when they land. The tabs above stay usable.</p>
+        <div class="waittargets" v-if="waitTargets().length">
+          <span class="chip" v-for="tg in waitTargets()" :key="tg">{{ tg }}</span>
+        </div>
+        <div class="waitskeleton" aria-hidden="true">
+          <span v-for="n in 6" :key="n" class="skcell"></span>
+        </div>
+        <p class="muted" style="font-size:.8rem">candidates appear here automatically — rate them when they land.</p>
+        <div class="row" style="justify-content:center; margin-top:10px">
+          <button v-if="S.recraftReady || S.debug" class="subtle" @click="openBatchDlg()"
+                  title="draft every open icon with Recraft instead — same icons on every sheet, one take per sheet">
+            <span class="ic" v-html="IC.bolt"></span> seed with Recraft instead
+          </button>
+        </div>
       </div>
     </section>
     <section v-else-if="S.grouped.length">
@@ -507,7 +531,7 @@ footer { text-align:center; color:var(--muted); font-size:.75rem; padding:20px 0
       <p class="muted">no candidates in {{ S.viewRound || S.round || 'this pass' }} — the status above shows agent progress.</p>
     </section>
 
-    <div class="composer">
+    <div class="composer" v-show="!waitingForAgent()">
       <details>
         <summary>Decision text · {{ S.lines.length }} lines</summary>
         <p class="muted" style="margin:6px 0">
@@ -818,7 +842,7 @@ footer { text-align:center; color:var(--muted); font-size:.75rem; padding:20px 0
 <footer>iconpilot review v{{ S.version }} · flock-serialized writes · approval is always yours</footer>
   </main>
 
-  <div class="actionbar" v-show="S.tab === 'round'" :class="{ ready: S.actionBar.ready }">
+  <div class="actionbar" v-show="S.tab === 'round' && !waitingForAgent()" :class="{ ready: S.actionBar.ready }">
     <span class="ab-status" :class="{ 'flash-ok': S.flash && S.flashOk, 'flash-err': S.flash && !S.flashOk }">
       <template v-if="S.flash">{{ S.flash }}</template>
       <template v-else>
@@ -1525,6 +1549,9 @@ function batchReject(maxScore) {
     }
   }
   flash('batch: rejected ' + (maxScore === 0 ? 'unrated' : 'all rated ≤ ' + maxScore), true);
+}
+function waitTargets() {
+  return [...new Set((S.grouped || []).map(g => g.icon))];
 }
 function waitingForAgent() {
   return S.tab === 'round' && !isViewing() && S.ai.active && !S.candidates.length;
@@ -2601,7 +2628,7 @@ const App = {
       showDebug, debugCopy, openNextDlg, addVariantBulk, addCustomStyle, saveRecraftDefaults,
       GATE_HELP, styleRules, stylePalette, ruleTitle, styleUsageCount, isPostponed, togglePostpone, applyAndNext, colState, toggleCol, toggleAll, usedStyles, setTab, iconSuggest, pickSuggestion, addNewIcon, startRoundWithNew,
       styleSummary, isOwnRef, editStyle, toggleGate, saveStyleRules, removeStyle, addStyleToPack, pickRefFile, removeRef,
-      vectorModels, curatedNames, styleDetail, editCustomStyle, recraftGenerate, commitResults, iconStylePalette, toggleIconColor, waitingForAgent, openStyleRc, styleRcCreate, styleRcSave, openBatchDlg, batchGroups, grpAll, toggleGrp, batchSelCount, batchTotal, batchSheets, batchDebug, batchEst, batchGenerate, batchElapsed, batchProgress, dropResult, keptCount, totalCount, keepAll,
+      vectorModels, curatedNames, styleDetail, editCustomStyle, recraftGenerate, commitResults, iconStylePalette, toggleIconColor, waitingForAgent, waitTargets, openStyleRc, styleRcCreate, styleRcSave, openBatchDlg, batchGroups, grpAll, toggleGrp, batchSelCount, batchTotal, batchSheets, batchDebug, batchEst, batchGenerate, batchElapsed, batchProgress, dropResult, keptCount, totalCount, keepAll,
 
     };
   },
