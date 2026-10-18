@@ -235,7 +235,7 @@ def test_context_markdown(workpack: Path) -> None:
     assert r.exit_code == 0, r.output
     assert "Self-catering hut" in r.output
     assert "Reference (visually match)" in r.output
-    assert "≤ 40 nodes" in r.output
+    assert "≤ 48 nodes" in r.output
 
 
 def test_context_json_has_gate_contract(workpack: Path) -> None:
@@ -253,7 +253,7 @@ def test_context_json_has_gate_contract(workpack: Path) -> None:
     )
     assert r.exit_code == 0
     ctx = json.loads(r.output)
-    assert ctx["gate"]["max_nodes"] == 40
+    assert ctx["gate"]["max_nodes"] == 48
     assert ctx["style"]["id"] == "mono-line"
 
 
@@ -489,15 +489,15 @@ def test_resolve_variant_by_candidate_home(tmp_path) -> None:
     icon = {
         "variants": {
             "mono": {"style": "mono-line", "status": "todo"},
-            "lineal-color": {"style": "lineal-color", "status": "todo"},
+            "color-flat": {"style": "color-flat", "status": "todo"},
         }
     }
-    # candidate r1 exists ONLY in lineal-color → resolves there, not mono
-    (tmp_path / ".runs" / "r1" / "lineal-color" / "sail").mkdir(parents=True)
-    (tmp_path / ".runs" / "r1" / "lineal-color" / "sail" / "r1.svg").write_text("<svg/>")
+    # candidate r1 exists ONLY in color-flat → resolves there, not mono
+    (tmp_path / ".runs" / "r1" / "color-flat" / "sail").mkdir(parents=True)
+    (tmp_path / ".runs" / "r1" / "color-flat" / "sail" / "r1.svg").write_text("<svg/>")
     assert (
         _resolve_variant(icon, None, ["r1"], pack_dir=tmp_path, round_id="r1", icon_id="sail")
-        == "lineal-color"
+        == "color-flat"
     )
     # candidate exists in BOTH open variants → ambiguous → error
     (tmp_path / ".runs" / "r1" / "mono" / "sail").mkdir(parents=True)

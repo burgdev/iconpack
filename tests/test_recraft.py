@@ -18,7 +18,7 @@ runner = CliRunner()
 def _pack(tmp_path: Path, *, with_style_id: bool = False, pinned: bool = False) -> Path:
     d = tmp_path / "pk"
     d.mkdir()
-    flat: dict = {"style": "flat-color", "status": "approved" if pinned else "todo"}
+    flat: dict = {"style": "color-flat", "status": "approved" if pinned else "todo"}
     if pinned:
         flat["chosen"] = {"run": "r0", "variant": "x"}
         flat["pinned"] = True
@@ -247,14 +247,14 @@ def test_recraft_style_per_pack_style(tmp_path: Path, monkeypatch: pytest.Monkey
     r = runner.invoke(app, ["recraft-style", str(d)])
     assert r.exit_code == 0, r.output
     pack = json.loads((d / "pack.json").read_text())
-    assert pack["recraft"]["style_ids"] == {"flat-color": "st-1", "mono-line": "st-2"}
+    assert pack["recraft"]["style_ids"] == {"color-flat": "st-1", "mono-line": "st-2"}
     assert made == [[_pack.__defaults__ and "x" or "x"] for _ in range(2)] or len(made) == 2
 
 
 def test_draft_picks_per_style_id(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     d = _pack(tmp_path, with_style_id=True)
     pack = json.loads((d / "pack.json").read_text())
-    pack["recraft"]["style_ids"] = {"flat-color": "per-style-9"}
+    pack["recraft"]["style_ids"] = {"color-flat": "per-style-9"}
     (d / "pack.json").write_text(json.dumps(pack))
     monkeypatch.setattr(rc, "resolve_token", lambda models_file=None: "tok")
 
@@ -461,7 +461,7 @@ def test_context_archived_feedback_scope_filtered(tmp_path: Path) -> None:
     pack = json.loads((d / "pack.json").read_text())
     pack["icons"]["moon"] = {
         "brief": "crescent",
-        "variants": {"flat": {"style": "flat-color", "status": "todo"}},
+        "variants": {"flat": {"style": "color-flat", "status": "todo"}},
     }
     (d / "pack.json").write_text(json.dumps(pack))
     (d / ".runs" / "r001").mkdir(parents=True)
@@ -496,7 +496,7 @@ def test_styles_extends_resolution() -> None:
     from iconpilot.styles import resolve_styles
 
     styles = resolve_styles(
-        {"outline-color": {"extends": "filled", "size": 48, "palette": ["#123456"]}}
+        {"outline-color": {"extends": "mono-filled", "size": 48, "palette": ["#123456"]}}
     )
     st = styles["outline-color"]
     assert st.size == 48
@@ -519,7 +519,7 @@ def test_draft_prompt_uses_brief_and_colors() -> None:
     import dataclasses
 
     style = dataclasses.replace(
-        resolve_styles({})["flat-color"],
+        resolve_styles({})["color-flat"],
         palette=("#2b6cb0", "#2f855a", "#c05621", "#4a5568"),
     )
     p = draft_prompt(icon, style, pack)
@@ -581,11 +581,13 @@ def test_add_snapshots_style_into_pack(tmp_path: Path) -> None:
     d = tmp_path / "pk"
     d.mkdir()
     runner.invoke(app, ["new", str(d)])
-    r = runner.invoke(app, ["add", str(d), "sun", "--brief", "sun", "--variant", "m:duotone"])
+    r = runner.invoke(
+        app, ["add", str(d), "sun", "--brief", "sun", "--variant", "m:color-broken-line"]
+    )
     assert r.exit_code == 0, r.output
     pack = json.loads((d / "pack.json").read_text())
-    snap = pack["styles"]["duotone"]
-    assert snap["extends"] == "duotone" and snap["color_mode"] == "bicolor"
+    snap = pack["styles"]["color-broken-line"]
+    assert snap["extends"] == "color-broken-line" and snap["color_mode"] == "color"
     # pack is now independent: even a hypothetical registry change wouldn't drift
 
 
@@ -593,9 +595,9 @@ def test_gate_config_toggles_check(tmp_path: Path) -> None:
     from iconpilot.gate.run import run_gate
     from iconpilot.styles import resolve_styles
 
-    style = resolve_styles({"broken-line": {"extends": "mono-line", "gate": {"min_gap": False}}})[
-        "broken-line"
-    ]
+    style = resolve_styles(
+        {"color-broken-line": {"extends": "mono-line", "gate": {"min_gap": False}}}
+    )["color-broken-line"]
     pack = {
         "icons": {},
         "spec": {
@@ -607,7 +609,7 @@ def test_gate_config_toggles_check(tmp_path: Path) -> None:
             "fill": "none",
         },
     }
-    # two strokes 1.0 apart → min_gap failure on mono-line; waived on broken-line
+    # two strokes 1.0 apart → min_gap failure on mono-line; waived on color-broken-line
     svg = tmp_path / "g.svg"
     svg.write_text(
         '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" '
@@ -771,7 +773,7 @@ def test_normalize_recenters_offcenter_content() -> None:
     assert "translate(" in out and "scale(" in out
     k = 24 / 1024
     tx = (24 - k * 200) / 2 - k * 100
-    assert "translate({:.3f}".format(tx) in out
+    assert f"translate({tx:.3f}" in out
     full = rc.normalize(SRC, "0 0 24 24")
     assert '<g transform="scale(' in full and "translate(" not in full
 
@@ -808,7 +810,7 @@ def test_draft_prompt_icon_colors_replace_palette() -> None:
 
     from iconpilot.styles import resolve_styles
 
-    style = dataclasses.replace(resolve_styles({})["flat-color"], palette=("#111111", "#222222"))
+    style = dataclasses.replace(resolve_styles({})["color-flat"], palette=("#111111", "#222222"))
     p = rc.draft_prompt(icon, style, {})
     assert "colors #C05621, #2F855A" in p
     assert "#111111" not in p and "#2B6CB0" not in p  # subset replaces both
@@ -860,7 +862,7 @@ def test_mono_styles_enforced_black_palette() -> None:
     for sid in mono_ids:
         assert rs[sid].palette == ("#000000",), f"{sid} should enforce black"
     # color styles carry example palettes, not black
-    assert set(rs["flat-color"].palette) - {"#000000"}
+    assert set(rs["color-flat"].palette) - {"#000000"}
     # an explicit pack palette on a mono style still wins (styled different later)
     custom = resolve_styles({"mono-line": {"extends": "mono-line", "palette": ["#2B6CB0"]}})
     assert custom["mono-line"].palette == ("#2B6CB0",)
@@ -872,7 +874,9 @@ def test_create_style_bakes_prompt_and_palette() -> None:
     from iconpilot.recraft import create_style, style_prompt_text
     from iconpilot.styles import resolve_styles
 
-    style = dataclasses.replace(resolve_styles({})["duotone"], palette=("#c05621", "#2b6cb0"))
+    style = dataclasses.replace(
+        resolve_styles({})["color-broken-line"], palette=("#c05621", "#2b6cb0")
+    )
     sent = {}
 
     def fake(token, method, path, payload=None):
@@ -885,7 +889,7 @@ def test_create_style_bakes_prompt_and_palette() -> None:
         "T", ["<svg/>"], prompt=style_prompt_text(style), palette=list(style.palette)
     )
     assert out["id"] == "uuid-1"
-    assert sent["prompt"].startswith("Duotone icon style")
+    assert sent["prompt"].startswith("Color broken line icon style")
     assert sent["palette"] == {"colors": [{"rgb": [192, 86, 33]}, {"rgb": [43, 108, 176]}]}
     assert sent["model"] == "recraftv4_styles"
     assert sent["style"] == "vector_illustration"  # vector base — 'any' is rejected by vector gens
@@ -899,12 +903,12 @@ def test_draft_prompt_styled_false_subject_only() -> None:
     from iconpilot.styles import resolve_styles
 
     style = dataclasses.replace(
-        resolve_styles({})["flat-color"], palette=("#2b6cb0",), style_words=("flat fills",)
+        resolve_styles({})["color-flat"], palette=("#2b6cb0",), style_words=("flat fills",)
     )
     p = rc.draft_prompt(icon, style, {}, styled=False)
     assert p.startswith("vector icon of a tent")
     assert "#2b6cb0" not in p  # colors are baked into the style
-    assert "flat-color" not in p and "flat fills" not in p
+    assert "color-flat" not in p and "flat fills" not in p
 
 
 def test_draft_prompt_colors_before_style() -> None:
@@ -914,7 +918,7 @@ def test_draft_prompt_colors_before_style() -> None:
 
     from iconpilot.styles import resolve_styles
 
-    style = dataclasses.replace(resolve_styles({})["flat-color"], palette=("#2b6cb0",))
+    style = dataclasses.replace(resolve_styles({})["color-flat"], palette=("#2b6cb0",))
     p = rc.draft_prompt(icon, style, {})
     assert p.startswith("vector icon of Two alpine peaks")
     assert p.index("#2b6cb0") < p.index("icon style")
@@ -938,7 +942,7 @@ def test_generate_refs_curated_uses_style_param(monkeypatch: pytest.MonkeyPatch)
         return {"data": [{"b64_json": base64.b64encode(_sheet_svg(3).encode()).decode()}]}
 
     monkeypatch.setattr(rc, "_request", fake_request)
-    cells = rc.generate_refs_curated("t", "broken-line", ["home", "leaf", "zap"], 3)
+    cells = rc.generate_refs_curated("t", "color-broken-line", ["home", "leaf", "zap"], 3)
     assert captured["payload"]["style"] == "Broken line"
     assert captured["payload"]["model"] == "recraftv2_vector"
     assert len(cells) == 9

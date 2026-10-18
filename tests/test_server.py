@@ -163,12 +163,12 @@ def test_variant_style_switch(server: _Server, srvpack: Path) -> None:
         {
             "icon": "hut",
             "variant": "mono",
-            "style": "mono-bold",
+            "style": "mono-line",
         },
     )
     assert code == 200, data
     pack = json.loads((srvpack / "pack.json").read_text())
-    assert pack["icons"]["hut"]["variants"]["mono"]["style"] == "mono-bold"
+    assert pack["icons"]["hut"]["variants"]["mono"]["style"] == "mono-line"
     # unknown style → 400, nothing written
     code, data = server.req(
         "PUT", "/api/variant", {"icon": "hut", "variant": "mono", "style": "nope"}
@@ -640,11 +640,11 @@ def test_pack_style_custom_extends(server: _Server, srvpack: Path) -> None:
     code, data = server.req(
         "POST",
         "/api/pack-style",
-        {"id": "outline-color", "def": {"extends": "filled", "size": 48}},
+        {"id": "outline-color", "def": {"extends": "mono-filled", "size": 48}},
     )
     assert code == 200, data
     pack = json.loads((srvpack / "pack.json").read_text())
-    assert pack["styles"]["outline-color"]["extends"] == "filled"
+    assert pack["styles"]["outline-color"]["extends"] == "mono-filled"
     code, data = server.req(
         "POST",
         "/api/pack-style",
@@ -654,13 +654,13 @@ def test_pack_style_custom_extends(server: _Server, srvpack: Path) -> None:
 
 
 def test_pack_variant_bulk(server: _Server, srvpack: Path) -> None:
-    code, data = server.req("POST", "/api/pack-variant-bulk", {"style": "duotone"})
+    code, data = server.req("POST", "/api/pack-variant-bulk", {"style": "color-broken-line"})
     assert code == 200, data
     assert data["added"] >= 1
     pack = json.loads((srvpack / "pack.json").read_text())
-    assert pack["icons"]["hut"]["variants"]["duotone"]["status"] == "todo"
+    assert pack["icons"]["hut"]["variants"]["color-broken-line"]["status"] == "todo"
     # idempotent
-    code, data = server.req("POST", "/api/pack-variant-bulk", {"style": "duotone"})
+    code, data = server.req("POST", "/api/pack-variant-bulk", {"style": "color-broken-line"})
     assert code == 200 and data["added"] == 0
 
 
@@ -703,7 +703,7 @@ def test_style_refs_endpoint(server: _Server) -> None:
     assert code == 200
     data = json.loads(body)
     assert "mono-line" in data and data["mono-line"]["source"] == "bundled"
-    assert len(data["mono-line"]["icons"]) == 3
+    assert len(data["mono-line"]["icons"]) == 5
 
 
 def test_style_detail_and_ref_crud(server: _Server, srvpack: Path) -> None:
@@ -711,7 +711,7 @@ def test_style_detail_and_ref_crud(server: _Server, srvpack: Path) -> None:
     assert code == 200
     d = json.loads(body)
     assert d["def"]["construction"] == "outline"
-    assert len(d["refs"]) == 3 and d["refs"][0]["own"] is False
+    assert len(d["refs"]) == 5 and d["refs"][0]["own"] is False
     # upload an own ref
     code, _data = server.req(
         "POST",
@@ -764,7 +764,7 @@ def test_api_run_filters_orphan_candidates(tmp_path) -> None:
         "spec": {"viewBox": "0 0 24 24"},
         "icons": {
             "sail": {"brief": "a sail", "variants": {"mono": {"style": "mono-line"}}},
-            "campfire": {"brief": "fire", "variants": {"flat": {"style": "flat-color"}}},
+            "campfire": {"brief": "fire", "variants": {"flat": {"style": "color-flat"}}},
         },
     }
     write_pack_atomic(tmp_path, pack)

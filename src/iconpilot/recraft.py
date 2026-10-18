@@ -69,39 +69,25 @@ def prompt_limit(model: str) -> int:
 # generate reference icons in exactly that look via the `style` parameter.
 # Suggested vector model per style family (V4 for detail/gradient, V2 for classic line styles)
 STYLE_MODEL_SUGGESTIONS = {
-    "primitive": "recraftv2_vector",
     "mono-line": "recraftv2_vector",
-    "mono-line-thin": "recraftv2_vector",
-    "mono-bold": "recraftv2_vector",
-    "filled": "recraftv2_vector",
-    "duotone": "recraftv4_1_vector",
-    "lineal-color": "recraftv4_1_vector",
-    "flat-color": "recraftv4_1_vector",
-    "gradient-color": "recraftv4_1_vector",
-    "broken-line": "recraftv2_vector",
-    "colored-outline": "recraftv4_1_vector",
+    "mono-filled": "recraftv2_vector",
+    "color-flat": "recraftv4_1_vector",
+    "color-broken-line": "recraftv4_1_vector",
+    "color-gradient": "recraftv4_1_vector",
     "isometric": "recraftv4_1_vector",
     "offset-fill": "recraftv4_1_vector",
-    "pixel": "recraftv2_vector",
-    "doodle": "recraftv2_vector",
+    "primitive": "recraftv2_vector",
 }
 
 CURATED_STYLE_MAP = {
     "mono-line": "Outline",
-    "mono-line-thin": "Thin",
-    "mono-bold": "Bold stroke",
-    "filled": "Icon",
-    "broken-line": "Broken line",
-    "doodle": "Doodle",
-    "colored-outline": "Colored outline",
-    "offset-fill": "Offset fill",
-    "gradient-color": "Gradient shape",
-    "flat-color": "Colored shape",
-    "pixel": "Pictogram",
-    "primitive": "Pictogram",
-    "lineal-color": "Colored outline",
-    "duotone": "Colored shape",
+    "mono-filled": "Icon",
+    "color-flat": "Colored shape",
+    "color-broken-line": "Broken line",
+    "color-gradient": "Gradient shape",
     "isometric": "Colored shape",
+    "offset-fill": "Offset fill",
+    "primitive": "Pictogram",
 }
 STYLE_REF_PRICE = 0.005  # per request attaching style_reference_urls instead of style_id
 

@@ -56,7 +56,7 @@ def test_add_multi_variant_and_unknown_style(tmp_path: Path) -> None:
             "--variant",
             "mono:mono-line",
             "--variant",
-            "color:lineal-color",
+            "color:color-flat",
         ],
     )
     assert r.exit_code == 0, r.output

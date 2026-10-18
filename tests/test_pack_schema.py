@@ -42,7 +42,7 @@ def example_pack() -> dict:
                     "primitive": {"style": "primitive", "status": "todo", "anchor": True},
                     "mono": {"style": "mono-line", "status": "approved"},
                     "color": {
-                        "style": "lineal-color",
+                        "style": "color-flat",
                         "status": "in_review",
                         "reference": "hut#mono",
                     },
@@ -253,23 +253,20 @@ def test_load_pack_raises_on_semantic_error(tmp_path: Path) -> None:
 
 def test_builtin_styles_complete() -> None:
     core = {
-        "primitive",
+        "color-broken-line",
+        "color-flat",
+        "color-gradient",
+        "mono-filled",
         "mono-line",
-        "mono-line-thin",
-        "mono-bold",
-        "filled",
-        "duotone",
-        "lineal-color",
-        "flat-color",
-        "gradient-color",
+        "primitive",
     }
     advanced = {
-        "broken-line",
-        "colored-outline",
+        "color-broken-line",
+        "color-flat",
         "isometric",
         "offset-fill",
-        "pixel",
-        "doodle",
+        "primitive",
+        "mono-line",
     }
     assert core <= set(BUILTIN_STYLES)
     assert advanced <= set(BUILTIN_STYLES)
@@ -324,7 +321,7 @@ def test_resolve_default_variant_single_rule() -> None:
         "variants": {
             "primitive": {"style": "primitive", "status": "approved"},
             "mono": {"style": "mono-line", "status": "approved"},
-            "color": {"style": "lineal-color", "status": "todo"},
+            "color": {"style": "color-flat", "status": "todo"},
         }
     }
     assert resolve_default_variant(icon) == "color"  # single non-approved
@@ -344,11 +341,11 @@ COLOR_GRID_SVG = (
 
 
 def test_style_grid_overrides_pack_viewbox(tmp_path: Path, pack_dir: Path) -> None:
-    # pack spec is 24; lineal-color designs on its own 48 grid
+    # pack spec is 24; color-flat designs on its own 48 grid
     svg = tmp_path / "color.svg"
     svg.write_text(COLOR_GRID_SVG)
     pack, styles = load_pack(pack_dir / "pack.json")
-    report = run_gate(svg, pack, styles["lineal-color"])
+    report = run_gate(svg, pack, styles["color-flat"])
     assert report.passed, report.errors
     # the same 48px SVG must FAIL against a 24-grid style
     report = run_gate(svg, pack, styles["mono-line"])
@@ -369,8 +366,8 @@ def test_palette_enforced_in_lint(tmp_path: Path, pack_dir: Path) -> None:
     svg = tmp_path / "p.svg"
     svg.write_text(PALETTE_STYLE_SVG)
     pack, styles = load_pack(pack_dir / "pack.json")
-    # lineal-color with a palette that excludes #ff0000
-    lc = styles["lineal-color"]
+    # color-flat with a palette that excludes #ff0000
+    lc = styles["color-flat"]
     styled = type(lc)(**{**lc.as_dict(), "palette": ("#346751", "#9dd9d2")})
     report = run_gate(svg, pack, styled)
     assert any("palette" in e for e in report.errors)
@@ -381,7 +378,7 @@ def test_context_surfaces_palette_and_design_md(pack_dir: Path) -> None:
 
     pack = _json.loads((pack_dir / "pack.json").read_text())
     pack["inherits"] = {"design_md": "../../DESIGN.md"}
-    pack["styles"] = {"lineal-color": {"palette": ["#346751", "#9dd9d2"]}}
+    pack["styles"] = {"color-flat": {"palette": ["#346751", "#9dd9d2"]}}
     (pack_dir / "pack.json").write_text(_json.dumps(pack))
     pack_data, styles = load_pack(pack_dir / "pack.json")
     ctx = build_context(pack_dir, pack_data, styles, "hut", "color")
@@ -399,11 +396,11 @@ def test_gate_icon_colors_tighten_palette(tmp_path) -> None:
         "strictness": 1.0,
         "icons": {},
     }
-    style = resolve_styles({})["flat-color"]  # palette has several colors
+    style = resolve_styles({})["color-flat"]  # palette has several colors
     svg = tmp_path / "i.svg"
     svg.write_text(
         '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24">'
-        '<path fill="#2F855A" d="M4 4h16v16H4z"/></svg>'
+        '<path fill="#F92F60" d="M4 4h16v16H4z"/></svg>'
     )
     # #2F855A is inside the style palette → no palette failure without subset
     rep = run_gate(svg, pack, style)
@@ -412,7 +409,7 @@ def test_gate_icon_colors_tighten_palette(tmp_path) -> None:
     rep = run_gate(svg, pack, style, icon_colors=("#C05621",))
     assert any("outside the icon colors" in f for f in rep.errors)
     # inside the subset → no icon-colors failure
-    rep = run_gate(svg, pack, style, icon_colors=("#2F855A",))
+    rep = run_gate(svg, pack, style, icon_colors=("#F92F60",))
     assert not any("icon colors" in f for f in rep.errors)
 
 
@@ -424,7 +421,7 @@ def test_prune_runs_removes_empty_and_orphans(tmp_path) -> None:
         "spec": {"viewBox": "0 0 24 24"},
         "icons": {
             "sail": {"brief": "s", "variants": {"mono": {"style": "mono-line"}}},
-            "campfire": {"brief": "c", "variants": {"flat": {"style": "flat-color"}}},
+            "campfire": {"brief": "c", "variants": {"flat": {"style": "color-flat"}}},
         },
     }
     write_pack_atomic(tmp_path, pack)
