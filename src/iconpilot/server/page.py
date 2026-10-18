@@ -71,13 +71,50 @@ button:disabled { opacity:.45; cursor:not-allowed; }
 .ab-apply:disabled { background:var(--card); color:var(--muted); border-color:var(--line); }
 body { margin:0; font:15px/1.45 system-ui,-apple-system,Segoe UI,Roboto,sans-serif;
        background:var(--bg); color:var(--ink); }
-/* unified sticky top bar — the ONLY sticky context (header + tabs + banner) */
+/* one-line sticky top bar — identity left, tabs center, actions right */
 .topbar { position:sticky; top:0; z-index:30; background:var(--card); border-bottom:1px solid var(--line);
           box-shadow:var(--shadow); }
-.topbar-main { padding:10px 16px; display:flex; align-items:center; gap:12px; flex-wrap:wrap; }
-.topbar h1 { font-size:1rem; margin:0; font-weight:650; }
-.topbar .meta { color:var(--muted); font-size:.8rem; }
-.topbar .banner { margin:0 16px 8px; }
+.topbar-row { display:flex; align-items:stretch; gap:12px; padding:0 16px; min-height:52px; }
+.tb-left  { flex:1 1 0; min-width:0; display:flex; align-items:center; gap:8px; }
+.tb-right { flex:1 1 0; min-width:0; display:flex; align-items:center; justify-content:flex-end; gap:8px; }
+.topbar h1 { font-size:1rem; margin:0; font-weight:650; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.topbar .meta.rev { color:var(--muted); font-size:.8rem; white-space:nowrap; }
+
+/* centered tabs — full-height, underline flush with the bar's bottom border */
+.tabs { display:flex; gap:4px; flex:0 0 auto; align-items:stretch; }
+.tabs button { border:none; border-bottom:2px solid transparent; border-radius:0; background:none;
+               color:var(--muted); padding:0 14px; font-weight:600; display:inline-flex; gap:6px; align-items:center; }
+.tabs button:hover { color:var(--ink); }
+.tabs button.on { color:var(--accent); border-bottom-color:var(--accent); }
+
+/* inline AI status chip — zero rows, truncates, full text in title */
+.aistat { display:inline-flex; align-items:center; gap:6px; min-width:0; max-width:240px;
+          font-size:.8rem; padding:3px 8px; border-radius:99px; }
+.aistat .dot { width:8px; height:8px; border-radius:50%; background:currentColor; flex:none; }
+.aistat-txt { white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.aistat.working { color:var(--warn); background:color-mix(in srgb, var(--warn) 14%, transparent); }
+.aistat.working .dot { animation:pulse 1.6s infinite; }
+.aistat.ready   { color:var(--accent); background:color-mix(in srgb, var(--accent) 12%, transparent); }
+:root[data-theme="dark"] .aistat.working { background:color-mix(in srgb, var(--warn) 24%, transparent);
+          color:color-mix(in srgb, var(--warn) 55%, white); }
+
+/* 2px ambient strip while the agent drafts — never costs a row */
+.tb-progress { height:2px; background:linear-gradient(90deg, transparent, var(--warn), transparent);
+               background-size:200% 100%; animation:tbslide 1.4s linear infinite; }
+@keyframes tbslide { from { background-position:200% 0; } to { background-position:-200% 0; } }
+
+/* breakpoint ladder */
+@media (max-width:1199px) { .tb-left .meta.rev { display:none; } .aistat { max-width:160px; } }
+@media (max-width:1023px) { .tabs .tab-label { display:none; } .aistat-txt { display:none; }
+                            .aistat { padding:3px 6px; } .tb-right .refresh { display:none; } }
+@media (max-width:640px) {
+  .topbar-row { flex-wrap:wrap; align-items:center; min-height:0; padding:0 12px; }
+  .tb-left, .tb-right { flex:1 1 auto; padding:8px 0; }
+  .tabs { order:3; flex:1 0 100%; border-top:1px solid var(--line); }
+  .tabs button { flex:1; justify-content:center; min-height:44px; padding:0; }
+  .nextpass .np-label { display:none; }
+  .tb-right select { max-width:92px; }
+}
 .spacer { flex:1; }
 .banner { width:100%; padding:6px 12px; border-radius:8px; font-size:.85rem; display:flex; gap:8px; align-items:center; }
 .ic { display:inline-flex; vertical-align:-2px; }
@@ -97,7 +134,7 @@ body { margin:0; font:15px/1.45 system-ui,-apple-system,Segoe UI,Roboto,sans-ser
                       user-select:none; }
 .stylestrip summary:hover { color:var(--ink); border-color:var(--accent); }
 @keyframes spin { to { transform: rotate(360deg); } }
-.tabs { display:flex; gap:4px; padding:0 16px; }
+
 .spin { width:16px; height:16px; border:2px solid var(--line); border-top-color: var(--accent);
   border-radius:50%; display:inline-block; animation: spin 0.9s linear infinite; }
 @keyframes spin { to { transform: rotate(360deg); } }
@@ -293,39 +330,42 @@ footer { text-align:center; color:var(--muted); font-size:.75rem; padding:20px 0
 </div>
 <div id="app" style="visibility:hidden">
   <header class="topbar">
-    <div class="topbar-main">
-    <h1>{{ S.pack.name || 'iconpilot' }}</h1>
-    <span class="meta">rev {{ S.rev }} · round {{ S.round || '—' }}</span>
-    <button class="subtle iconbtn-lg" @click="toggleTheme"
-            :title="S.theme === 'dark' ? 'switch to light' : 'switch to dark'"
-            :aria-label="S.theme === 'dark' ? 'Switch to light theme' : 'Switch to dark theme'">
-      <span class="ic" v-html="S.theme === 'dark' ? IC.sun : IC.moon"></span>
-    </button>
-    <select v-if="S.rounds.length" :value="S.viewRound || S.latest" @change="switchRound($event.target.value)"
-            class="subtle" style="padding:4px 6px" title="browse any pass — latest is the live one">
-      <option v-for="r in S.rounds" :key="r" :value="r">{{ r }}{{ r === S.latest ? ' (live)' : '' }}</option>
-    </select>
-    <button class="subtle" :class="{ on: fbFor('pack').length }"
-            title="feedback for the whole draft" aria-label="feedback for the whole draft" @click="openFb('pack')">
-      <span class="ic" v-html="IC.comment"></span> {{ fbFor('pack').length || '' }}
-      <span v-if="fbNew('pack')" class="chip new">{{ fbNew('pack') }} new</span>
-    </button>
-    <button class="subtle" @click="openNextDlg()"
-            title="apply first, then start the next pass — history is kept">
-      <span class="ic" v-html="IC.plus"></span> next pass</button>
-    <span class="spacer"></span>
-    <span class="meta">{{ S.candidates.length }} candidates</span>
-    <button class="subtle" @click="load(true)">refresh</button>
+    <div class="topbar-row">
+      <div class="tb-left">
+        <h1>{{ S.pack.name || 'iconpilot' }}</h1>
+        <span class="meta rev">rev {{ S.rev }}</span>
+      </div>
+      <nav class="tabs" role="tablist">
+        <button :class="{ on: S.tab === 'round' }" @click="setTab('round')" role="tab" aria-label="pick"><span class="ic" v-html="IC.star"></span><span class="tab-label">pick</span></button>
+        <button :class="{ on: S.tab === 'pack' }" @click="setTab('pack')" role="tab" aria-label="icons"><span class="ic" v-html="IC.grid"></span><span class="tab-label">icons</span></button>
+        <button :class="{ on: S.tab === 'styles' }" @click="setTab('styles')" role="tab" aria-label="styles"><span class="ic" v-html="IC.palette"></span><span class="tab-label">styles</span></button>
+        <button :class="{ on: S.tab === 'settings' }" @click="setTab('settings')" role="tab" aria-label="settings"><span class="ic" v-html="IC.gear"></span><span class="tab-label">settings</span></button>
+      </nav>
+      <div class="tb-right">
+        <span v-if="S.ai.text" class="aistat" :class="S.ai.active ? 'working' : 'ready'" :title="S.ai.text">
+          <span class="dot"></span><span class="aistat-txt">{{ S.ai.text }}</span>
+        </span>
+        <button class="subtle iconbtn-lg" @click="toggleTheme"
+                :title="S.theme === 'dark' ? 'switch to light' : 'switch to dark'"
+                :aria-label="S.theme === 'dark' ? 'Switch to light theme' : 'Switch to dark theme'">
+          <span class="ic" v-html="S.theme === 'dark' ? IC.sun : IC.moon"></span>
+        </button>
+        <select v-if="S.rounds.length" :value="S.viewRound || S.latest" @change="switchRound($event.target.value)"
+                class="subtle" style="padding:4px 6px" title="browse any pass — latest is the live one">
+          <option v-for="r in S.rounds" :key="r" :value="r">{{ r }}{{ r === S.latest ? ' (live)' : '' }}</option>
+        </select>
+        <button class="subtle" :class="{ on: fbFor('pack').length }"
+                title="feedback for the whole draft" aria-label="feedback for the whole draft" @click="openFb('pack')">
+          <span class="ic" v-html="IC.comment"></span> {{ fbFor('pack').length || '' }}
+          <span v-if="fbNew('pack')" class="chip new">{{ fbNew('pack') }} new</span>
+        </button>
+        <button class="primary nextpass" @click="openNextDlg()"
+                title="apply first, then start the next pass — history is kept">
+          <span class="ic" v-html="IC.plus"></span> <span class="np-label">next pass</span></button>
+        <button class="subtle refresh" @click="load(true)" title="refresh" aria-label="refresh"><span class="ic" v-html="IC.refresh"></span></button>
+      </div>
     </div>
-    <div v-if="S.ai.text && S.tab !== 'round'" class="banner" :class="S.ai.active ? 'working' : 'ready'">
-      <span class="dot"></span>{{ S.ai.text }}
-    </div>
-    <nav class="tabs" role="tablist">
-      <button :class="{ on: S.tab === 'round' }" @click="setTab('round')" role="tab" aria-label="pick"><span class="ic" v-html="IC.star"></span><span class="tab-label">pick</span></button>
-      <button :class="{ on: S.tab === 'pack' }" @click="setTab('pack')" role="tab" aria-label="icons"><span class="ic" v-html="IC.grid"></span><span class="tab-label">icons</span></button>
-      <button :class="{ on: S.tab === 'styles' }" @click="setTab('styles')" role="tab" aria-label="styles"><span class="ic" v-html="IC.palette"></span><span class="tab-label">styles</span></button>
-      <button :class="{ on: S.tab === 'settings' }" @click="setTab('settings')" role="tab" aria-label="settings"><span class="ic" v-html="IC.gear"></span><span class="tab-label">settings</span></button>
-    </nav>
+    <div class="tb-progress" v-if="S.ai.active" aria-hidden="true"></div>
   </header>
 
   <main>
@@ -1204,6 +1244,7 @@ const IC = {
   bolt: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M13 2 3 14h9l-1 8 10-12h-9l1-8z"/></svg>',
   plus: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14M5 12h14"/></svg>',
   undo: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7v6h6"/><path d="M21 17a9 9 0 0 0-15-6.7L3 13"/></svg>',
+  refresh: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 1 1-2.64-6.36L21 8"/><path d="M21 3v5h-5"/></svg>',
   copy: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>',
   pin: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 17v5"/><path d="M9 10.76a2 2 0 0 1-1.11 1.79l-1.78.9A2 2 0 0 0 5 15.24V16a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1v-.76a2 2 0 0 0-1.11-1.79l-1.78-.9A2 2 0 0 1 15 10.76V6h1a2 2 0 0 0 0-4H8a2 2 0 0 0 0 4h1z"/></svg>',
   unlock: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 9.9-1"/></svg>',
