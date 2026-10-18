@@ -161,7 +161,8 @@ body { margin:0; font:15px/1.45 system-ui,-apple-system,Segoe UI,Roboto,sans-ser
   border-radius:50%; display:inline-block; animation: spin 0.9s linear infinite; }
 @keyframes spin { to { transform: rotate(360deg); } }
 progress { flex:1; height:6px; accent-color: var(--accent); }
-.progressrow { display:flex; gap:10px; align-items:center; }
+.progressrow { display:flex; gap:16px; align-items:center; margin-top:12px; }
+.progressrow progress { flex:1; margin-left:8px; }
 .chip.fit { display:inline-block; width:auto; align-self:center; }
 .dropzone { outline: 2px dashed var(--accent); outline-offset: 4px; border-radius: 8px; }
 @media (max-width:480px) { .actionbar .statustext { display:none; } }

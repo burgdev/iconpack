@@ -85,6 +85,7 @@ def test_create_style_payload(monkeypatch: pytest.MonkeyPatch) -> None:
     assert urls[0].startswith("data:image/png;base64,")  # /styles needs raster
     assert captured["payload"]["model"] == "recraftv4_styles"
     assert captured["payload"]["match"] == "precise"
+    assert captured["payload"]["style"] == "vector_illustration"
 
 
 def test_generate_decodes_b64(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -887,7 +888,7 @@ def test_create_style_bakes_prompt_and_palette() -> None:
     assert sent["prompt"].startswith("Duotone icon style")
     assert sent["palette"] == {"colors": [{"rgb": [192, 86, 33]}, {"rgb": [43, 108, 176]}]}
     assert sent["model"] == "recraftv4_styles"
-    assert "style" not in sent  # base 'icon' style is V2-only
+    assert sent["style"] == "vector_illustration"  # vector base — 'any' is rejected by vector gens
 
 
 def test_draft_prompt_styled_false_subject_only() -> None:

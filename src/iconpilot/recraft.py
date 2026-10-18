@@ -261,9 +261,11 @@ def create_style(
         "image_urls": image_urls,
         "model": model,
         "match": match,
+        # base style decides the OUTPUT type: without it Recraft defaults the
+        # style to 'any' (raster) and vector generations reject it with
+        # "Style 'any' is not a vector style"
+        "style": "icon" if model.startswith("recraftv2") else "vector_illustration",
     }
-    if model.startswith("recraftv2"):
-        body["style"] = "icon"  # base style 'icon' is V2-only per API docs
     if prompt:
         body["prompt"] = prompt[:1000]
     colors = [c for c in (hex_to_rgb(x) for x in (palette or [])[:10]) if c]
