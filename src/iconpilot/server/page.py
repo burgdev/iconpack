@@ -60,6 +60,8 @@ input, select, textarea {
   border: 1px solid var(--line); border-radius: 8px;
   padding: 6px 10px; min-height: 32px;
 }
+select, input:not([type="checkbox"]):not([type="color"]):not([type="range"]) { height:32px; box-sizing:border-box; }
+.topbar select { height:28px; }
 select { cursor: pointer; }
 input[type="color"] { min-height: 28px; padding: 0 2px; }
 input[type="range"] { min-height: 0; padding: 0; }
@@ -88,8 +90,13 @@ body { margin:0; font:15px/1.45 system-ui,-apple-system,Segoe UI,Roboto,sans-ser
 .tabs button.on { color:var(--accent); border-bottom-color:var(--accent); }
 
 /* inline AI status chip — zero rows, truncates, full text in title */
-.aistat { display:inline-flex; align-items:center; gap:6px; min-width:0; max-width:240px;
-          font-size:.8rem; padding:3px 8px; border-radius:99px; }
+.aistatwrap { position:relative; display:inline-flex; min-width:0; }
+.aistat { display:inline-flex; align-items:center; gap:6px; min-width:28px; height:28px; max-width:240px;
+          font-size:.8rem; padding:0 10px; border-radius:99px; border:none; cursor:pointer; }
+.aistat-pop { position:absolute; top:calc(100% + 8px); right:0; z-index:60; background:var(--card);
+              border:1px solid var(--line); border-radius:10px; box-shadow:var(--shadow);
+              padding:8px 12px; font-size:.8rem; color:var(--ink); max-width:min(300px, 80vw);
+              white-space:normal; line-height:1.4; }
 .aistat .dot { width:8px; height:8px; border-radius:50%; background:currentColor; flex:none; }
 .aistat-txt { white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
 .aistat.working { color:var(--warn); background:color-mix(in srgb, var(--warn) 14%, transparent); }
@@ -98,10 +105,13 @@ body { margin:0; font:15px/1.45 system-ui,-apple-system,Segoe UI,Roboto,sans-ser
 :root[data-theme="dark"] .aistat.working { background:color-mix(in srgb, var(--warn) 24%, transparent);
           color:color-mix(in srgb, var(--warn) 55%, white); }
 
-/* 2px ambient strip while the agent drafts — never costs a row */
-.tb-progress { height:2px; background:linear-gradient(90deg, transparent, var(--warn), transparent);
-               background-size:200% 100%; animation:tbslide 1.4s linear infinite; }
-@keyframes tbslide { from { background-position:200% 0; } to { background-position:-200% 0; } }
+/* full-area waiting state (pick tab, agent drafting, nothing to rate yet) */
+.waitstate { display:flex; justify-content:center; padding:64px 16px; }
+.waitcard { text-align:center; max-width:460px; }
+.waitcard h2 { margin:12px 0 6px; }
+.waitcard p { margin:4px 0; }
+.waitpulse { animation:pulse 1.6s infinite; color:var(--warn); }
+.waitpulse svg { width:28px; height:28px; }
 
 /* breakpoint ladder */
 @media (max-width:1199px) { .tb-left .meta.rev { display:none; } .aistat { max-width:160px; } }
@@ -143,6 +153,13 @@ progress { flex:1; height:6px; accent-color: var(--accent); }
 .chip.fit { display:inline-block; width:auto; align-self:center; }
 .dropzone { outline: 2px dashed var(--accent); outline-offset: 4px; border-radius: 8px; }
 @media (max-width:480px) { .actionbar .statustext { display:none; } }
+@media (max-width:640px) {
+  button, button.subtle { height:40px; }
+  select, input:not([type="checkbox"]):not([type="color"]) { height:40px; }
+  .iconbtn { height:36px; }
+  .iconbtn-lg { height:40px; }
+  .aistat { height:36px; }
+}
 .tabs button { border:none; border-bottom:2px solid transparent; border-radius:8px 8px 0 0; background:none;
                color:var(--muted); padding:8px 14px; font-weight:600; display:inline-flex; gap:6px; align-items:center; }
 .tabs button.on { color:var(--accent); border-bottom-color:var(--accent); }
@@ -202,11 +219,12 @@ section h2 { font-size:.85rem; text-transform:uppercase; letter-spacing:.06em; c
 .rating { display:flex; align-items:center; gap:10px; justify-content:center; }
 .rating button { padding:4px 8px; font-size:.9rem; }
 .rating input[type=range] { flex:1; min-width:60px; accent-color:var(--accent); }
-button { font:inherit; padding:6px 12px; border-radius:8px; border:1px solid var(--line);
-         background:var(--card); color:var(--ink); cursor:pointer; }
+button { font:inherit; padding:0 12px; height:32px; border-radius:8px; border:1px solid var(--line);
+         background:var(--card); color:var(--ink); cursor:pointer;
+         display:inline-flex; align-items:center; justify-content:center; gap:6px; }
 button:hover { border-color:var(--accent); }
 button.primary { background:var(--accent); color:var(--accent-ink); border-color:var(--accent); }
-button.subtle { font-size:.8rem; padding:4px 8px; color:var(--muted); }
+button.subtle { font-size:.8rem; padding:0 8px; height:28px; color:var(--muted); }
 button.armed { border-color:var(--accent); color:var(--accent); font-weight:600; }
 button.armed-x { border-color:var(--warn); color:var(--warn); font-weight:600; }
 .chip { display:inline-block; padding:1px 8px; border-radius:99px; font-size:.75rem; background:var(--chip); color:var(--muted); }
@@ -290,7 +308,7 @@ footer { text-align:center; color:var(--muted); font-size:.75rem; padding:20px 0
 .compare-label { font-weight:600; margin-bottom:8px; }
 .compare-sizes { display:flex; justify-content:center; gap:12px; align-items:flex-end; margin-top:8px; }
 .card.kbactive { outline: 3px solid var(--accent); outline-offset: 2px; }
-.iconbtn-lg { padding:6px 9px; display:inline-flex; align-items:center; }
+.iconbtn-lg { padding:0 9px; height:32px; display:inline-flex; align-items:center; justify-content:center; }
 .iconbtn .ic.filled svg { fill: currentColor; }
 .histstrip { margin:0 0 8px; font-size:.8rem; }
 .histstrip summary { cursor:pointer; color:var(--muted); display:inline-flex; gap:6px; align-items:center;
@@ -304,8 +322,8 @@ footer { text-align:center; color:var(--muted); font-size:.75rem; padding:20px 0
 .histcell figcaption { font-size:.75rem; }
 .thumb.missing { width:64px; height:64px; display:flex; align-items:center; justify-content:center;
                  color:var(--muted); border:1px dashed var(--line); border-radius:8px; }
-.iconbtn { padding:3px 7px; font-size:.85rem; border:none; background:none; cursor:pointer;
-             color:var(--muted); border-radius:6px; }
+.iconbtn { padding:0 7px; height:28px; font-size:.85rem; border:none; background:none; cursor:pointer;
+             color:var(--muted); border-radius:6px; display:inline-flex; align-items:center; justify-content:center; }
 .iconbtn:hover { color:var(--ink); background:var(--chip); }
 .iconbtn.on { color:var(--accent); font-weight:700; }
 .varstyle { font:inherit; font-size:.75rem; padding:2px 4px; border-radius:6px;
@@ -342,8 +360,12 @@ footer { text-align:center; color:var(--muted); font-size:.75rem; padding:20px 0
         <button :class="{ on: S.tab === 'settings' }" @click="setTab('settings')" role="tab" aria-label="settings"><span class="ic" v-html="IC.gear"></span><span class="tab-label">settings</span></button>
       </nav>
       <div class="tb-right">
-        <span v-if="S.ai.text" class="aistat" :class="S.ai.active ? 'working' : 'ready'" :title="S.ai.text">
-          <span class="dot"></span><span class="aistat-txt">{{ S.ai.text }}</span>
+        <span v-if="S.ai.text" class="aistatwrap">
+          <button class="aistat" :class="S.ai.active ? 'working' : 'ready'" @click.stop="S.aistatOpen = !S.aistatOpen"
+                  :aria-label="'agent status: ' + S.ai.text" :aria-expanded="!!S.aistatOpen">
+            <span class="dot"></span><span class="aistat-txt">{{ S.ai.text }}</span>
+          </button>
+          <div v-if="S.aistatOpen" class="aistat-pop" @click.stop>{{ S.ai.text }}</div>
         </span>
         <button class="subtle iconbtn-lg" @click="toggleTheme"
                 :title="S.theme === 'dark' ? 'switch to light' : 'switch to dark'"
@@ -365,7 +387,6 @@ footer { text-align:center; color:var(--muted); font-size:.75rem; padding:20px 0
         <button class="subtle refresh" @click="load(true)" title="refresh" aria-label="refresh"><span class="ic" v-html="IC.refresh"></span></button>
       </div>
     </div>
-    <div class="tb-progress" v-if="S.ai.active" aria-hidden="true"></div>
   </header>
 
   <main>
@@ -383,7 +404,15 @@ footer { text-align:center; color:var(--muted); font-size:.75rem; padding:20px 0
         viewing {{ S.viewRound }} (history — read only). <button class="subtle" @click="switchRound(S.latest)">back to {{ S.latest }}</button>
       </div>
     </section>
-    <section v-if="S.grouped.length">
+    <section v-if="waitingForAgent()" class="waitstate">
+      <div class="waitcard">
+        <span class="ic-lg waitpulse" v-html="IC.spark"></span>
+        <h2>agent is drafting pass {{ S.round || '—' }}</h2>
+        <p class="muted">{{ S.ai.text }}</p>
+        <p class="muted" style="font-size:.8rem">candidates appear here automatically — rate them when they land. The tabs above stay usable.</p>
+      </div>
+    </section>
+    <section v-show="!waitingForAgent() && S.grouped.length">
       <div class="row" style="justify-content:space-between; align-items:baseline">
         <h2 style="margin:0">{{ S.viewRound && S.viewRound !== S.latest ? 'Archived pass ' + S.viewRound : 'Current pass — rate, then decide' }}</h2>
         <button v-if="(S.recraftReady || S.debug) && !isViewing()" class="subtle" @click="openBatchDlg()"
@@ -1218,7 +1247,7 @@ const S = reactive({
   flash: '', flashOk: true, applying: false, instructions: '',
   tab: (location.hash || '#round').slice(1) || 'round',
   kbFocus: 0, kbVariant: 0, kbCand: 0, kbUsed: false, compare: null, histView: null,
-  recraftReady: false, debug: new URLSearchParams(location.search).has('debug'), debugDlg: null, nextDlg: null, resultDlg: null, batchDlg: null, styleRc: null,
+  recraftReady: false, debug: new URLSearchParams(location.search).has('debug'), debugDlg: null, nextDlg: null, resultDlg: null, batchDlg: null, styleRc: null, aistatOpen: false,
   appliedRound: null,
   recraftModels: {}, styleRefs: {}, styleDetail: {}, styleEdit: null, styleView: null, removeArm: null, theme: 'light', iconHist: {}, svgFiles: {}, rejectArm: null,
   history: [], showHistory: false,
@@ -1304,6 +1333,7 @@ function initTheme() {
 }
 function toggleTheme() { applyTheme(S.theme === 'dark' ? 'light' : 'dark'); }
 function setTab(tb) {
+  if (S.aistatOpen) S.aistatOpen = false;
   S.tab = tb;
   history.replaceState(null, '', '#' + tb);
   if (tb === 'settings') loadSettings();
@@ -1498,6 +1528,9 @@ function batchReject(maxScore) {
     }
   }
   flash('batch: rejected ' + (maxScore === 0 ? 'unrated' : 'all rated ≤ ' + maxScore), true);
+}
+function waitingForAgent() {
+  return S.tab === 'round' && !isViewing() && S.ai.active && !S.candidates.length;
 }
 function isViewing() { return !!(S.viewRound && S.viewRound !== S.latest); }
 function ruleTitle(ru) {
@@ -2554,6 +2587,7 @@ const App = {
       }
     };
     window.addEventListener('keydown', onKey);
+  window.addEventListener('click', () => { if (S.aistatOpen) S.aistatOpen = false; });
 
     return {
       S, render, item, rating, drop, approve, keep, rate,
@@ -2570,7 +2604,7 @@ const App = {
       showDebug, debugCopy, openNextDlg, addVariantBulk, addCustomStyle, saveRecraftDefaults,
       GATE_HELP, styleRules, stylePalette, ruleTitle, styleUsageCount, isPostponed, togglePostpone, applyAndNext, colState, toggleCol, toggleAll, usedStyles, setTab, iconSuggest, pickSuggestion, addNewIcon, startRoundWithNew,
       styleSummary, isOwnRef, editStyle, toggleGate, saveStyleRules, removeStyle, addStyleToPack, pickRefFile, removeRef,
-      vectorModels, curatedNames, styleDetail, editCustomStyle, recraftGenerate, commitResults, iconStylePalette, toggleIconColor, openStyleRc, styleRcCreate, styleRcSave, openBatchDlg, batchGroups, grpAll, toggleGrp, batchSelCount, batchTotal, batchSheets, batchDebug, batchEst, batchGenerate, batchElapsed, batchProgress, dropResult, keptCount, totalCount, keepAll,
+      vectorModels, curatedNames, styleDetail, editCustomStyle, recraftGenerate, commitResults, iconStylePalette, toggleIconColor, waitingForAgent, openStyleRc, styleRcCreate, styleRcSave, openBatchDlg, batchGroups, grpAll, toggleGrp, batchSelCount, batchTotal, batchSheets, batchDebug, batchEst, batchGenerate, batchElapsed, batchProgress, dropResult, keptCount, totalCount, keepAll,
 
     };
   },
