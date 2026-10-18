@@ -91,7 +91,7 @@ body { margin:0; font:15px/1.45 system-ui,-apple-system,Segoe UI,Roboto,sans-ser
 
 /* inline AI status chip — zero rows, truncates, full text in title */
 .aistatwrap { position:relative; display:inline-flex; min-width:0; }
-.aistat { display:inline-flex; align-items:center; gap:6px; min-width:28px; height:28px; max-width:240px;
+.aistat { display:inline-flex; align-items:center; gap:6px; min-width:28px; height:32px; max-width:240px;
           font-size:.8rem; padding:0 10px; border-radius:99px; border:none; cursor:pointer; }
 .aistat-pop { position:absolute; top:calc(100% + 8px); right:0; z-index:60; background:var(--card);
               border:1px solid var(--line); border-radius:10px; box-shadow:var(--shadow);
@@ -154,11 +154,8 @@ progress { flex:1; height:6px; accent-color: var(--accent); }
 .dropzone { outline: 2px dashed var(--accent); outline-offset: 4px; border-radius: 8px; }
 @media (max-width:480px) { .actionbar .statustext { display:none; } }
 @media (max-width:640px) {
-  button, button.subtle { height:40px; }
+  button, button.subtle, .iconbtn, .iconbtn-lg, .aistat { height:40px; }
   select, input:not([type="checkbox"]):not([type="color"]) { height:40px; }
-  .iconbtn { height:36px; }
-  .iconbtn-lg { height:40px; }
-  .aistat { height:36px; }
 }
 .tabs button { border:none; border-bottom:2px solid transparent; border-radius:8px 8px 0 0; background:none;
                color:var(--muted); padding:8px 14px; font-weight:600; display:inline-flex; gap:6px; align-items:center; }
@@ -224,7 +221,7 @@ button { font:inherit; padding:0 12px; height:32px; border-radius:8px; border:1p
          display:inline-flex; align-items:center; justify-content:center; gap:6px; }
 button:hover { border-color:var(--accent); }
 button.primary { background:var(--accent); color:var(--accent-ink); border-color:var(--accent); }
-button.subtle { font-size:.8rem; padding:0 8px; height:28px; color:var(--muted); }
+button.subtle { font-size:.8rem; padding:0 8px; height:32px; color:var(--muted); }
 button.armed { border-color:var(--accent); color:var(--accent); font-weight:600; }
 button.armed-x { border-color:var(--warn); color:var(--warn); font-weight:600; }
 .chip { display:inline-block; padding:1px 8px; border-radius:99px; font-size:.75rem; background:var(--chip); color:var(--muted); }
@@ -322,7 +319,7 @@ footer { text-align:center; color:var(--muted); font-size:.75rem; padding:20px 0
 .histcell figcaption { font-size:.75rem; }
 .thumb.missing { width:64px; height:64px; display:flex; align-items:center; justify-content:center;
                  color:var(--muted); border:1px dashed var(--line); border-radius:8px; }
-.iconbtn { padding:0 7px; height:28px; font-size:.85rem; border:none; background:none; cursor:pointer;
+.iconbtn { padding:0 7px; height:32px; font-size:.85rem; border:none; background:none; cursor:pointer;
              color:var(--muted); border-radius:6px; display:inline-flex; align-items:center; justify-content:center; }
 .iconbtn:hover { color:var(--ink); background:var(--chip); }
 .iconbtn.on { color:var(--accent); font-weight:700; }
@@ -2511,7 +2508,6 @@ async function load(manual) {
   S.recraftReady = !!p.recraft_ready;
   S.round = run.round; S.latest = run.latest;
   S.locked = run.locked || {};
-  S.rounds = (S.history || []).map(h => h.round).reverse();  // newest first
   S.candidates = run.candidates.map(c => ({
     ...c,
     path: `.runs/${run.round}/${c.variant}/${c.icon}/${c.cand}.svg`,
@@ -2523,6 +2519,7 @@ async function load(manual) {
   setFavicon(ai.phase || 'idle');
   S.version = p.version || '';
   S.history = hist.rounds || [];
+  S.rounds = (S.history || []).map(h => h.round).reverse();  // newest first — after history lands
   restoreDraft();  // bring back in-progress ratings after a reload
 }
 
