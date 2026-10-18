@@ -71,10 +71,13 @@ button:disabled { opacity:.45; cursor:not-allowed; }
 .ab-apply:disabled { background:var(--card); color:var(--muted); border-color:var(--line); }
 body { margin:0; font:15px/1.45 system-ui,-apple-system,Segoe UI,Roboto,sans-serif;
        background:var(--bg); color:var(--ink); }
-header { position:sticky; top:0; z-index:10; background:var(--card); border-bottom:1px solid var(--line);
-         padding:10px 16px; display:flex; align-items:center; gap:12px; flex-wrap:wrap; box-shadow:var(--shadow); }
-header h1 { font-size:1rem; margin:0; font-weight:650; }
-header .meta { color:var(--muted); font-size:.8rem; }
+/* unified sticky top bar — the ONLY sticky context (header + tabs + banner) */
+.topbar { position:sticky; top:0; z-index:30; background:var(--card); border-bottom:1px solid var(--line);
+          box-shadow:var(--shadow); }
+.topbar-main { padding:10px 16px; display:flex; align-items:center; gap:12px; flex-wrap:wrap; }
+.topbar h1 { font-size:1rem; margin:0; font-weight:650; }
+.topbar .meta { color:var(--muted); font-size:.8rem; }
+.topbar .banner { margin:0 16px 8px; }
 .spacer { flex:1; }
 .banner { width:100%; padding:6px 12px; border-radius:8px; font-size:.85rem; display:flex; gap:8px; align-items:center; }
 .ic { display:inline-flex; vertical-align:-2px; }
@@ -94,8 +97,7 @@ header .meta { color:var(--muted); font-size:.8rem; }
                       user-select:none; }
 .stylestrip summary:hover { color:var(--ink); border-color:var(--accent); }
 @keyframes spin { to { transform: rotate(360deg); } }
-.tabs { display:flex; gap:4px; margin: 0 0 14px; border-bottom:1px solid var(--line);
-  position: sticky; top: 0; z-index: 30; background: var(--bg); }
+.tabs { display:flex; gap:4px; padding:0 16px; }
 .spin { width:16px; height:16px; border:2px solid var(--line); border-top-color: var(--accent);
   border-radius:50%; display:inline-block; animation: spin 0.9s linear infinite; }
 @keyframes spin { to { transform: rotate(360deg); } }
@@ -108,7 +110,8 @@ progress { flex:1; height:6px; accent-color: var(--accent); }
                color:var(--muted); padding:8px 14px; font-weight:600; display:inline-flex; gap:6px; align-items:center; }
 .tabs button.on { color:var(--accent); border-bottom-color:var(--accent); }
 .tabs .tab-label { display:inline; }
-@media (max-width: 640px) { .tabs .tab-label { display:none; } .tabs button { padding:10px 12px; } }
+@media (max-width: 640px) { .tabs .tab-label { display:none; } .tabs { padding:0 12px; }
+.tabs button { padding:10px 12px; min-height:44px; } }
 .refcell { margin:0; width:56px; display:inline-flex; flex-direction:column; align-items:center; gap:2px; position:relative; }
 .refcell img { border-radius:8px; background:#fff; display:block; }
 .stylecard { width:110px; padding:10px 8px; border:1px solid var(--line); border-radius:10px;
@@ -289,7 +292,8 @@ footer { text-align:center; color:var(--muted); font-size:.75rem; padding:20px 0
   <span style="color:var(--muted, #66707a); font-size:.85rem">loading pack…</span>
 </div>
 <div id="app" style="visibility:hidden">
-  <header>
+  <header class="topbar">
+    <div class="topbar-main">
     <h1>{{ S.pack.name || 'iconpilot' }}</h1>
     <span class="meta">rev {{ S.rev }} · round {{ S.round || '—' }}</span>
     <button class="subtle iconbtn-lg" @click="toggleTheme"
@@ -312,18 +316,19 @@ footer { text-align:center; color:var(--muted); font-size:.75rem; padding:20px 0
     <span class="spacer"></span>
     <span class="meta">{{ S.candidates.length }} candidates</span>
     <button class="subtle" @click="load(true)">refresh</button>
+    </div>
     <div v-if="S.ai.text && S.tab !== 'round'" class="banner" :class="S.ai.active ? 'working' : 'ready'">
       <span class="dot"></span>{{ S.ai.text }}
     </div>
+    <nav class="tabs" role="tablist">
+      <button :class="{ on: S.tab === 'round' }" @click="setTab('round')" role="tab" aria-label="pick"><span class="ic" v-html="IC.star"></span><span class="tab-label">pick</span></button>
+      <button :class="{ on: S.tab === 'pack' }" @click="setTab('pack')" role="tab" aria-label="icons"><span class="ic" v-html="IC.grid"></span><span class="tab-label">icons</span></button>
+      <button :class="{ on: S.tab === 'styles' }" @click="setTab('styles')" role="tab" aria-label="styles"><span class="ic" v-html="IC.palette"></span><span class="tab-label">styles</span></button>
+      <button :class="{ on: S.tab === 'settings' }" @click="setTab('settings')" role="tab" aria-label="settings"><span class="ic" v-html="IC.gear"></span><span class="tab-label">settings</span></button>
+    </nav>
   </header>
 
   <main>
-<nav class="tabs" role="tablist">
-  <button :class="{ on: S.tab === 'round' }" @click="setTab('round')" role="tab" aria-label="pick"><span class="ic" v-html="IC.star"></span><span class="tab-label">pick</span></button>
-  <button :class="{ on: S.tab === 'pack' }" @click="setTab('pack')" role="tab" aria-label="icons"><span class="ic" v-html="IC.grid"></span><span class="tab-label">icons</span></button>
-  <button :class="{ on: S.tab === 'styles' }" @click="setTab('styles')" role="tab" aria-label="styles"><span class="ic" v-html="IC.palette"></span><span class="tab-label">styles</span></button>
-  <button :class="{ on: S.tab === 'settings' }" @click="setTab('settings')" role="tab" aria-label="settings"><span class="ic" v-html="IC.gear"></span><span class="tab-label">settings</span></button>
-</nav>
 <div v-show="S.tab === 'round'">
     <div v-if="S.msg" :class="S.msgClass">{{ S.msg }}</div>
 
