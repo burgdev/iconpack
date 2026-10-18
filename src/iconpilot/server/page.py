@@ -1090,7 +1090,7 @@ footer { text-align:center; color:var(--muted); font-size:.75rem; padding:20px 0
 
   <div v-if="S.resultDlg" class="overlay" @click.self="S.resultDlg = null">
     <div class="dialog" style="max-width:720px">
-      <h3 v-if="!S.resultDlg.batch"><span><span class="ic-lg" v-html="IC.bolt"></span> {{ S.resultDlg.icon }}#{{ S.resultDlg.variant }} — {{ S.resultDlg.results.filter(r => r.keep).length }}/{{ S.resultDlg.results.length }} kept</span>
+      <h3 v-if="!S.resultDlg.batch"><span><span class="ic-lg" v-html="IC.bolt"></span> {{ S.resultDlg.icon }}#{{ S.resultDlg.variant }} — {{ (S.resultDlg.results || []).filter(r => r.keep).length }}/{{ (S.resultDlg.results || []).length }} kept</span>
           <button class="subtle" @click="S.resultDlg = null" aria-label="Close">✕</button></h3>
       <h3 v-if="S.resultDlg.batch"><span><span class="ic-lg" v-html="IC.bolt"></span> pack draft — {{ S.resultDlg.items.length }} icons × {{ S.resultDlg.takes }} takes · {{ keptCount() }}/{{ totalCount() }} kept</span>
           <button class="subtle" @click="S.resultDlg = null" aria-label="Close">✕</button></h3>
@@ -1102,7 +1102,7 @@ footer { text-align:center; color:var(--muted); font-size:.75rem; padding:20px 0
              @dragover.prevent @drop="dropResult(it)">
           <div class="row" style="justify-content:space-between">
             <b>{{ it.icon }}#{{ it.variant }}</b>
-            <span class="muted">{{ it.results.filter(r => r.keep).length }}/{{ it.results.length }}</span>
+            <span class="muted">{{ (it.results || []).filter(r => r.keep).length }}/{{ (it.results || []).length }}</span>
           </div>
           <div class="row" style="flex-wrap:wrap; gap:8px">
             <div v-for="r in it.results" :key="r.uid"
@@ -1943,9 +1943,10 @@ async function batchGenerate() {
     S.batchDlg = null;
     let seq = 0;
     S.resultDlg = {
+      batch: true,
       drag: null,
-      items: r.items.map(it => ({ ...it, results: it.results.map(x => ({ ...x, keep: true, uid: ++seq })) })),
-      takes: r.takes, model: r.calls.map(c => c.model).filter((m, i, a) => a.indexOf(m) === i).join(', '),
+      items: (r.items || []).map(it => ({ ...it, results: (it.results || []).map(x => ({ ...x, keep: true, uid: ++seq })) })),
+      takes: r.takes, model: (r.calls || []).map(c => c.model).filter((m, i, a) => a.indexOf(m) === i).join(', '),
       cost: r.cost_usd,
     };
   } catch (e) {
@@ -2534,6 +2535,9 @@ async function load(manual) {
   S.pack = p.pack; S.rev = p.rev; S.svgFiles = p.svg_files || {};
   if (Object.keys(S.decisions || {}).length) healDraft();
   S.recraftReady = !!p.recraft_ready;
+  if (!S.recraftModels || !S.recraftModels.prices) {
+    try { S.recraftModels = await (await fetch('/api/recraft-models')).json(); } catch {}
+  }
   S.round = run.round; S.latest = run.latest;
   S.locked = run.locked || {};
   S.candidates = run.candidates.map(c => ({
