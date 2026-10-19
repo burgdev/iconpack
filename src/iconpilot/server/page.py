@@ -883,10 +883,10 @@ footer { text-align:center; color:var(--muted); font-size:.75rem; padding:20px 0
   </div>
 
 
-  <div v-if="S.fbDlg" class="overlay" @click.self="S.fbDlg = null">
+  <div v-if="S.fbDlg" class="overlay" @click.self="S.fbDlg = null; refineResume()">
     <div class="dialog">
       <h3><span><span class="ic-lg" v-html="IC.comment"></span> {{ fbTitle() }}</span>
-          <button class="subtle" @click="S.fbDlg = null">✕</button></h3>
+          <button class="subtle" @click="S.fbDlg = null; refineResume()">✕</button></h3>
       <p class="muted" style="margin:0 0 8px">Per-round feedback — guides the next draft, then dies with its round (history keeps it). Generally valid? The agent promotes it into the standing note via CLI.</p>
       <textarea ref="fbInput" v-model="S.fbDlg.text" rows="2"
                 placeholder="what to change in the next draft — Enter to add, Shift+Enter for a new line"
@@ -1138,10 +1138,15 @@ footer { text-align:center; color:var(--muted); font-size:.75rem; padding:20px 0
         <p class="muted" style="margin:0 0 6px; font-size:.75rem">Feedback — required for refine. Click 💬 to write/review.</p>
         <div v-for="it in S.refineDlg.items.filter(x => !x.skip)" :key="it.icon + '#' + it.variant"
              class="row" style="gap:8px; margin:3px 0; align-items:center">
-          <span class="chip" style="flex:none; font-size:.72rem">{{ it.icon }} · {{ it.variant }}</span>
-          <span v-if="it.feedback" class="muted" style="flex:1; font-size:.75rem; overflow:hidden; text-overflow:ellipsis; white-space:nowrap">✓ {{ it.feedback }}</span>
-          <span v-else class="muted" style="flex:1; font-size:.75rem; color:var(--warn)">⚠ missing — refine needs it</span>
-          <button class="iconbtn" @click="openFb('variant', it.icon, it.variant)"
+          <img v-if="S.svgFiles[it.icon + '/' + it.variant]"
+               :src="render('.runs/' + S.round + '/' + it.variant + '/' + it.icon + '/' + (topCand(it.icon, it.variant) || 'r1') + '.svg', 28, '#fff')"
+               width="28" height="28" style="border-radius:5px; background:#fff; flex:none; border:1px solid var(--line)">
+          <span v-else class="thumb missing" style="width:28px; height:28px; flex:none">—</span>
+          <span style="flex:none; font-size:.72rem; font-weight:600">{{ it.icon }}</span>
+          <span class="muted" style="flex:none; font-size:.7rem">{{ it.variant }}</span>
+          <span v-if="it.feedback" class="muted" style="flex:1; min-width:0; font-size:.75rem; overflow:hidden; text-overflow:ellipsis; white-space:nowrap" :title="it.feedback">✓ {{ it.feedback }}</span>
+          <span v-else class="muted" style="flex:1; min-width:0; font-size:.75rem; color:var(--warn)">⚠ missing</span>
+          <button class="iconbtn" style="flex:none" @click="refineFeedback(it)"
                   :title="'feedback for ' + it.icon + ' ' + it.variant" :aria-label="'feedback for ' + it.icon + ' ' + it.variant">
             <span class="ic" v-html="IC.comment"></span>
           </button>
@@ -2122,6 +2127,31 @@ function refineToggleCol2(style) {
   const col = g.cols.find(c => c.style === style);
   if (col) Object.values(col.cells).flat().forEach(it => { it.skip = !turnOn; });
 }
+function topCand(icon, variant) {
+  const cands = (S.candidates || []).filter(c => c.icon === icon && c.variant === variant);
+  if (!cands.length) return null;
+  return cands[cands.length - 1].cand;
+}
+function refineFeedback(it) {
+  // the fb overlay renders behind the refine overlay — close refine,
+  // open fb, and reopen refine when fb closes (feedback re-read from pack)
+  S._refineReturn = S.refineDlg;
+  S.refineDlg = null;
+  openFb('variant', it.icon, it.variant);
+}
+function refineResume() {
+  if (!S._refineReturn) return;
+  // re-read feedback from pack after the dialog may have added items
+  const d = S._refineReturn;
+  for (const it of d.items) {
+    const fbs = (S.pack.feedback || []).filter(f =>
+      f.scope === 'variant' && f.icon === it.icon && f.variant === it.variant && f.round === S.round);
+    it.feedback = fbs.map(f => f.text).join('; ');
+  }
+  S.refineDlg = d;
+  S._refineReturn = null;
+  focusDialog();
+}
 function refineActive() { return (S.refineDlg?.items || []).filter(i => !i.skip && (i.feedback || '').trim()); }
 function refineReady() { return refineActive().length > 0 && !S.refineDlg.busy; }
 function refineEst() {
@@ -2992,7 +3022,7 @@ const App = {
       showDebug, debugCopy, openNextDlg, addVariantBulk, addCustomStyle, saveRecraftDefaults,
       GATE_HELP, styleRules, stylePalette, ruleTitle, styleUsageCount, isPostponed, togglePostpone, applyAndNext, colState, toggleCol, toggleAll, usedStyles, setTab, iconSuggest, pickSuggestion, addNewIcon, startRoundWithNew,
       styleSummary, isOwnRef, editStyle, toggleGate, saveStyleRules, removeStyle, addStyleToPack, pickRefFile, removeRef,
-      vectorModels, curatedNames, styleDetail, editCustomStyle, recraftGenerate, commitResults, iconStylePalette, toggleIconColor, waitingForAgent, waitTargets, adoptPreview, adoptCommit, openRefineDlg, refineGrid, refineSetAll, refineCellAll, refineToggleCell, refineRowState, refineToggleRow2, refineColState, refineToggleCol2, refineActive, refineReady, refineEst, refineGenerate, openStyleRc, styleRcCreate, styleRcSave, openBatchDlg, batchGrid, batchCellAll, batchToggleCell, batchRowState, batchToggleRow, batchColState, batchToggleCol, batchSelAll, batchSelCount, batchTotal, batchSheets, batchDebug, batchEst, batchGenerate, batchElapsed, batchProgress, planCheck, dropResult, keptCount, totalCount, keepAll,
+      vectorModels, curatedNames, styleDetail, editCustomStyle, recraftGenerate, commitResults, iconStylePalette, toggleIconColor, waitingForAgent, waitTargets, topCand, refineFeedback, refineResume, adoptPreview, adoptCommit, openRefineDlg, refineGrid, refineSetAll, refineCellAll, refineToggleCell, refineRowState, refineToggleRow2, refineColState, refineToggleCol2, refineActive, refineReady, refineEst, refineGenerate, openStyleRc, styleRcCreate, styleRcSave, openBatchDlg, batchGrid, batchCellAll, batchToggleCell, batchRowState, batchToggleRow, batchColState, batchToggleCol, batchSelAll, batchSelCount, batchTotal, batchSheets, batchDebug, batchEst, batchGenerate, batchElapsed, batchProgress, planCheck, dropResult, keptCount, totalCount, keepAll,
 
     };
   },
