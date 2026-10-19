@@ -246,11 +246,11 @@ def adopt_svg(
     # gradient stops: gradient id → representative (middle-offset) color
     grad_colors: dict[str, tuple[int, int, int]] = {}
     for el in root.iter():
-        if el.tag.split("}")[-1] in ("linearGradient", "radialGradient"):
+        if el.tag.split("}")[-1].split(":")[-1] in ("linearGradient", "radialGradient"):
             stops = [
                 _hex_to_rgb(el2.get("stop-color") or "")
                 for el2 in el
-                if el2.tag.split("}")[-1] == "stop"
+                if el2.tag.split("}")[-1].split(":")[-1] == "stop"
             ]
             stops = [s for s in stops if s]
             if stops:
@@ -269,14 +269,18 @@ def adopt_svg(
     drawn: list[tuple[str, list[tuple[float, float]]]] = []  # (fill, polyline)
     bg_removed = 0
 
+    def local_tag(el: ET.Element) -> str:
+        # handles both {ns}tag and prefix:tag (Recraft emits svg:path)
+        return el.tag.split("}")[-1].split(":")[-1]
+
     def walk(el: ET.Element, m: Affine) -> None:
         nonlocal bg_removed
         for child in el:
-            tag = child.tag.split("}")[-1]
+            tag = local_tag(child)
             if tag in ("defs", "linearGradient", "radialGradient", "metadata"):
                 continue
             cm = _compose(m, _parse_transform(child.get("transform")))
-            if tag == "g":
+            if tag in ("g", "svg"):  # groups and nested svg roots recurse
                 walk(child, cm)
                 continue
             if tag == "path":
