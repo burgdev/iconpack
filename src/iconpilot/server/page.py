@@ -1134,7 +1134,7 @@ footer { text-align:center; color:var(--muted); font-size:.75rem; padding:20px 0
           </tbody>
         </table>
       </div>
-      <div v-if="refineActive().length" style="margin-bottom:8px; border:1px solid var(--line); border-radius:10px; padding:8px 10px">
+      <div v-if="refineSel().length" style="margin-bottom:8px; border:1px solid var(--line); border-radius:10px; padding:8px 10px">
         <p class="muted" style="margin:0 0 6px; font-size:.75rem">Feedback — required. Click 💬 to write.</p>
         <div v-for="it in S.refineDlg.items.filter(x => !x.skip)" :key="it.icon + '#' + it.variant"
              class="row" style="gap:6px; margin:3px 0; align-items:center">
