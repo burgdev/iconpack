@@ -2101,6 +2101,9 @@ function refineGrid() {
   cols.sort();
   return { rows, cols: cols.map(st => ({ style: st, cells: cellsByStyle[st] })) };
 }
+function refineSetAll(on) {
+  (S.refineDlg?.items || []).forEach(it => { it.skip = !on; });
+}
 function refineCellAll(items) { return items.every(it => !it.skip); }
 function refineToggleCell(items) {
   const on = !refineCellAll(items);
@@ -2211,6 +2214,9 @@ function batchGrid() {
     rows, // [{icon}]
     cols: cols.map(st => ({ style: st, cells: cellsByStyle[st], count: Object.values(cellsByStyle[st]).flat().length })),
   };
+}
+function batchSelAll(on) {
+  for (const tg of Object.keys(S.batchDlg.sel || {})) S.batchDlg.sel[tg] = on;
 }
 function batchCellAll(targets) { return targets.every(tg => S.batchDlg.sel[tg]); }
 function batchToggleCell(targets) {
@@ -2995,7 +3001,7 @@ const App = {
       showDebug, debugCopy, openNextDlg, addVariantBulk, addCustomStyle, saveRecraftDefaults,
       GATE_HELP, styleRules, stylePalette, ruleTitle, styleUsageCount, isPostponed, togglePostpone, applyAndNext, colState, toggleCol, toggleAll, usedStyles, setTab, iconSuggest, pickSuggestion, addNewIcon, startRoundWithNew,
       styleSummary, isOwnRef, editStyle, toggleGate, saveStyleRules, removeStyle, addStyleToPack, pickRefFile, removeRef,
-      vectorModels, curatedNames, styleDetail, editCustomStyle, recraftGenerate, commitResults, iconStylePalette, toggleIconColor, waitingForAgent, waitTargets, adoptPreview, adoptCommit, openRefineDlg, refineGrid, refineCellAll, refineToggleCell, refineRowState, refineToggleRow2, refineColState, refineToggleCol2, refineActive, refineReady, refineEst, refineGenerate, openStyleRc, styleRcCreate, styleRcSave, openBatchDlg, batchGrid, batchCellAll, batchToggleCell, batchRowState, batchToggleRow, batchColState, batchToggleCol, batchSelAll, batchSelCount, batchTotal, batchSheets, batchDebug, batchEst, batchGenerate, batchElapsed, batchProgress, planCheck, dropResult, keptCount, totalCount, keepAll,
+      vectorModels, curatedNames, styleDetail, editCustomStyle, recraftGenerate, commitResults, iconStylePalette, toggleIconColor, waitingForAgent, waitTargets, adoptPreview, adoptCommit, openRefineDlg, refineGrid, refineSetAll, refineCellAll, refineToggleCell, refineRowState, refineToggleRow2, refineColState, refineToggleCol2, refineActive, refineReady, refineEst, refineGenerate, openStyleRc, styleRcCreate, styleRcSave, openBatchDlg, batchGrid, batchCellAll, batchToggleCell, batchRowState, batchToggleRow, batchColState, batchToggleCol, batchSelAll, batchSelCount, batchTotal, batchSheets, batchDebug, batchEst, batchGenerate, batchElapsed, batchProgress, planCheck, dropResult, keptCount, totalCount, keepAll,
 
     };
   },
