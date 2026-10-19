@@ -1111,12 +1111,50 @@ footer { text-align:center; color:var(--muted); font-size:.75rem; padding:20px 0
       <h3><span><span class="ic-lg" v-html="IC.spark"></span> refine — {{ refineActive().length }} variant(s)</span>
           <button class="subtle" @click="S.refineDlg = null" aria-label="Close">✕</button></h3>
       <p class="muted" style="margin:0 0 10px">Best take of each variant + your feedback → improved variants via image-to-image. Feedback is required — it IS the change instruction.</p>
-      <div v-for="it in S.refineDlg.items" :key="it.icon + '#' + it.variant"
-           class="row" style="align-items:flex-start; gap:8px; margin-bottom:8px; border-bottom:1px solid var(--line); padding-bottom:8px">
-        <span class="chip" style="flex:none; margin-top:4px">{{ it.icon }}#{{ it.variant }}</span>
-        <input v-model="it.feedback" style="flex:1"
-               :placeholder="'what to change in ' + it.icon + ' ' + it.variant + ' — e.g. flame too heavy, thin the logs'">
-        <button class="subtle" style="flex:none" @click="it.skip = !it.skip" :title="it.skip ? 'include' : 'skip'">{{ it.skip ? 'skip' : '✓' }}</button>
+      <div style="overflow-x:auto; margin-bottom:6px">
+        <table class="selmatrix">
+          <thead>
+            <tr>
+              <th class="sh">
+                <button class="subtle" style="padding:0 6px; font-size:.72rem" @click="refineSetAll(true)">all</button>
+                <button class="subtle" style="padding:0 6px; font-size:.72rem" @click="refineSetAll(false)">none</button>
+              </th>
+              <th v-for="ic in refineMatrix().icons" :key="ic" class="ih">
+                <button class="subtle" style="padding:0 4px; font-size:.72rem" :class="{ on: refineColAll(ic) }" @click="refineToggleCol(ic)">{{ ic }}</button>
+              </th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr v-for="row in refineMatrix().styles" :key="row.style">
+              <th class="sh">
+                <button class="subtle" style="padding:0 6px; font-size:.75rem" :class="{ on: refineRowAll(row) }" @click="refineToggleRow(row)">{{ row.style }}</button>
+              </th>
+              <td v-for="ic in refineMatrix().icons" :key="ic" class="cell" style="min-width:180px">
+                <div v-for="it in (row.cells[ic] || [])" :key="it.icon + '#' + it.variant"
+                     class="row" style="gap:5px; align-items:center"
+                     :style="{ opacity: it.skip ? '.45' : '1' }">
+                  <input type="checkbox" :checked="!it.skip" @change="it.skip = !it.skip" :aria-label="'include ' + it.icon + ' ' + it.variant">
+                  <span class="muted" style="font-size:.7rem; flex:none" :title="it.icon + '#' + it.variant">{{ it.variant }}</span>
+                  <input v-model="it.feedback" style="flex:1; min-width:120px; height:28px; font-size:.78rem"
+                         :placeholder="it.skip ? 'skipped' : 'what to change — e.g. flame too heavy'">
+                </div>
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+      <div class="only-narrow">
+        <div v-for="it in S.refineDlg.items" :key="it.icon + '#' + it.variant" style="margin-bottom:8px">
+          <div class="row" style="gap:6px; margin-bottom:3px">
+            <button class="selchip" :class="{ on: !it.skip }" @click="it.skip = !it.skip">{{ it.icon }} · {{ it.variant }}</button>
+          </div>
+          <input v-if="!it.skip" v-model="it.feedback" style="width:100%; height:36px; font-size:.82rem"
+                 :placeholder="'what to change in ' + it.icon + ' ' + it.variant">
+        </div>
+        <div class="row" style="gap:6px; margin-bottom:8px">
+          <button class="subtle" style="height:36px" @click="refineSetAll(true)">all</button>
+          <button class="subtle" style="height:36px" @click="refineSetAll(false)">none</button>
+        </div>
       </div>
       <div class="row" style="margin-top:8px; gap:10px">
         <label class="muted">strength</label>
@@ -2052,6 +2090,40 @@ function openRefineDlg(iconId) {
   S.refineDlg = { items, strength: 0.3, takes: 2, model: 'recraftv4_1_vector', busy: false, err: '' };
   focusDialog();
 }
+function refineMatrix() {
+  const styles = [], icons = [], cells = {};
+  for (const it of S.refineDlg?.items || []) {
+    const st = S.pack.icons?.[it.icon]?.variants?.[it.variant]?.style || '?';
+    if (!cells[st]) { cells[st] = {}; styles.push(st); }
+    (cells[st][it.icon] = cells[st][it.icon] || []).push(it);
+    if (!icons.includes(it.icon)) icons.push(it.icon);
+  }
+  styles.sort(); icons.sort();
+  return { styles: styles.map(s => ({ style: s, cells: cells[s] })), icons };
+}
+function refineRowItems(row) {
+  const out = [];
+  for (const list of Object.values(row.cells || {})) out.push(...list);
+  return out;
+}
+function refineRowAll(row) { return refineRowItems(row).every(it => !it.skip && (it.feedback || '').trim()); }
+function refineToggleRow(row) {
+  const on = !refineRowAll(row);
+  refineRowItems(row).forEach(it => { it.skip = !on; });
+}
+function refineColItems(ic) {
+  const out = [];
+  for (const row of refineMatrix().styles) out.push(...((row.cells[ic] || [])));
+  return out;
+}
+function refineColAll(ic) { const t = refineColItems(ic); return t.length > 0 && t.every(it => !it.skip && (it.feedback || '').trim()); }
+function refineToggleCol(ic) {
+  const on = !refineColAll(ic);
+  refineColItems(ic).forEach(it => { it.skip = !on; });
+}
+function refineSetAll(on) {
+  (S.refineDlg?.items || []).forEach(it => { it.skip = !on; });
+}
 function refineActive() { return (S.refineDlg?.items || []).filter(i => !i.skip && (i.feedback || '').trim()); }
 function refineReady() { return refineActive().length > 0 && !S.refineDlg.busy; }
 function refineEst() {
@@ -2912,7 +2984,7 @@ const App = {
       showDebug, debugCopy, openNextDlg, addVariantBulk, addCustomStyle, saveRecraftDefaults,
       GATE_HELP, styleRules, stylePalette, ruleTitle, styleUsageCount, isPostponed, togglePostpone, applyAndNext, colState, toggleCol, toggleAll, usedStyles, setTab, iconSuggest, pickSuggestion, addNewIcon, startRoundWithNew,
       styleSummary, isOwnRef, editStyle, toggleGate, saveStyleRules, removeStyle, addStyleToPack, pickRefFile, removeRef,
-      vectorModels, curatedNames, styleDetail, editCustomStyle, recraftGenerate, commitResults, iconStylePalette, toggleIconColor, waitingForAgent, waitTargets, adoptPreview, adoptCommit, openRefineDlg, refineActive, refineReady, refineEst, refineGenerate, openStyleRc, styleRcCreate, styleRcSave, openBatchDlg, batchMatrix, batchRowTargets, batchRowAll, batchToggleRow, batchColAll, batchToggleCol, batchSelAll, batchSelCount, batchTotal, batchSheets, batchDebug, batchEst, batchGenerate, batchElapsed, batchProgress, planCheck, dropResult, keptCount, totalCount, keepAll,
+      vectorModels, curatedNames, styleDetail, editCustomStyle, recraftGenerate, commitResults, iconStylePalette, toggleIconColor, waitingForAgent, waitTargets, adoptPreview, adoptCommit, openRefineDlg, refineMatrix, refineRowAll, refineToggleRow, refineColAll, refineToggleCol, refineSetAll, refineActive, refineReady, refineEst, refineGenerate, openStyleRc, styleRcCreate, styleRcSave, openBatchDlg, batchMatrix, batchRowTargets, batchRowAll, batchToggleRow, batchColAll, batchToggleCol, batchSelAll, batchSelCount, batchTotal, batchSheets, batchDebug, batchEst, batchGenerate, batchElapsed, batchProgress, planCheck, dropResult, keptCount, totalCount, keepAll,
 
     };
   },
