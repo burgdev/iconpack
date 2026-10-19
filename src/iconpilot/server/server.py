@@ -1387,6 +1387,101 @@ class ReviewHandler(BaseHTTPRequestHandler):
             rc.style_cache_put(rc.refs_hash(refs), rid, sid)
         return {"style_id": rid}
 
+    def _adopt_preview(self, data: dict) -> dict:
+        """Process a seed deterministically; nothing is written. Soft gating:
+        gate errors are returned for the user to judge, never blocking."""
+        import base64 as _b64
+
+        from iconpilot.adopt import adopt_svg
+
+        icon_id = str(data.get("icon") or "")
+        variant = str(data.get("variant") or "")
+        with pack_lock(self.pack_dir):
+            pack, styles = load_pack(self.pack_dir / "pack.json")
+        icon = pack["icons"].get(icon_id)
+        var = (icon or {}).get("variants", {}).get(variant)
+        if var is None or "style" not in var:
+            raise ValueError(f"no authored variant {icon_id}#{variant}")
+        style = styles[var["style"]]
+
+        runs_dir = self.pack_dir / ".runs"
+        runs = sorted(p.name for p in runs_dir.glob("r*") if p.is_dir())
+        run = runs[-1] if runs else None
+        cand = str(data.get("cand") or "")
+        src = None
+        if data.get("approved") or not cand:
+            f = self.pack_dir / "icons" / icon_id / f"{variant}.svg"
+            if f.is_file():
+                src = f
+        if src is None and run and cand:
+            f = runs_dir / run / variant / icon_id / f"{cand}.svg"
+            if f.is_file():
+                src = f
+        if src is None:
+            raise ValueError("need cand (current round) or an approved icon")
+
+        out, fixes, gate_errors = adopt_svg(src.read_text(), style, pack)
+        b64 = _b64.b64encode(out.encode()).decode()
+        return {
+            "icon": icon_id,
+            "variant": variant,
+            "cand": cand,
+            "source": str(src.relative_to(self.pack_dir)),
+            "svg_data": f"data:image/svg+xml;base64,{b64}",
+            "fixes": fixes,
+            "gate_pass": not gate_errors,
+            "gate_errors": gate_errors,
+        }
+
+    def _adopt_commit(self, data: dict) -> dict:
+        """Write an adopted seed as the variant's icon. No hard gating —
+        remaining gate issues are recorded as a comment for traceability."""
+        import shutil
+
+        from iconpilot.pack import file_sha256
+
+        icon_id = str(data.get("icon") or "")
+        variant = str(data.get("variant") or "")
+        svg = str(data.get("svg") or "")
+        cand = str(data.get("cand") or "")
+        gate_errors = data.get("gate_errors") or []
+        if not svg.startswith("<svg"):
+            raise ValueError("need the adopted svg text")
+        with pack_lock(self.pack_dir):
+            pack, _styles = load_pack(self.pack_dir / "pack.json")
+        icon = pack["icons"].get(icon_id)
+        var = (icon or {}).get("variants", {}).get(variant)
+        if var is None or "style" not in var:
+            raise ValueError(f"no authored variant {icon_id}#{variant}")
+        runs_dir = self.pack_dir / ".runs"
+        runs = sorted(p.name for p in runs_dir.glob("r*") if p.is_dir())
+        run = runs[-1] if runs else "adopt"
+
+        dest = self.pack_dir / "icons" / icon_id / f"{variant}.svg"
+        dest.parent.mkdir(parents=True, exist_ok=True)
+        # adopt keeps a copy of the raw seed alongside for traceability
+        if cand:
+            raw = runs_dir / run / variant / icon_id / f"{cand}.svg"
+            if raw.is_file():
+                history = dest.parent / f"{variant}.seed-{cand}.svg"
+                shutil.copyfile(raw, history)
+        dest.write_text(svg)
+        var["status"] = "approved"
+        var["chosen"] = {"run": run, "variant": f"adopt:{cand}" if cand else "adopt"}
+        var["content_hash"] = file_sha256(dest)
+        notes = [f"[adopt] from {cand or 'approved'} (deterministic post-process)"]
+        if gate_errors:
+            notes.append(f"[adopt] open gate issues: {'; '.join(e[:120] for e in gate_errors[:4])}")
+        for n in notes:
+            var.setdefault("comments", []).append({"round": run, "text": n})
+        pack["rev"] = pack.get("rev", 0) + 1
+        write_pack_atomic(self.pack_dir, pack)
+        return {
+            "rev": pack["rev"],
+            "dest": str(dest.relative_to(self.pack_dir)),
+            "gate_issues": len(gate_errors),
+        }
+
     def _recraft_refine(self, data: dict) -> dict:
         """Recraft refine: existing take + round feedback → i2i variants.
 
@@ -1812,6 +1907,24 @@ class ReviewHandler(BaseHTTPRequestHandler):
             data = self._body()
             try:
                 self._json(200, self._recraft_style_save(data))
+            except ValueError as exc:
+                self._json(400, {"error": str(exc)})
+            except Exception as exc:
+                self._json(500, {"error": str(exc)})
+            return
+        if url.path == "/api/adopt":
+            data = self._body()
+            try:
+                self._json(200, self._adopt_preview(data))
+            except ValueError as exc:
+                self._json(400, {"error": str(exc)})
+            except Exception as exc:
+                self._json(500, {"error": str(exc)})
+            return
+        if url.path == "/api/adopt-commit":
+            data = self._body()
+            try:
+                self._json(200, self._adopt_commit(data))
             except ValueError as exc:
                 self._json(400, {"error": str(exc)})
             except Exception as exc:

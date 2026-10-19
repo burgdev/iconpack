@@ -1040,6 +1040,37 @@ footer { text-align:center; color:var(--muted); font-size:.75rem; padding:20px 0
     </div>
   </div>
 
+  <div v-if="S.adoptDlg" class="overlay" @click.self="S.adoptDlg = null">
+    <div class="dialog" style="max-width:680px">
+      <h3><span><span class="ic-lg" v-html="IC.check || IC.star"></span> adopt — {{ S.adoptDlg.icon }}#{{ S.adoptDlg.variant }} {{ S.adoptDlg.cand ? '· ' + S.adoptDlg.cand : '' }}</span>
+          <button class="subtle" @click="S.adoptDlg = null" aria-label="Close">✕</button></h3>
+      <div class="row" style="gap:16px; align-items:flex-start">
+        <div style="text-align:center">
+          <img :src="S.adoptDlg.svg_data" width="120" height="120" style="border-radius:10px; background:#fff; border:1px solid var(--line)">
+          <div class="muted" style="font-size:.75rem; margin-top:2px">adopted</div>
+        </div>
+        <div style="flex:1; min-width:0">
+          <b style="font-size:.85rem">applied fixes</b>
+          <ul style="margin:4px 0 10px; padding-left:18px; font-size:.8rem">
+            <li v-for="f in S.adoptDlg.fixes" :key="f">{{ f }}</li>
+          </ul>
+          <b style="font-size:.85rem" :style="{color: S.adoptDlg.gate_errors.length ? 'var(--warn)' : 'var(--accent)'}">
+            gate: {{ S.adoptDlg.gate_errors.length ? S.adoptDlg.gate_errors.length + ' open issue(s)' : 'clean pass' }}</b>
+          <ul v-if="S.adoptDlg.gate_errors.length" style="margin:4px 0; padding-left:18px; font-size:.78rem; color:var(--warn)">
+            <li v-for="e in S.adoptDlg.gate_errors" :key="e">{{ e.slice(0, 110) }}</li>
+          </ul>
+        </div>
+      </div>
+      <div class="row" style="margin-top:12px">
+        <button class="primary" :class="{ busy: S.adoptDlg.busy }" @click="adoptCommit()">
+          {{ S.adoptDlg.gate_errors.length ? 'adopt anyway' : 'adopt' }} — make this the {{ S.adoptDlg.variant }} icon
+        </button>
+        <button class="subtle" @click="S.adoptDlg = null">cancel</button>
+      </div>
+      <p v-if="S.adoptDlg.err" class="err">{{ S.adoptDlg.err }}</p>
+    </div>
+  </div>
+
   <div v-if="S.refineDlg" class="overlay" @click.self="S.refineDlg = null">
     <div class="dialog" style="max-width:640px">
       <h3><span><span class="ic-lg" v-html="IC.spark"></span> refine — {{ refineActive().length }} variant(s)</span>
@@ -1258,7 +1289,12 @@ footer { text-align:center; color:var(--muted); font-size:.75rem; padding:20px 0
   <div v-if="S.dlg" class="overlay" @click.self="S.dlg = null">
     <div class="dialog">
       <h3><span>{{ S.dlg.icon }} / {{ S.dlg.variant }} <span class="muted">{{ S.dlg.cand || '' }}</span></span>
-          <button class="subtle" @click="S.dlg = null">close ✕</button></h3>
+          <span class="row" style="gap:6px">
+            <button v-if="S.recraftReady || S.debug" class="primary" @click="adoptPreview()"
+                    title="deterministic post-process this seed into a pack icon: bake transforms, snap colors/palette, rescale to the style grid, simplify — gate issues are shown, never blocking">
+              <span class="ic" v-html="IC.check || IC.star"></span> adopt</button>
+            <button class="subtle" @click="S.dlg = null">close ✕</button>
+          </span></h3>
       <div class="matrix">
         <div class="col" v-for="bgc in S.dlg.bgs2" :key="bgc.hex">
           <div class="colhead">{{ bgc.name }}</div>
@@ -1317,7 +1353,7 @@ const S = reactive({
   flash: '', flashOk: true, applying: false, instructions: '',
   tab: (location.hash || '#round').slice(1) || 'round',
   kbFocus: 0, kbVariant: 0, kbCand: 0, kbUsed: false, compare: null, histView: null,
-  recraftReady: false, debug: new URLSearchParams(location.search).has('debug'), debugDlg: null, nextDlg: null, resultDlg: null, batchDlg: null, refineDlg: null, styleRc: null, aistatOpen: false,
+  recraftReady: false, debug: new URLSearchParams(location.search).has('debug'), debugDlg: null, nextDlg: null, resultDlg: null, batchDlg: null, refineDlg: null, adoptDlg: null, styleRc: null, aistatOpen: false,
   appliedRound: null,
   recraftModels: {}, styleRefs: {}, styleDetail: {}, styleEdit: null, styleView: null, removeArm: null, theme: 'light', iconHist: {}, svgFiles: {}, rejectArm: null,
   history: [], showHistory: false,
@@ -1340,6 +1376,7 @@ const esc = s => String(s ?? '');
 const IC = {
   comment: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>',
   lock: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>',
+  check: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>',
   bolt: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M13 2 3 14h9l-1 8 10-12h-9l1-8z"/></svg>',
   plus: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14M5 12h14"/></svg>',
   undo: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7v6h6"/><path d="M21 17a9 9 0 0 0-15-6.7L3 13"/></svg>',
@@ -1896,6 +1933,34 @@ async function styleRcSave() {
     S.styleRc = null;
     await load();
   } catch (e) { d.err = e.d?.error || e.message || 'save failed'; }
+}
+async function adoptPreview() {
+  const d = S.dlg;
+  if (!d) return;
+  try {
+    const r = await api('/api/adopt', { method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ icon: d.icon, variant: d.variant, cand: d.cand || '' }) });
+    S.adoptDlg = { icon: r.icon, variant: r.variant, cand: r.cand,
+      svg_data: r.svg_data, fixes: r.fixes, gate_errors: r.gate_errors, busy: false, err: '' };
+    S.dlg = null;
+    focusDialog();
+  } catch (e) { flash('adopt: ' + (e.d?.error || e.message), false); }
+}
+async function adoptCommit() {
+  const d = S.adoptDlg;
+  if (!d || d.busy) return;
+  d.busy = true; d.err = '';
+  try {
+    const svg = atob(d.svg_data.split(',')[1]);
+    const r = await api('/api/adopt-commit', { method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ icon: d.icon, variant: d.variant, cand: d.cand, svg, gate_errors: d.gate_errors }) });
+    flash('adopted ' + d.icon + '#' + d.variant + (r.gate_issues ? ' — ' + r.gate_issues + ' gate issue(s) recorded' : ' — gate clean'), true);
+    S.adoptDlg = null;
+    await load();
+  } catch (e) {
+    d.busy = false;
+    d.err = e.d?.error || e.message || 'commit failed';
+  }
 }
 function openRefineDlg(iconId) {
   const targets = [];
@@ -2762,7 +2827,7 @@ const App = {
       showDebug, debugCopy, openNextDlg, addVariantBulk, addCustomStyle, saveRecraftDefaults,
       GATE_HELP, styleRules, stylePalette, ruleTitle, styleUsageCount, isPostponed, togglePostpone, applyAndNext, colState, toggleCol, toggleAll, usedStyles, setTab, iconSuggest, pickSuggestion, addNewIcon, startRoundWithNew,
       styleSummary, isOwnRef, editStyle, toggleGate, saveStyleRules, removeStyle, addStyleToPack, pickRefFile, removeRef,
-      vectorModels, curatedNames, styleDetail, editCustomStyle, recraftGenerate, commitResults, iconStylePalette, toggleIconColor, waitingForAgent, waitTargets, openRefineDlg, refineActive, refineReady, refineEst, refineGenerate, openStyleRc, styleRcCreate, styleRcSave, openBatchDlg, batchGroups, grpAll, toggleGrp, batchSelCount, batchTotal, batchSheets, batchDebug, batchEst, batchGenerate, batchElapsed, batchProgress, planCheck, dropResult, keptCount, totalCount, keepAll,
+      vectorModels, curatedNames, styleDetail, editCustomStyle, recraftGenerate, commitResults, iconStylePalette, toggleIconColor, waitingForAgent, waitTargets, adoptPreview, adoptCommit, openRefineDlg, refineActive, refineReady, refineEst, refineGenerate, openStyleRc, styleRcCreate, styleRcSave, openBatchDlg, batchGroups, grpAll, toggleGrp, batchSelCount, batchTotal, batchSheets, batchDebug, batchEst, batchGenerate, batchElapsed, batchProgress, planCheck, dropResult, keptCount, totalCount, keepAll,
 
     };
   },

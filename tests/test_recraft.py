@@ -1013,3 +1013,38 @@ def test_refine_payload_and_guards(monkeypatch: pytest.MonkeyPatch) -> None:
     # v4+ only
     with pytest.raises(rc.RecraftError, match="v4"):
         rc.refine("T", "<svg/>", "x", strength=0.3, model="recraftv2_vector")
+
+
+def test_adopt_svg_deterministic_pipeline(tmp_path) -> None:
+    """Seed with transforms, bg rect, gradients, off-palette → pack icon."""
+    from iconpilot.adopt import adopt_svg
+    from iconpilot.styles import resolve_styles
+
+    seed = (
+        '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024">'
+        '<defs><linearGradient id="g1"><stop offset="0" stop-color="#ff0000"/>'
+        '<stop offset="1" stop-color="#0000ff"/></linearGradient></defs>'
+        '<rect x="0" y="0" width="1024" height="1024" fill="#ffffff"/>'
+        '<g transform="translate(-100 -100) scale(1.5)">'
+        '<path fill="url(#g1)" d="M100 100 L700 100 L700 700 Z"/>'
+        '<path fill="#123456" d="M200 200 H400 V400 H200 Z"/>'
+        "</g></svg>"
+    )
+    style = resolve_styles({})["color-flat"]
+    pack = {"icons": {}, "spec": {"viewBox": "0 0 48 48", "precision": 0.5}}
+    out, fixes, errors = adopt_svg(seed, style, pack)
+    assert "0 0 48 48" in out  # style design grid
+    assert "<g" not in out and "transform=" not in out  # baked
+    assert "url(" not in out and "linearGradient" not in out  # gradients collapsed
+    import re
+
+    fills = set(re.findall(r'fill="([^"]+)"', out))
+    pal = {c.lower() for c in style.palette}
+    assert fills <= pal, fills  # everything snapped to the palette
+    assert any("background" in f for f in fixes)
+    assert any("transform" in f for f in fixes)
+    assert out.count("<path") >= 2
+    # parseable output
+    from xml.etree import ElementTree as ET
+
+    ET.fromstring(out)
