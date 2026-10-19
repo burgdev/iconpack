@@ -1108,7 +1108,7 @@ footer { text-align:center; color:var(--muted); font-size:.75rem; padding:20px 0
 
   <div v-if="S.refineDlg" class="overlay" @click.self="S.refineDlg = null">
     <div class="dialog" style="max-width:640px">
-      <h3><span><span class="ic-lg" v-html="IC.spark"></span> refine — {{ refineActive().length }} variant(s)</span>
+      <h3><span><span class="ic-lg" v-html="IC.spark"></span> refine — {{ refineSel().length }} variant(s)</span>
           <button class="subtle" @click="S.refineDlg = null" aria-label="Close">✕</button></h3>
       <p class="muted" style="margin:0 0 10px">Best take of each variant + your feedback → improved variants via image-to-image. Feedback is required — it IS the change instruction.</p>
       <div style="max-height:240px; overflow-y:auto; margin-bottom:8px">
@@ -1165,8 +1165,9 @@ footer { text-align:center; color:var(--muted); font-size:.75rem; padding:20px 0
       </div>
       <div class="row" style="margin-top:12px">
         <button class="primary" :class="{ busy: S.refineDlg.busy }" :disabled="!refineReady()" @click="refineGenerate()">
-          <span class="ic" v-html="IC.spark"></span> refine {{ refineActive().length * S.refineDlg.takes }} variants · ~${{ refineEst() }}
+          <span class="ic" v-html="IC.spark"></span> refine {{ refineSel().length * S.refineDlg.takes }} variants · ~${{ refineEst() }}
         </button>
+        <span v-if="refineMissing().length" class="muted" style="font-size:.75rem; color:var(--warn)">⚠ {{ refineMissing().length }} missing feedback</span>
       </div>
       <p v-if="S.refineDlg.err" class="err">{{ S.refineDlg.err }}</p>
     </div>
@@ -2133,12 +2134,14 @@ function refineResume() {
   S._refineReturn = null;
   focusDialog();
 }
-function refineActive() { return (S.refineDlg?.items || []).filter(i => !i.skip && (i.feedback || '').trim()); }
-function refineReady() { return refineActive().length > 0 && !S.refineDlg.busy; }
+function refineSel() { return (S.refineDlg?.items || []).filter(i => !i.skip); }
+function refineActive() { return refineSel().filter(i => (i.feedback || '').trim()); }
+function refineMissing() { return refineSel().filter(i => !(i.feedback || '').trim()); }
+function refineReady() { return refineSel().length > 0 && refineMissing().length === 0 && !S.refineDlg.busy; }
 function refineEst() {
   const d = S.refineDlg; if (!d) return '0.00';
   const price = (S.recraftModels.prices || {})[d.model] || 0.08;
-  return (refineActive().length * d.takes * price).toFixed(2);
+  return (refineSel().length * d.takes * price).toFixed(2);
 }
 async function refineGenerate() {
   const d = S.refineDlg;
@@ -2996,7 +2999,7 @@ const App = {
       showDebug, debugCopy, openNextDlg, addVariantBulk, addCustomStyle, saveRecraftDefaults,
       GATE_HELP, styleRules, stylePalette, ruleTitle, styleUsageCount, isPostponed, togglePostpone, applyAndNext, colState, toggleCol, toggleAll, usedStyles, setTab, iconSuggest, pickSuggestion, addNewIcon, startRoundWithNew,
       styleSummary, isOwnRef, editStyle, toggleGate, saveStyleRules, removeStyle, addStyleToPack, pickRefFile, removeRef,
-      vectorModels, curatedNames, styleDetail, editCustomStyle, recraftGenerate, commitResults, iconStylePalette, toggleIconColor, waitingForAgent, waitTargets, refineFeedback, refineResume, adoptPreview, adoptCommit, openRefineDlg, refineGrid, refineSetAll, refineCellAll, refineToggleCell, refineRowState, refineToggleRow2, refineColState, refineToggleCol2, refineActive, refineReady, refineEst, refineGenerate, openStyleRc, styleRcCreate, styleRcSave, openBatchDlg, batchGrid, batchCellAll, batchToggleCell, batchRowState, batchToggleRow, batchColState, batchToggleCol, batchSelAll, batchSelCount, batchTotal, batchSheets, batchDebug, batchEst, batchGenerate, batchElapsed, batchProgress, planCheck, dropResult, keptCount, totalCount, keepAll,
+      vectorModels, curatedNames, styleDetail, editCustomStyle, recraftGenerate, commitResults, iconStylePalette, toggleIconColor, waitingForAgent, waitTargets, refineFeedback, refineResume, adoptPreview, adoptCommit, openRefineDlg, refineSel, refineMissing, refineGrid, refineSetAll, refineCellAll, refineToggleCell, refineRowState, refineToggleRow2, refineColState, refineToggleCol2, refineActive, refineReady, refineEst, refineGenerate, openStyleRc, styleRcCreate, styleRcSave, openBatchDlg, batchGrid, batchCellAll, batchToggleCell, batchRowState, batchToggleRow, batchColState, batchToggleCol, batchSelAll, batchSelCount, batchTotal, batchSheets, batchDebug, batchEst, batchGenerate, batchElapsed, batchProgress, planCheck, dropResult, keptCount, totalCount, keepAll,
 
     };
   },
