@@ -1135,14 +1135,10 @@ footer { text-align:center; color:var(--muted); font-size:.75rem; padding:20px 0
         </table>
       </div>
       <div v-if="refineActive().length" style="margin-bottom:8px; border:1px solid var(--line); border-radius:10px; padding:8px 10px">
-        <p class="muted" style="margin:0 0 6px; font-size:.75rem">Feedback — required for refine. Click 💬 to write/review.</p>
+        <p class="muted" style="margin:0 0 6px; font-size:.75rem">Feedback — required. Click 💬 to write.</p>
         <div v-for="it in S.refineDlg.items.filter(x => !x.skip)" :key="it.icon + '#' + it.variant"
-             class="row" style="gap:8px; margin:3px 0; align-items:center">
-          <img v-if="S.svgFiles[it.icon + '/' + it.variant]"
-               :src="render('.runs/' + S.round + '/' + it.variant + '/' + it.icon + '/' + (topCand(it.icon, it.variant) || 'r1') + '.svg', 28, '#fff')"
-               width="28" height="28" style="border-radius:5px; background:#fff; flex:none; border:1px solid var(--line)">
-          <span v-else class="thumb missing" style="width:28px; height:28px; flex:none">—</span>
-          <span style="flex:none; font-size:.72rem; font-weight:600">{{ it.icon }}</span>
+             class="row" style="gap:6px; margin:3px 0; align-items:center">
+          <span style="flex:none; font-size:.75rem; font-weight:600; min-width:70px">{{ it.icon }}</span>
           <span class="muted" style="flex:none; font-size:.7rem">{{ it.variant }}</span>
           <span v-if="it.feedback" class="muted" style="flex:1; min-width:0; font-size:.75rem; overflow:hidden; text-overflow:ellipsis; white-space:nowrap" :title="it.feedback">✓ {{ it.feedback }}</span>
           <span v-else class="muted" style="flex:1; min-width:0; font-size:.75rem; color:var(--warn)">⚠ missing</span>
@@ -2077,12 +2073,10 @@ function openRefineDlg(iconId) {
     const fb = (S.pack.feedback || []).filter(i =>
       i.scope === 'variant' && i.icon === tg.icon && i.variant === tg.variant && i.round === S.round)
       .map(i => i.text).join('; ');
-    return { ...tg, feedback: fb, skip: !fb };
+    return { ...tg, feedback: fb, skip: true };
   });
-  const withFb = items.filter(i => !i.skip).length;
-  if (!withFb) {
-    flash('no feedback this round — write feedback first (💬), refine needs it', false);
-  }
+  // pre-select only variants that have feedback (refine needs it)
+  items.forEach(it => { if (it.feedback) it.skip = false; });
   S.refineDlg = { items, strength: 0.3, takes: 2, model: 'recraftv4_1_vector', busy: false, err: '' };
   focusDialog();
 }
@@ -2126,11 +2120,6 @@ function refineToggleCol2(style) {
   const g = refineGrid();
   const col = g.cols.find(c => c.style === style);
   if (col) Object.values(col.cells).flat().forEach(it => { it.skip = !turnOn; });
-}
-function topCand(icon, variant) {
-  const cands = (S.candidates || []).filter(c => c.icon === icon && c.variant === variant);
-  if (!cands.length) return null;
-  return cands[cands.length - 1].cand;
 }
 function refineFeedback(it) {
   // the fb overlay renders behind the refine overlay — close refine,
@@ -3022,7 +3011,7 @@ const App = {
       showDebug, debugCopy, openNextDlg, addVariantBulk, addCustomStyle, saveRecraftDefaults,
       GATE_HELP, styleRules, stylePalette, ruleTitle, styleUsageCount, isPostponed, togglePostpone, applyAndNext, colState, toggleCol, toggleAll, usedStyles, setTab, iconSuggest, pickSuggestion, addNewIcon, startRoundWithNew,
       styleSummary, isOwnRef, editStyle, toggleGate, saveStyleRules, removeStyle, addStyleToPack, pickRefFile, removeRef,
-      vectorModels, curatedNames, styleDetail, editCustomStyle, recraftGenerate, commitResults, iconStylePalette, toggleIconColor, waitingForAgent, waitTargets, topCand, refineFeedback, refineResume, adoptPreview, adoptCommit, openRefineDlg, refineGrid, refineSetAll, refineCellAll, refineToggleCell, refineRowState, refineToggleRow2, refineColState, refineToggleCol2, refineActive, refineReady, refineEst, refineGenerate, openStyleRc, styleRcCreate, styleRcSave, openBatchDlg, batchGrid, batchCellAll, batchToggleCell, batchRowState, batchToggleRow, batchColState, batchToggleCol, batchSelAll, batchSelCount, batchTotal, batchSheets, batchDebug, batchEst, batchGenerate, batchElapsed, batchProgress, planCheck, dropResult, keptCount, totalCount, keepAll,
+      vectorModels, curatedNames, styleDetail, editCustomStyle, recraftGenerate, commitResults, iconStylePalette, toggleIconColor, waitingForAgent, waitTargets, refineFeedback, refineResume, adoptPreview, adoptCommit, openRefineDlg, refineGrid, refineSetAll, refineCellAll, refineToggleCell, refineRowState, refineToggleRow2, refineColState, refineToggleCol2, refineActive, refineReady, refineEst, refineGenerate, openStyleRc, styleRcCreate, styleRcSave, openBatchDlg, batchGrid, batchCellAll, batchToggleCell, batchRowState, batchToggleRow, batchColState, batchToggleCol, batchSelAll, batchSelCount, batchTotal, batchSheets, batchDebug, batchEst, batchGenerate, batchElapsed, batchProgress, planCheck, dropResult, keptCount, totalCount, keepAll,
 
     };
   },
