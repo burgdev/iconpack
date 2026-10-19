@@ -1530,8 +1530,14 @@ class ReviewHandler(BaseHTTPRequestHandler):
                         curated_style=curated,
                     )
                 except rc.RecraftError as exc:
-                    if style_id_rc and "not a vector style" in str(exc):
-                        # poisoned cached style (wrong base) — heal + retry once
+                    msg = str(exc).lower()
+                    bad_style = "not a vector style" in msg or (
+                        "style" in msg
+                        and any(s in msg for s in ("not found", "does not exist", "invalid"))
+                    )
+                    if style_id_rc and bad_style:
+                        # poisoned cached style (wrong base, foreign account,
+                        # remotely deleted) — heal + retry once
                         healed = self._heal_bad_style(token, style_id, style, refs)
                         if not healed or healed == style_id_rc:
                             raise  # nothing better to retry with

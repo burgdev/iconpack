@@ -159,8 +159,10 @@ def style_cache_path() -> Path:
 
     Bundled refs are identical across packs — one creation per hash per
     Recraft account (ever), instead of $0.005 per pack per style.
+    XDG cache semantics: derived, regenerable (pack.json stays the source
+    of truth; delete this file freely).
     """
-    return Path.home() / ".config" / "iconpilot" / "style_cache.json"
+    return Path.home() / ".cache" / "iconpilot" / "style-cache.json"
 
 
 def style_cache_get(refs_hash: str) -> str | None:
