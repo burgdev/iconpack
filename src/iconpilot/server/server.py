@@ -1387,6 +1387,131 @@ class ReviewHandler(BaseHTTPRequestHandler):
             rc.style_cache_put(rc.refs_hash(refs), rid, sid)
         return {"style_id": rid}
 
+    def _recraft_refine(self, data: dict) -> dict:
+        """Recraft refine: existing take + round feedback → i2i variants.
+
+        Body: {targets: ["icon#variant"], feedback?: {target: text},
+        strength: 0.3, takes: 2, model?, debug?}. Source per target:
+        approved file → best-rated candidate of the current run → skip.
+        Requires feedback text (from the current round or the request) —
+        nothing to refine without it. Preview only; commit via
+        /api/recraft-commit like all Recraft results.
+        """
+        import base64 as _b64
+        import re as _re
+
+        import iconpilot.recraft as rc
+
+        token = rc.resolve_token()
+        if not token and not data.get("debug"):
+            raise ValueError("no Recraft token on the server — set RECRAFT_API_TOKEN")
+        strength = max(0.0, min(float(data.get("strength") or 0.3), 1.0))
+        takes = max(1, min(int(data.get("takes") or 2), 6))
+        model = data.get("model") or "recraftv4_1_vector"
+        if model not in rc.REFINE_MODELS:
+            raise ValueError(f"refine needs a v4+ vector model, got '{model}'")
+        overrides = data.get("feedback") or {}
+
+        with pack_lock(self.pack_dir):
+            pack, styles = load_pack(self.pack_dir / "pack.json")
+        runs_dir = self.pack_dir / ".runs"
+        runs = sorted(p.name for p in runs_dir.glob("r*") if p.is_dir())
+        run = runs[-1] if runs else None
+        if not run:
+            raise ValueError("no round yet — start a pass first")
+
+        items: list[dict] = []
+        skipped: list[dict] = []
+        calls: list[dict] = []
+        cost = 0.0
+        for target in data.get("targets", []):
+            iid, _, vid = str(target).partition("#")
+            icon = pack["icons"].get(iid)
+            var = (icon or {}).get("variants", {}).get(vid)
+            if var is None or "style" not in var:
+                raise ValueError(f"no authored variant {iid}#{vid}")
+            # feedback: request override → current-round variant feedback
+            fb = str(overrides.get(target) or "").strip()
+            if not fb:
+                fbs = [
+                    f.get("text", "")
+                    for f in pack.get("feedback", [])
+                    if f.get("scope") == "variant"
+                    and f.get("icon") == iid
+                    and f.get("variant") == vid
+                    and f.get("round") == run
+                ]
+                fb = "; ".join(x for x in fbs if x).strip()
+            # source: approved file → best-rated candidate in current run
+            source_path = None
+            approved = self.pack_dir / "icons" / iid / f"{vid}.svg"
+            if approved.is_file():
+                source_path = approved
+            cand_dir = runs_dir / run / vid / iid
+            cands = sorted(cand_dir.glob("r*.svg")) if cand_dir.is_dir() else []
+            if source_path is None and cands:
+                best_n, best_r = None, -1
+                for c in var.get("comments", []):
+                    m = _re.match(r"\[(r\d+)\] rated (\d+)/10", c.get("text", ""))
+                    if (
+                        m
+                        and int(m.group(2)) >= best_r
+                        and (cand_dir / f"{m.group(1)}.svg").is_file()
+                    ):
+                        best_n, best_r = m.group(1), int(m.group(2))
+                source_path = cand_dir / f"{best_n}.svg" if best_n else cands[-1]
+            if source_path is None:
+                skipped.append({"target": target, "reason": "no take to refine — draft first"})
+                continue
+            if not fb:
+                skipped.append(
+                    {"target": target, "reason": "no feedback this round — add feedback first"}
+                )
+                continue
+            c_cost = round(rc.price_per_image(model) * takes, 4)
+            calls.append(
+                {
+                    "target": target,
+                    "source": str(source_path.relative_to(self.pack_dir)),
+                    "prompt": fb,
+                    "strength": strength,
+                    "takes": takes,
+                    "model": model,
+                    "cost": c_cost,
+                }
+            )
+            cost += c_cost
+            if data.get("debug"):
+                continue
+            svgs = rc.refine(token, source_path.read_text(), fb, strength, model=model, n=takes)
+            style = styles[var["style"]]
+            mono = style.color_mode == "mono"
+            viewbox = pack["spec"]["viewBox"]
+            results = []
+            for i, raw in enumerate(svgs):
+                svg = rc.normalize(rc.strip_metadata(raw), viewbox, mono=mono)
+                b64 = _b64.b64encode(svg.encode()).decode()
+                results.append(
+                    {
+                        "id": i,
+                        "svg_data": f"data:image/svg+xml;base64,{b64}",
+                        "gate_pass": run_gate_svg(svg, pack, styles, iid, vid),
+                    }
+                )
+            items.append({"icon": iid, "variant": vid, "results": results})
+
+        out: dict = {
+            "takes": takes,
+            "strength": strength,
+            "model": model,
+            "cost_usd": round(cost, 4),
+            "skipped": skipped,
+            "calls": calls,
+        }
+        if not data.get("debug"):
+            out["items"] = items
+        return out
+
     def _recraft_batch(self, data: dict) -> dict:
         """Pack draft: same icons on every sheet, takes vary ACROSS sheets.
 
@@ -1691,6 +1816,17 @@ class ReviewHandler(BaseHTTPRequestHandler):
                 self._json(400, {"error": str(exc)})
             except Exception as exc:
                 self._json(500, {"error": str(exc)})
+            return
+        if url.path == "/api/recraft-refine":
+            data = self._body()
+            try:
+                self._json(200, self._recraft_refine(data))
+            except ValueError as exc:
+                self._json(400, {"error": str(exc)})
+            except Exception as exc:
+                import iconpilot.recraft as _rcr
+
+                self._json(502 if isinstance(exc, _rcr.RecraftError) else 500, {"error": str(exc)})
             return
         if url.path == "/api/recraft-batch":
             data = self._body()

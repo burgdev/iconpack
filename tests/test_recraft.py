@@ -974,3 +974,42 @@ def test_account_style_cache_shared_across_packs(tmp_path, monkeypatch) -> None:
     # corrupt cache never raises
     (tmp_path / "style_cache.json").write_text("{not json")
     assert rc.style_cache_get("h1") is None
+
+
+def test_with_px_size_stamps_dimensions() -> None:
+    s = rc.with_px_size('<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path/></svg>')
+    assert 'width="512" height="512"' in s and 'viewBox="0 0 24 24"' in s
+    # existing sizes replaced, not duplicated
+    s2 = rc.with_px_size('<svg width="24" height="24" viewBox="0 0 24 24"/>')
+    assert s2.count("width=") == 1 and 'width="512"' in s2
+
+
+def test_refine_payload_and_guards(monkeypatch: pytest.MonkeyPatch) -> None:
+    sent = {}
+
+    def fake(token, method, path, payload=None):
+        sent.update(payload or {})
+        sent["_path"] = path
+        return {"data": [{"b64_json": _b64_svg("<path/>")}]}
+
+    monkeypatch.setattr(rc, "_request", fake)
+    out = rc.refine(
+        "T",
+        '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path/></svg>',
+        "flame too heavy, thin the logs",
+        strength=5.0,  # clamped to 1.0
+        model="recraftv4_1_vector",
+        n=9,  # clamped to 6
+    )
+    assert len(out) == 1
+    assert sent["_path"] == "/images/imageToImage"
+    assert sent["model"] == "recraftv4_1_vector"
+    assert sent["strength"] == 1.0
+    assert sent["n"] == 6
+    assert sent["image_url"].startswith("data:image/svg+xml;base64,")
+    # feedback is required — no feedback, no refine
+    with pytest.raises(rc.RecraftError, match="feedback"):
+        rc.refine("T", "<svg/>", "  ", strength=0.3)
+    # v4+ only
+    with pytest.raises(rc.RecraftError, match="v4"):
+        rc.refine("T", "<svg/>", "x", strength=0.3, model="recraftv2_vector")

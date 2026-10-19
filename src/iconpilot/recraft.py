@@ -327,6 +327,62 @@ def style_prompt_text(style) -> str:
     return f"{style.label} icon style: {words}".strip()[:1000]
 
 
+REFINE_MODELS = ("recraftv4_vector", "recraftv4_1_vector")
+
+
+def with_px_size(svg: str, px: int = 512) -> str:
+    """Stamp width/height on the root <svg> (i2i needs 256-4096px sides).
+
+    Keeps the viewBox — pure metadata, no geometry change.
+    """
+    import re as _re
+
+    m = _re.search(r"<svg\b[^>]*>", svg)
+    if not m:
+        return svg
+    tag = m.group(0)
+    new = _re.sub(r'\s(width|height)="[^"]*"', "", tag)
+    new = new[:-1] + f' width="{px}" height="{px}">'
+    return svg.replace(tag, new, 1)
+
+
+def refine(
+    token: str,
+    svg_text: str,
+    prompt: str,
+    strength: float,
+    model: str = "recraftv4_1_vector",
+    n: int = 2,
+) -> list[str]:
+    """Image-to-image refine: same icon, targeted change (V4+ vector only).
+
+    The input SVG is sent directly (stamped to 512px) — vector in, vector
+    out. `prompt` describes WHAT to change (the round feedback);
+    `strength` 0=almost identical … 1=least similar.
+    """
+    if model not in REFINE_MODELS:
+        raise RecraftError(f"refine needs a v4+ vector model, got '{model}'")
+    if not prompt.strip():
+        raise RecraftError("refine needs feedback text — nothing to change")
+    svg = with_px_size(strip_metadata(svg_text), 512)
+    payload: dict = {
+        "image_url": _svg_data_url(svg),
+        "prompt": prompt.strip()[: prompt_limit(model)],
+        "strength": round(max(0.0, min(float(strength), 1.0)), 2),
+        "model": model,
+        "n": max(1, min(int(n), 6)),
+        "response_format": "b64_json",
+    }
+    out = _request(token, "POST", "/images/imageToImage", payload)
+    svgs: list[str] = []
+    for item in out.get("data", []):
+        b64 = item.get("b64_json")
+        if not b64:
+            raise RecraftError("recraft returned an image without b64_json")
+        svgs.append(base64.b64decode(b64).decode())
+    return svgs
+
+
 def sheet_prompt(prompt: str, grid: int, model: str | None = None) -> str:
     """One canvas, g×g cells: every cell a different take on the SAME icon.
 

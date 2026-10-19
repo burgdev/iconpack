@@ -440,6 +440,9 @@ footer { text-align:center; color:var(--muted); font-size:.75rem; padding:20px 0
         <button v-if="(S.recraftReady || S.debug) && !isViewing()" class="subtle" @click="openBatchDlg()"
                 title="Recraft pack draft: same icons on every sheet, one different take per sheet (≤9 icons per 3×3 sheet) — review before anything is written">
           <span class="ic" v-html="IC.bolt"></span> draft pack</button>
+        <button v-if="(S.recraftReady || S.debug) && !isViewing()" class="subtle" @click="openRefineDlg(null)"
+                title="Recraft refine: every open variant's best take + round feedback → improved variants (image-to-image)">
+          <span class="ic" v-html="IC.spark"></span> refine pack</button>
       </div>
       <div class="group" v-for="(g, gi) in S.grouped" :key="g.key">
         <div class="ghead">
@@ -449,6 +452,9 @@ footer { text-align:center; color:var(--muted); font-size:.75rem; padding:20px 0
           <button v-if="S.recraftReady || S.debug" class="subtle" :class="{ busy: S.drafting.startsWith(g.icon + '/') }"
                   title="Recraft: seed 4 drafts for every open variant of this icon"
                   @click="recraftIcon(g)"><span class="ic" v-html="IC.bolt"></span> draft</button>
+          <button v-if="S.recraftReady || S.debug" class="subtle" @click="openRefineDlg(g.icon)"
+                  title="Recraft refine: best take of each variant + your round feedback → improved variants (image-to-image)">
+            <span class="ic" v-html="IC.spark"></span> refine</button>
           <button class="subtle" :class="{ 'armed-x': S.rejectArm === g.icon }" @click="rejectAllIcon(g)"
                   title="reject every candidate for this icon (click twice)">reject all</button>
         </div>
@@ -1034,6 +1040,42 @@ footer { text-align:center; color:var(--muted); font-size:.75rem; padding:20px 0
     </div>
   </div>
 
+  <div v-if="S.refineDlg" class="overlay" @click.self="S.refineDlg = null">
+    <div class="dialog" style="max-width:640px">
+      <h3><span><span class="ic-lg" v-html="IC.spark"></span> refine — {{ refineActive().length }} variant(s)</span>
+          <button class="subtle" @click="S.refineDlg = null" aria-label="Close">✕</button></h3>
+      <p class="muted" style="margin:0 0 10px">Best take of each variant + your feedback → improved variants via image-to-image. Feedback is required — it IS the change instruction.</p>
+      <div v-for="it in S.refineDlg.items" :key="it.icon + '#' + it.variant"
+           class="row" style="align-items:flex-start; gap:8px; margin-bottom:8px; border-bottom:1px solid var(--line); padding-bottom:8px">
+        <span class="chip" style="flex:none; margin-top:4px">{{ it.icon }}#{{ it.variant }}</span>
+        <input v-model="it.feedback" style="flex:1"
+               :placeholder="'what to change in ' + it.icon + ' ' + it.variant + ' — e.g. flame too heavy, thin the logs'">
+        <button class="subtle" style="flex:none" @click="it.skip = !it.skip" :title="it.skip ? 'include' : 'skip'">{{ it.skip ? 'skip' : '✓' }}</button>
+      </div>
+      <div class="row" style="margin-top:8px; gap:10px">
+        <label class="muted">strength</label>
+        <input type="range" min="0" max="1" step="0.05" v-model.number="S.refineDlg.strength" style="flex:1">
+        <span class="chip">{{ S.refineDlg.strength }}</span>
+        <span class="muted" style="font-size:.75rem">0 = identical · 1 = reinvent</span>
+      </div>
+      <div class="row" style="margin-top:6px; gap:8px">
+        <label class="muted">takes</label>
+        <select v-model.number="S.refineDlg.takes"><option v-for="tk in [1,2,3,4,5,6]" :key="tk" :value="tk">{{ tk }}</option></select>
+        <label class="muted">model</label>
+        <select v-model="S.refineDlg.model">
+          <option v-for="m in ['recraftv4_vector', 'recraftv4_1_vector']" :key="m" :value="m">{{ m }} (${{ (S.recraftModels.prices || {})[m] || '?' }}/img)</option>
+        </select>
+        <span class="chip rule">≈ ${{ refineEst() }}</span>
+      </div>
+      <div class="row" style="margin-top:12px">
+        <button class="primary" :class="{ busy: S.refineDlg.busy }" :disabled="!refineReady()" @click="refineGenerate()">
+          <span class="ic" v-html="IC.spark"></span> refine {{ refineActive().length * S.refineDlg.takes }} variants · ~${{ refineEst() }}
+        </button>
+      </div>
+      <p v-if="S.refineDlg.err" class="err">{{ S.refineDlg.err }}</p>
+    </div>
+  </div>
+
   <div v-if="S.batchDlg" class="overlay" @click.self="S.batchDlg = null">
     <div class="dialog" style="max-width:680px">
       <h3><span><span class="ic-lg" v-html="IC.bolt"></span> draft pack — {{ batchSelCount() }} icons × {{ S.batchDlg.takes }} takes</span>
@@ -1275,7 +1317,7 @@ const S = reactive({
   flash: '', flashOk: true, applying: false, instructions: '',
   tab: (location.hash || '#round').slice(1) || 'round',
   kbFocus: 0, kbVariant: 0, kbCand: 0, kbUsed: false, compare: null, histView: null,
-  recraftReady: false, debug: new URLSearchParams(location.search).has('debug'), debugDlg: null, nextDlg: null, resultDlg: null, batchDlg: null, styleRc: null, aistatOpen: false,
+  recraftReady: false, debug: new URLSearchParams(location.search).has('debug'), debugDlg: null, nextDlg: null, resultDlg: null, batchDlg: null, refineDlg: null, styleRc: null, aistatOpen: false,
   appliedRound: null,
   recraftModels: {}, styleRefs: {}, styleDetail: {}, styleEdit: null, styleView: null, removeArm: null, theme: 'light', iconHist: {}, svgFiles: {}, rejectArm: null,
   history: [], showHistory: false,
@@ -1854,6 +1896,67 @@ async function styleRcSave() {
     S.styleRc = null;
     await load();
   } catch (e) { d.err = e.d?.error || e.message || 'save failed'; }
+}
+function openRefineDlg(iconId) {
+  const targets = [];
+  const collect = (iid, icon) => {
+    for (const [vid, v] of Object.entries(icon.variants || {})) {
+      if (v.link || v.postponed || (S.locked || {})[iid + '/' + vid]) continue;
+      targets.push({ icon: iid, variant: vid });
+    }
+  };
+  if (iconId) collect(iconId, S.pack.icons[iconId] || { variants: {} });
+  else for (const [iid, icon] of Object.entries(S.pack.icons || {})) collect(iid, icon);
+  if (!targets.length) { flash('no open variants to refine', false); return; }
+  const items = targets.map(tg => {
+    const fb = (S.pack.feedback || []).filter(i =>
+      i.scope === 'variant' && i.icon === tg.icon && i.variant === tg.variant && i.round === S.round)
+      .map(i => i.text).join('; ');
+    return { ...tg, feedback: fb, skip: !fb };
+  });
+  const withFb = items.filter(i => !i.skip).length;
+  if (!withFb) {
+    flash('no feedback this round — write feedback first (💬), refine needs it', false);
+  }
+  S.refineDlg = { items, strength: 0.3, takes: 2, model: 'recraftv4_1_vector', busy: false, err: '' };
+  focusDialog();
+}
+function refineActive() { return (S.refineDlg?.items || []).filter(i => !i.skip && (i.feedback || '').trim()); }
+function refineReady() { return refineActive().length > 0 && !S.refineDlg.busy; }
+function refineEst() {
+  const d = S.refineDlg; if (!d) return '0.00';
+  const price = (S.recraftModels.prices || {})[d.model] || 0.08;
+  return (refineActive().length * d.takes * price).toFixed(2);
+}
+async function refineGenerate() {
+  const d = S.refineDlg;
+  if (!d || d.busy || !refineReady()) return;
+  d.busy = true; d.err = '';
+  try {
+    const active = refineActive();
+    const feedback = {};
+    active.forEach(i => { feedback[i.icon + '#' + i.variant] = i.feedback.trim(); });
+    const r = await api('/api/recraft-refine', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        targets: active.map(i => i.icon + '#' + i.variant),
+        feedback, strength: d.strength, takes: d.takes, model: d.model,
+      }) });
+    S.refineDlg = null;
+    if ((r.skipped || []).length) {
+      flash('skipped: ' + r.skipped.map(s => s.target + ' (' + s.reason + ')').join(', '), false);
+    }
+    let seq = 0;
+    S.resultDlg = {
+      batch: true,
+      drag: null,
+      items: (r.items || []).map(it => ({ ...it, results: (it.results || []).map(x => ({ ...x, keep: true, uid: ++seq })) })),
+      takes: r.takes, model: r.model, cost: r.cost_usd,
+    };
+  } catch (e) {
+    d.busy = false;
+    d.err = e.d?.error || e.message || 'refine failed';
+  }
 }
 function openBatchDlg() {
   const sel = {};
@@ -2659,7 +2762,7 @@ const App = {
       showDebug, debugCopy, openNextDlg, addVariantBulk, addCustomStyle, saveRecraftDefaults,
       GATE_HELP, styleRules, stylePalette, ruleTitle, styleUsageCount, isPostponed, togglePostpone, applyAndNext, colState, toggleCol, toggleAll, usedStyles, setTab, iconSuggest, pickSuggestion, addNewIcon, startRoundWithNew,
       styleSummary, isOwnRef, editStyle, toggleGate, saveStyleRules, removeStyle, addStyleToPack, pickRefFile, removeRef,
-      vectorModels, curatedNames, styleDetail, editCustomStyle, recraftGenerate, commitResults, iconStylePalette, toggleIconColor, waitingForAgent, waitTargets, openStyleRc, styleRcCreate, styleRcSave, openBatchDlg, batchGroups, grpAll, toggleGrp, batchSelCount, batchTotal, batchSheets, batchDebug, batchEst, batchGenerate, batchElapsed, batchProgress, planCheck, dropResult, keptCount, totalCount, keepAll,
+      vectorModels, curatedNames, styleDetail, editCustomStyle, recraftGenerate, commitResults, iconStylePalette, toggleIconColor, waitingForAgent, waitTargets, openRefineDlg, refineActive, refineReady, refineEst, refineGenerate, openStyleRc, styleRcCreate, styleRcSave, openBatchDlg, batchGroups, grpAll, toggleGrp, batchSelCount, batchTotal, batchSheets, batchDebug, batchEst, batchGenerate, batchElapsed, batchProgress, planCheck, dropResult, keptCount, totalCount, keepAll,
 
     };
   },
