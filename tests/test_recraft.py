@@ -784,7 +784,9 @@ def test_normalize_recenters_offcenter_content() -> None:
 def test_pack_sheet_prompt_different_icons_per_cell() -> None:
     p = rc.pack_sheet_prompt(["a tent", "a map", "a boot"], "Lineal color", 2)
     assert "distinct icons" in p and "one icon per cell" in p
-    assert "cell 1: a tent" in p and "cell 3: a boot" in p
+    assert 'cell 1 at top left (1,1): a tent' in p
+    assert 'cell 3 at bottom left (2,1): a boot' in p
+    assert 'Leave the remaining 1 cell(s) empty' in p
     assert "same stroke weight" in p  # cross-cell consistency demand
     assert "variations of ONE" not in p  # different pattern than sheet_prompt
 

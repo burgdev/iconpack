@@ -342,11 +342,28 @@ def pack_sheet_prompt(
     takes), never within one image. Cell k of every sheet maps to icon k.
     """
     g = int(grid)
-    cells = "; ".join(f"cell {i + 1}: {b}" for i, b in enumerate(briefs))
+    # per-cell position anchors: diffusion models have weak spatial grounding,
+    # so every cell repeats WHERE it is instead of relying on one numbering
+    # rule the model must resolve itself
+    corners = {
+        (0, 0): "top left",
+        (0, g - 1): "top right",
+        (g - 1, 0): "bottom left",
+        (g - 1, g - 1): "bottom right",
+    }
+    parts = []
+    for i, b in enumerate(briefs):
+        row, col = divmod(i, g)
+        pos = corners.get((row, col), f"row {row + 1}, column {col + 1}")
+        parts.append(f"cell {i + 1} at {pos} ({row + 1},{col + 1}): {b}")
+    cells = "; ".join(parts)
+    empty = ""
+    if len(briefs) < g * g:
+        empty = f" Leave the remaining {g * g - len(briefs)} cell(s) empty."
     body = (
         f"Icon set sheet: {len(briefs)} distinct icons in a {g} by {g} grid, "
         "one icon per cell, cells numbered left to right, top to bottom, "
-        f"starting at the top left — {cells}. Style: {style_phrase}; same stroke "
+        f"starting at the top left — {cells}.{empty} Style: {style_phrase}; same stroke "
         "weight, corner treatment and color system across all cells. "
         "Generous clean margins between cells — no touching, no overlapping. "
         "Plain empty background, no grid lines, no borders, no labels, no text."
