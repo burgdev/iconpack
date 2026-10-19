@@ -1054,7 +1054,12 @@ footer { text-align:center; color:var(--muted); font-size:.75rem; padding:20px 0
       <div class="row" style="margin-top:8px; gap:8px">
         <label class="muted">takes per icon</label>
         <select v-model.number="S.batchDlg.takes"><option v-for="tk in [1,2,3,4,5,6]" :key="tk" :value="tk">{{ tk }}</option></select>
-        <span class="muted" style="font-size:.75rem">each take = one extra sheet with all selected icons</span>
+        <label class="muted" style="margin-left:6px">max grid</label>
+        <select v-model.number="S.batchDlg.maxGrid" @change="planCheck()">
+          <option :value="0">auto</option>
+          <option v-for="g in [2,3,4,5]" :key="g" :value="g">{{ g }}×{{ g }}</option>
+        </select>
+        <span class="muted" style="font-size:.75rem">smaller grids = more sheets, higher fidelity per icon</span>
       </div>
       <div class="row" style="margin-top:6px; gap:8px">
         <label class="muted">model</label>
@@ -1860,7 +1865,7 @@ function openBatchDlg() {
     }
   }
   if (!any) { flash('no open icons to draft — everything approved or postponed', false); return; }
-  S.batchDlg = { sel, takes: 4, model: '', busy: false, err: '', warn: '' };
+  S.batchDlg = { sel, takes: 4, model: '', maxGrid: 0, busy: false, err: '', warn: '' };
   focusDialog();
   planCheck();
 }
@@ -1872,7 +1877,7 @@ async function planCheck() {
   try {
     const r = await api('/api/recraft-batch', {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ targets, takes: d.takes, model: d.model || undefined, debug: true }) });
+      body: JSON.stringify({ targets, takes: d.takes, model: d.model || undefined, max_grid: d.maxGrid || undefined, debug: true }) });
     const bad = (r.calls || []).filter(c => !c.prompt_fits);
     if (bad.length) {
       const c = bad[0];
@@ -1901,6 +1906,7 @@ function toggleGrp(grp) {
 function batchSelCount() { return Object.values(S.batchDlg?.sel || {}).filter(Boolean).length; }
 function batchTotal() { return Object.keys(S.batchDlg?.sel || {}).length; }
 function batchSheets() {
+  const cap = (S.batchDlg?.maxGrid || 0) >= 2 ? S.batchDlg.maxGrid * S.batchDlg.maxGrid : 25;
   const byStyle = {};
   for (const [tg, on] of Object.entries(S.batchDlg?.sel || {})) {
     if (!on) continue;
@@ -1908,7 +1914,7 @@ function batchSheets() {
     const st = S.pack.icons?.[iid]?.variants?.[vid]?.style || '?';
     byStyle[st] = (byStyle[st] || 0) + 1;
   }
-  return Object.values(byStyle).reduce((a, n) => a + Math.ceil(n / 9), 0);
+  return Object.values(byStyle).reduce((a, n) => a + Math.ceil(n / cap), 0);
 }
 async function batchDebug() {
   const d = S.batchDlg;
@@ -1958,7 +1964,7 @@ async function batchGenerate() {
     const targets = Object.entries(d.sel).filter(([, on]) => on).map(([tg]) => tg);
     const r = await api('/api/recraft-batch', {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ targets, takes: d.takes, model: d.model || undefined }) });
+      body: JSON.stringify({ targets, takes: d.takes, model: d.model || undefined, max_grid: d.maxGrid || undefined }) });
     if (batchTimer) { clearInterval(batchTimer); batchTimer = null; }
     S.batchDlg = null;
     let seq = 0;

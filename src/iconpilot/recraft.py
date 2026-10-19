@@ -371,12 +371,19 @@ def pack_sheet_prompt(
     return body[: prompt_limit(model or "")]
 
 
-def pack_grid(n_icons: int) -> int:
-    """Tightest square grid that fits: 2×2 ≤4, 3×3 ≤9, 4×4 ≤16, 5×5 ≤25."""
+def pack_grid(n_icons: int, max_grid: int | None = None) -> int:
+    """Tightest square grid that fits: 2×2 ≤4, 3×3 ≤9, 4×4 ≤16, 5×5 ≤25.
+
+    max_grid caps the ladder (2-5): many icons + max_grid=2 → several 2×2
+    sheets (higher fidelity per icon) instead of one big grid.
+    """
+    cap = max(2, min(int(max_grid or 5), 5))
     for g in (2, 3, 4, 5):
+        if g > cap:
+            break
         if n_icons <= g * g:
             return g
-    return 5
+    return cap
 
 
 def _ink_bbox(

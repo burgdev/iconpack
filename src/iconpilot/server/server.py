@@ -1387,6 +1387,11 @@ class ReviewHandler(BaseHTTPRequestHandler):
             raise ValueError("no Recraft token on the server — set RECRAFT_API_TOKEN")
 
         takes = max(1, min(int(data.get("takes") or 4), 6))
+        try:
+            max_grid = max(0, min(int(data.get("max_grid") or 0), 5))
+        except (TypeError, ValueError):
+            max_grid = 0
+        chunk_size = (max_grid * max_grid) if max_grid >= 2 else 25
         with pack_lock(self.pack_dir):
             pack, styles = load_pack(self.pack_dir / "pack.json")
 
@@ -1442,9 +1447,9 @@ class ReviewHandler(BaseHTTPRequestHandler):
                 if not style_id_rc and not ref_urls and "v4" not in model
                 else None
             )
-            for i0 in range(0, len(targets), 25):
-                chunk = targets[i0 : i0 + 9]
-                grid = rc.pack_grid(len(chunk))
+            for i0 in range(0, len(targets), chunk_size):
+                chunk = targets[i0 : i0 + chunk_size]
+                grid = rc.pack_grid(len(chunk), max_grid=max_grid or None)
                 briefs = []
                 for iid, vid in chunk:
                     icon = pack["icons"][iid]
@@ -1478,6 +1483,7 @@ class ReviewHandler(BaseHTTPRequestHandler):
                         "style": style_id,
                         "grid": grid,
                         "takes": takes,
+                        "max_grid": max_grid,
                         "model": model,
                         "cost": cost,
                         "prompt": prompt,
@@ -1539,6 +1545,7 @@ class ReviewHandler(BaseHTTPRequestHandler):
 
         out: dict = {
             "takes": takes,
+            "max_grid": max_grid,
             "cost_usd": round(sum(c["cost"] for c in calls) or total_cost, 4),
             "calls": [
                 {
