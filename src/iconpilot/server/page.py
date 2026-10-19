@@ -887,8 +887,9 @@ footer { text-align:center; color:var(--muted); font-size:.75rem; padding:20px 0
     <div class="dialog">
       <h3><span style="display:flex; align-items:center; gap:8px; min-width:0">
             <img v-if="S.fbDlg.scope !== 'pack' && fbSrc(S.fbDlg.icon, S.fbDlg.variant, 36)"
-                 :src="fbSrc(S.fbDlg.icon, S.fbDlg.variant, 36)" width="36" height="36"
-                 style="border-radius:6px; background:#fff; border:1px solid var(--line); flex:none">
+                 :src="fbSrc(S.fbDlg.icon, S.fbDlg.variant, 36)" width="36" height="36" role="button"
+                 style="border-radius:6px; background:#fff; border:1px solid var(--line); flex:none; cursor:zoom-in"
+                 title="preview" aria-label="preview icon" @click="refinePreview(S.fbDlg.icon, S.fbDlg.variant)">
             <span class="ic-lg" v-html="IC.comment"></span>
             <span style="min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap">{{ fbTitle() }}</span>
           </span>
@@ -1114,7 +1115,7 @@ footer { text-align:center; color:var(--muted); font-size:.75rem; padding:20px 0
 
   <div v-if="S.refineDlg" class="overlay" @click.self="S.refineDlg = null">
     <div class="dialog" style="max-width:640px">
-      <h3><span><span class="ic-lg" v-html="IC.spark"></span> refine — {{ refineSel().length }} variant(s)</span>
+      <h3><span><span class="ic-lg" v-html="IC.spark"></span> refine — {{ refineSel().filter(i => hasSrc(i.icon, i.variant)).length }} variant(s)</span>
           <button class="subtle" @click="S.refineDlg = null" aria-label="Close">✕</button></h3>
       <p class="muted" style="margin:0 0 10px">Best take of each variant + your feedback → improved variants via image-to-image. Feedback is required — it IS the change instruction.</p>
       <div style="max-height:240px; overflow-y:auto; margin-bottom:8px">
@@ -1133,6 +1134,8 @@ footer { text-align:center; color:var(--muted); font-size:.75rem; padding:20px 0
               <td v-for="col in refineGrid().cols" :key="col.variant" style="text-align:center">
                 <input v-if="col.cells[row.icon]" type="checkbox"
                        :checked="refineCellAll(col.cells[row.icon])" @change="refineToggleCell(col.cells[row.icon])"
+                       :disabled="!hasSrc(row.icon, col.variant)"
+                       :title="hasSrc(row.icon, col.variant) ? '' : 'no image yet — draft first'"
                        :aria-label="row.icon + ' ' + col.variant">
                 <span v-else class="muted">·</span>
               </td>
@@ -1145,12 +1148,15 @@ footer { text-align:center; color:var(--muted); font-size:.75rem; padding:20px 0
         <div v-for="it in S.refineDlg.items.filter(x => !x.skip)" :key="it.icon + '#' + it.variant"
              class="row" style="gap:6px; margin:3px 0; align-items:center">
           <img v-if="fbSrc(it.icon, it.variant)" :src="fbSrc(it.icon, it.variant, 28)"
-               width="28" height="28" loading="lazy"
-               style="flex:none; border-radius:5px; background:#fff; border:1px solid var(--line)">
-          <span v-else class="thumb missing" style="width:28px; height:28px; flex:none; border-radius:5px">—</span>
+               width="28" height="28" loading="lazy" role="button" style="flex:none; border-radius:5px; background:#fff; border:1px solid var(--line); cursor:zoom-in"
+               :title="'preview ' + it.icon + ' ' + it.variant" :aria-label="'preview ' + it.icon + ' ' + it.variant"
+               @click="refinePreview(it.icon, it.variant)">
+          <span v-else class="thumb missing" style="width:28px; height:28px; flex:none; border-radius:5px"
+                title="no image yet — draft first">—</span>
           <span style="flex:none; font-size:.75rem; font-weight:600; min-width:70px">{{ it.icon }}</span>
           <span class="muted" style="flex:none; font-size:.7rem">{{ it.variant }}</span>
           <span v-if="it.feedback" class="muted" style="flex:1; min-width:0; font-size:.75rem; overflow:hidden; text-overflow:ellipsis; white-space:nowrap" :title="it.feedback">✓ {{ it.feedback }}</span>
+          <span v-else-if="!hasSrc(it.icon, it.variant)" class="muted" style="flex:1; min-width:0; font-size:.75rem">no image — draft first</span>
           <span v-else class="muted" style="flex:1; min-width:0; font-size:.75rem; color:var(--warn)">⚠ missing</span>
           <button class="iconbtn" style="flex:none" @click="refineFeedback(it)"
                   :title="'feedback for ' + it.icon + ' ' + it.variant" :aria-label="'feedback for ' + it.icon + ' ' + it.variant">
@@ -1175,7 +1181,7 @@ footer { text-align:center; color:var(--muted); font-size:.75rem; padding:20px 0
       </div>
       <div class="row" style="margin-top:12px">
         <button class="primary" :class="{ busy: S.refineDlg.busy }" :disabled="!refineReady()" @click="refineGenerate()">
-          <span class="ic" v-html="IC.spark"></span> refine {{ refineSel().length * S.refineDlg.takes }} variants · ~${{ refineEst() }}
+          <span class="ic" v-html="IC.spark"></span> refine {{ refineSel().filter(i => hasSrc(i.icon, i.variant)).length * S.refineDlg.takes }} variants · ~${{ refineEst() }}
         </button>
         <span v-if="refineMissing().length" class="muted" style="font-size:.75rem; color:var(--warn)">⚠ {{ refineMissing().length }} missing feedback</span>
       </div>
@@ -2087,7 +2093,7 @@ function openRefineDlg(iconId) {
     return { ...tg, feedback: fb, skip: true };
   });
   // pre-select only variants that have feedback (refine needs it)
-  items.forEach(it => { if (it.feedback) it.skip = false; });
+  items.forEach(it => { if (it.feedback && hasSrc(it.icon, it.variant)) it.skip = false; });
   S.refineDlg = { items, strength: 0.3, takes: 2, model: 'recraftv4_1_vector', busy: false, err: '' };
   focusDialog();
 }
@@ -2144,6 +2150,18 @@ function refineResume() {
   S._refineReturn = null;
   focusDialog();
 }
+function hasSrc(icon, variant) {
+  if (S.svgFiles?.[icon + '/' + variant]) return true;
+  return (S.candidates || []).some(c => c.icon === icon && c.variant === variant);
+}
+function refinePreview(icon, variant) {
+  if (S.svgFiles?.[icon + '/' + variant]) return openIcon(icon, variant, S.pack.icons[icon].variants[variant]);
+  const cands = (S.candidates || []).filter(c => c.icon === icon && c.variant === variant);
+  if (cands.length) {
+    const best = [...cands].sort((a, b) => rating(b) - rating(a))[0];
+    return open(best);
+  }
+}
 function fbSrc(icon, variant, size) {
   const sz = size || 56;
   if (S.svgFiles?.[icon + '/' + variant]) return render('icons/' + icon + '/' + variant + '.svg', sz, '#ffffff');
@@ -2156,12 +2174,12 @@ function fbSrc(icon, variant, size) {
 }
 function refineSel() { return (S.refineDlg?.items || []).filter(i => !i.skip); }
 function refineActive() { return refineSel().filter(i => (i.feedback || '').trim()); }
-function refineMissing() { return refineSel().filter(i => !(i.feedback || '').trim()); }
-function refineReady() { return refineSel().length > 0 && refineMissing().length === 0 && !S.refineDlg.busy; }
+function refineMissing() { return refineSel().filter(i => hasSrc(i.icon, i.variant) && !(i.feedback || '').trim()); }
+function refineReady() { const r = refineSel().filter(i => hasSrc(i.icon, i.variant)); return r.length > 0 && r.every(i => (i.feedback || '').trim()) && !S.refineDlg.busy; }
 function refineEst() {
   const d = S.refineDlg; if (!d) return '0.00';
   const price = (S.recraftModels.prices || {})[d.model] || 0.08;
-  return (refineSel().length * d.takes * price).toFixed(2);
+  return (refineSel().filter(i => hasSrc(i.icon, i.variant)).length * d.takes * price).toFixed(2);
 }
 async function refineGenerate() {
   const d = S.refineDlg;
@@ -3019,7 +3037,7 @@ const App = {
       showDebug, debugCopy, openNextDlg, addVariantBulk, addCustomStyle, saveRecraftDefaults,
       GATE_HELP, styleRules, stylePalette, ruleTitle, styleUsageCount, isPostponed, togglePostpone, applyAndNext, colState, toggleCol, toggleAll, usedStyles, setTab, iconSuggest, pickSuggestion, addNewIcon, startRoundWithNew,
       styleSummary, isOwnRef, editStyle, toggleGate, saveStyleRules, removeStyle, addStyleToPack, pickRefFile, removeRef,
-      vectorModels, curatedNames, styleDetail, editCustomStyle, recraftGenerate, commitResults, iconStylePalette, toggleIconColor, waitingForAgent, waitTargets, refineFeedback, refineResume, adoptPreview, adoptCommit, openRefineDlg, fbSrc, refineSel, refineMissing, refineGrid, refineSetAll, refineCellAll, refineToggleCell, refineRowState, refineToggleRow2, refineColState, refineToggleCol2, refineActive, refineReady, refineEst, refineGenerate, openStyleRc, styleRcCreate, styleRcSave, openBatchDlg, batchGrid, batchCellAll, batchToggleCell, batchRowState, batchToggleRow, batchColState, batchToggleCol, batchSelAll, batchSelCount, batchTotal, batchSheets, batchDebug, batchEst, batchGenerate, batchElapsed, batchProgress, planCheck, dropResult, keptCount, totalCount, keepAll,
+      vectorModels, curatedNames, styleDetail, editCustomStyle, recraftGenerate, commitResults, iconStylePalette, toggleIconColor, waitingForAgent, waitTargets, refineFeedback, refineResume, adoptPreview, adoptCommit, openRefineDlg, hasSrc, refinePreview, fbSrc, refineSel, refineMissing, refineGrid, refineSetAll, refineCellAll, refineToggleCell, refineRowState, refineToggleRow2, refineColState, refineToggleCol2, refineActive, refineReady, refineEst, refineGenerate, openStyleRc, styleRcCreate, styleRcSave, openBatchDlg, batchGrid, batchCellAll, batchToggleCell, batchRowState, batchToggleRow, batchColState, batchToggleCol, batchSelAll, batchSelCount, batchTotal, batchSheets, batchDebug, batchEst, batchGenerate, batchElapsed, batchProgress, planCheck, dropResult, keptCount, totalCount, keepAll,
 
     };
   },
