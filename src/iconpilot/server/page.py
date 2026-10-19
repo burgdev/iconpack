@@ -972,7 +972,7 @@ footer { text-align:center; color:var(--muted); font-size:.75rem; padding:20px 0
           </select>
           <label class="muted" style="margin-left:10px" title="1×1 = separate images, 2×2+ = one sheet">grid</label>
           <select v-model="S.debugDlg.grid" @change="showDebug(S.debugDlg.icon, S.debugDlg.variant, null, +S.debugDlg.n, +S.debugDlg.grid)">
-            <option v-for="g in [1,2,3,4]" :key="g" :value="g">{{ g }}×{{ g }}</option>
+            <option v-for="g in [1,2,3,4,5]" :key="g" :value="g">{{ g }}×{{ g }}</option>
           </select>
           <label class="muted" style="margin-left:10px" title="total number of icon versions to generate">versions</label>
           <input v-model.number="S.debugDlg.n" type="number" min="1"
@@ -1058,10 +1058,11 @@ footer { text-align:center; color:var(--muted); font-size:.75rem; padding:20px 0
       </div>
       <div class="row" style="margin-top:6px; gap:8px">
         <label class="muted">model</label>
-        <select v-model="S.batchDlg.model">
+        <select v-model="S.batchDlg.model" @change="planCheck()">
           <option value="">auto</option>
           <option v-for="m in vectorModels()" :key="m" :value="m">{{ m }} (${{ (S.recraftModels.prices || {})[m] || '?' }}/img)</option>
         </select>
+        <span v-if="S.batchDlg.warn" class="chip rule" :title="S.batchDlg.warn">{{ S.batchDlg.warn }}</span>
       </div>
       <p style="margin:10px 0 0; display:flex; gap:6px; flex-wrap:wrap">
         <span class="chip">{{ batchSelCount() }}/{{ batchTotal() }} icons</span>
@@ -1859,8 +1860,27 @@ function openBatchDlg() {
     }
   }
   if (!any) { flash('no open icons to draft — everything approved or postponed', false); return; }
-  S.batchDlg = { sel, takes: 4, model: '', busy: false, err: '' };
+  S.batchDlg = { sel, takes: 4, model: '', busy: false, err: '', warn: '' };
   focusDialog();
+  planCheck();
+}
+async function planCheck() {
+  const d = S.batchDlg;
+  if (!d) return;
+  const targets = Object.entries(d.sel || {}).filter(([, on]) => on).map(([tg]) => tg);
+  if (!targets.length) return;
+  try {
+    const r = await api('/api/recraft-batch', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ targets, takes: d.takes, model: d.model || undefined, debug: true }) });
+    const bad = (r.calls || []).filter(c => !c.prompt_fits);
+    if (bad.length) {
+      const c = bad[0];
+      d.warn = `⚠ prompt ${c.prompt_chars}/${c.prompt_limit} chars on ${c.model.split('_')[0]} — pick a v4 model`;
+    } else {
+      d.warn = '';
+    }
+  } catch { d.warn = ''; }
 }
 function batchGroups() {
   const groups = [];
@@ -2633,7 +2653,7 @@ const App = {
       showDebug, debugCopy, openNextDlg, addVariantBulk, addCustomStyle, saveRecraftDefaults,
       GATE_HELP, styleRules, stylePalette, ruleTitle, styleUsageCount, isPostponed, togglePostpone, applyAndNext, colState, toggleCol, toggleAll, usedStyles, setTab, iconSuggest, pickSuggestion, addNewIcon, startRoundWithNew,
       styleSummary, isOwnRef, editStyle, toggleGate, saveStyleRules, removeStyle, addStyleToPack, pickRefFile, removeRef,
-      vectorModels, curatedNames, styleDetail, editCustomStyle, recraftGenerate, commitResults, iconStylePalette, toggleIconColor, waitingForAgent, waitTargets, openStyleRc, styleRcCreate, styleRcSave, openBatchDlg, batchGroups, grpAll, toggleGrp, batchSelCount, batchTotal, batchSheets, batchDebug, batchEst, batchGenerate, batchElapsed, batchProgress, dropResult, keptCount, totalCount, keepAll,
+      vectorModels, curatedNames, styleDetail, editCustomStyle, recraftGenerate, commitResults, iconStylePalette, toggleIconColor, waitingForAgent, waitTargets, openStyleRc, styleRcCreate, styleRcSave, openBatchDlg, batchGroups, grpAll, toggleGrp, batchSelCount, batchTotal, batchSheets, batchDebug, batchEst, batchGenerate, batchElapsed, batchProgress, planCheck, dropResult, keptCount, totalCount, keepAll,
 
     };
   },

@@ -1442,7 +1442,7 @@ class ReviewHandler(BaseHTTPRequestHandler):
                 if not style_id_rc and not ref_urls and "v4" not in model
                 else None
             )
-            for i0 in range(0, len(targets), 9):
+            for i0 in range(0, len(targets), 25):
                 chunk = targets[i0 : i0 + 9]
                 grid = rc.pack_grid(len(chunk))
                 briefs = []
@@ -1472,6 +1472,7 @@ class ReviewHandler(BaseHTTPRequestHandler):
                     request["style"] = curated
                 elif ref_urls:
                     request["style_reference_urls"] = [f"<{len(ref_urls)} PNG refs>"]
+                plimit = rc.prompt_limit(model)
                 calls.append(
                     {
                         "style": style_id,
@@ -1480,6 +1481,9 @@ class ReviewHandler(BaseHTTPRequestHandler):
                         "model": model,
                         "cost": cost,
                         "prompt": prompt,
+                        "prompt_chars": len(prompt),
+                        "prompt_limit": plimit,
+                        "prompt_fits": len(prompt) <= plimit,
                         "style_refs": len(refs),
                         "style_id": style_id_rc or "",
                         "curated": curated or "",
@@ -1544,6 +1548,9 @@ class ReviewHandler(BaseHTTPRequestHandler):
                     "model": c["model"],
                     "cost": c["cost"],
                     "prompt": c["prompt"],
+                    "prompt_chars": c["prompt_chars"],
+                    "prompt_limit": c["prompt_limit"],
+                    "prompt_fits": c["prompt_fits"],
                     "style_refs": c["style_refs"],
                     "style_id": c["style_id"],
                     "curated": c["curated"],

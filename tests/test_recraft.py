@@ -795,6 +795,10 @@ def test_pack_grid_fits_icons() -> None:
     assert rc.pack_grid(4) == 2
     assert rc.pack_grid(5) == 3
     assert rc.pack_grid(9) == 3
+    assert rc.pack_grid(10) == 4
+    assert rc.pack_grid(16) == 4
+    assert rc.pack_grid(17) == 5
+    assert rc.pack_grid(25) == 5
 
 
 def test_generate_sends_per_icon_colors() -> None:

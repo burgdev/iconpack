@@ -372,8 +372,11 @@ def pack_sheet_prompt(
 
 
 def pack_grid(n_icons: int) -> int:
-    """Grid for a pack sheet: 2×2 for ≤4 icons, else 3×3 (chunk >9 upstream)."""
-    return 2 if n_icons <= 4 else 3
+    """Tightest square grid that fits: 2×2 ≤4, 3×3 ≤9, 4×4 ≤16, 5×5 ≤25."""
+    for g in (2, 3, 4, 5):
+        if n_icons <= g * g:
+            return g
+    return 5
 
 
 def _ink_bbox(
