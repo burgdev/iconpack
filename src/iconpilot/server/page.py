@@ -947,13 +947,13 @@ footer { text-align:center; color:var(--muted); font-size:.75rem; padding:20px 0
           <button class="subtle" style="height:36px" @click="batchSelAll(false)">none</button>
           <span class="muted" style="font-size:.75rem; align-self:center">{{ batchSelCount() }}/{{ batchTotal() }} selected</span>
         </div>
-        <div v-for="row in batchMatrix().styles" :key="row.style" style="margin-bottom:10px">
+        <div v-for="col in batchGrid().cols" :key="col.style" style="margin-bottom:10px">
           <div class="row" style="justify-content:space-between; margin-bottom:4px">
-            <button class="subtle" style="height:36px; font-weight:600" :class="{ on: batchRowAll(row) }" @click="batchToggleRow(row)">{{ row.style }}</button>
-            <span class="muted" style="font-size:.75rem">{{ batchRowTargets(row).filter(tg => S.batchDlg.sel[tg]).length }}/{{ batchRowTargets(row).length }}</span>
+            <button class="subtle" style="height:36px; font-weight:600" :class="{ on: batchColState(col.style) === 'all' }" @click="batchToggleCol(col.style)">{{ col.style }}</button>
+            <span class="muted" style="font-size:.75rem">{{ col.count }}</span>
           </div>
           <div class="row" style="flex-wrap:wrap; gap:6px">
-            <button v-for="tg in batchRowTargets(row)" :key="tg" class="selchip" :class="{ on: S.batchDlg.sel[tg] }"
+            <button v-for="tg in Object.values(col.cells).flat()" :key="tg" class="selchip" :class="{ on: S.batchDlg.sel[tg] }"
                     @click="S.batchDlg.sel[tg] = !S.batchDlg.sel[tg]" :aria-pressed="!!S.batchDlg.sel[tg]">
               {{ tg.replace('#', ' · ') }}
             </button>
@@ -1215,13 +1215,13 @@ footer { text-align:center; color:var(--muted); font-size:.75rem; padding:20px 0
           <button class="subtle" style="height:36px" @click="batchSelAll(false)">none</button>
           <span class="muted" style="font-size:.75rem; align-self:center">{{ batchSelCount() }}/{{ batchTotal() }} selected</span>
         </div>
-        <div v-for="row in batchMatrix().styles" :key="row.style" style="margin-bottom:10px">
+        <div v-for="col in batchGrid().cols" :key="col.style" style="margin-bottom:10px">
           <div class="row" style="justify-content:space-between; margin-bottom:4px">
-            <button class="subtle" style="height:36px; font-weight:600" :class="{ on: batchRowAll(row) }" @click="batchToggleRow(row)">{{ row.style }}</button>
-            <span class="muted" style="font-size:.75rem">{{ batchRowTargets(row).filter(tg => S.batchDlg.sel[tg]).length }}/{{ batchRowTargets(row).length }}</span>
+            <button class="subtle" style="height:36px; font-weight:600" :class="{ on: batchColState(col.style) === 'all' }" @click="batchToggleCol(col.style)">{{ col.style }}</button>
+            <span class="muted" style="font-size:.75rem">{{ col.count }}</span>
           </div>
           <div class="row" style="flex-wrap:wrap; gap:6px">
-            <button v-for="tg in batchRowTargets(row)" :key="tg" class="selchip" :class="{ on: S.batchDlg.sel[tg] }"
+            <button v-for="tg in Object.values(col.cells).flat()" :key="tg" class="selchip" :class="{ on: S.batchDlg.sel[tg] }"
                     @click="S.batchDlg.sel[tg] = !S.batchDlg.sel[tg]" :aria-pressed="!!S.batchDlg.sel[tg]">
               {{ tg.replace('#', ' · ') }}
             </button>
