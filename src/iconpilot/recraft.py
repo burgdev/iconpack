@@ -154,6 +154,53 @@ def models_path() -> Path:
     return Path.home() / ".config" / "iconpilot" / "models.toml"
 
 
+def style_cache_path() -> Path:
+    """Per-ACCOUNT style id cache, keyed by refs content hash.
+
+    Bundled refs are identical across packs — one creation per hash per
+    Recraft account (ever), instead of $0.005 per pack per style.
+    """
+    return Path.home() / ".config" / "iconpilot" / "style_cache.json"
+
+
+def style_cache_get(refs_hash: str) -> str | None:
+    import json as _json
+
+    p = style_cache_path()
+    if not p.is_file():
+        return None
+    try:
+        data = _json.loads(p.read_text())
+        return (data.get("styles") or {}).get(refs_hash, {}).get("style_id")
+    except (ValueError, OSError):
+        return None
+
+
+def style_cache_put(refs_hash: str, style_id: str, style_key: str = "") -> None:
+    """Register a style id for a refs hash (best-effort, never raises)."""
+    import json as _json
+    from datetime import datetime as _dt
+
+    p = style_cache_path()
+    try:
+        data = {}
+        if p.is_file():
+            data = _json.loads(p.read_text())
+        entry = {"style_id": style_id, "style": style_key, "created": _dt.now().isoformat()}
+        styles = data.get("styles") or {}
+        # drop any other hash pointing at the same id (heal replaced it)
+        for k in [k for k, v in styles.items() if v.get("style_id") == style_id]:
+            styles.pop(k)
+        styles[refs_hash] = entry
+        data["styles"] = styles
+        p.parent.mkdir(parents=True, exist_ok=True)
+        tmp = p.with_suffix(".tmp")
+        tmp.write_text(_json.dumps(data, indent=2) + "\n")
+        tmp.replace(p)
+    except OSError:
+        pass
+
+
 def resolve_token(models_file: Path | None = None) -> str | None:
     """API token from env or models.toml; None when unconfigured."""
     env = os.environ.get("RECRAFT_API_TOKEN")

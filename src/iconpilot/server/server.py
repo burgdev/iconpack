@@ -835,6 +835,7 @@ class ReviewHandler(BaseHTTPRequestHandler):
             snap["recraft_style_hash"] = rc.refs_hash(refs)
             pk.setdefault("recraft", {}).setdefault("style_ids", {})[style_key] = new_id
             write_pack_atomic(self.pack_dir, pk)
+        rc.style_cache_put(rc.refs_hash(refs), new_id, style_key)
         return new_id
 
     def _ensure_style_id(self, token: str, style_key: str, style, refs: list[str]) -> str | None:
@@ -857,6 +858,19 @@ class ReviewHandler(BaseHTTPRequestHandler):
             return cached
         if not refs:
             return cached  # manual/curated id without refs: trust as-is
+        # account-level cache: same bundled refs in another pack already
+        # created this style — reuse it and mirror into this pack
+        if h:
+            account_id = rc.style_cache_get(h)
+            if account_id and account_id != cached:
+                with pack_lock(self.pack_dir):
+                    pk, _ = load_pack(self.pack_dir / "pack.json")
+                    snap = pk.setdefault("styles", {}).setdefault(style_key, {})
+                    snap["recraft_style_id"] = account_id
+                    snap["recraft_style_hash"] = h
+                    pk.setdefault("recraft", {}).setdefault("style_ids", {})[style_key] = account_id
+                    write_pack_atomic(self.pack_dir, pk)
+                return account_id
         out = rc.create_style(
             token,
             refs,
@@ -871,6 +885,8 @@ class ReviewHandler(BaseHTTPRequestHandler):
             snap["recraft_style_hash"] = h
             pk.setdefault("recraft", {}).setdefault("style_ids", {})[style_key] = new_id
             write_pack_atomic(self.pack_dir, pk)
+        if h:
+            rc.style_cache_put(h, new_id, style_key)
         return new_id
 
     def _recraft_plan(self, icon_id: str, variant: str, n_in: int | None = None) -> dict:
@@ -1339,6 +1355,7 @@ class ReviewHandler(BaseHTTPRequestHandler):
             snap["recraft_style_hash"] = h
             pk.setdefault("recraft", {}).setdefault("style_ids", {})[sid] = new_id
             write_pack_atomic(self.pack_dir, pk)
+        rc.style_cache_put(h, new_id, sid)
         return {"style_id": new_id, "cost_usd": rc.STYLE_CREATE_PRICE}
 
     def _recraft_style_save(self, data: dict) -> dict:
@@ -1366,6 +1383,8 @@ class ReviewHandler(BaseHTTPRequestHandler):
                 snap["recraft_style_hash"] = rc.refs_hash(refs)
             pk.setdefault("recraft", {}).setdefault("style_ids", {})[sid] = rid
             write_pack_atomic(self.pack_dir, pk)
+        if refs:
+            rc.style_cache_put(rc.refs_hash(refs), rid, sid)
         return {"style_id": rid}
 
     def _recraft_batch(self, data: dict) -> dict:

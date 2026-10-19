@@ -784,9 +784,9 @@ def test_normalize_recenters_offcenter_content() -> None:
 def test_pack_sheet_prompt_different_icons_per_cell() -> None:
     p = rc.pack_sheet_prompt(["a tent", "a map", "a boot"], "Lineal color", 2)
     assert "distinct icons" in p and "one icon per cell" in p
-    assert 'cell 1 at top left (1,1): a tent' in p
-    assert 'cell 3 at bottom left (2,1): a boot' in p
-    assert 'Leave the remaining 1 cell(s) empty' in p
+    assert "cell 1 at top left (1,1): a tent" in p
+    assert "cell 3 at bottom left (2,1): a boot" in p
+    assert "Leave the remaining 1 cell(s) empty" in p
     assert "same stroke weight" in p  # cross-cell consistency demand
     assert "variations of ONE" not in p  # different pattern than sheet_prompt
 
@@ -955,3 +955,21 @@ def test_generate_refs_curated_uses_style_param(monkeypatch: pytest.MonkeyPatch)
     assert captured["payload"]["style"] == "Broken line"
     assert captured["payload"]["model"] == "recraftv2_vector"
     assert len(cells) == 9
+
+
+def test_account_style_cache_shared_across_packs(tmp_path, monkeypatch) -> None:
+    """Same refs in two packs → one Recraft create, second pack reuses the id."""
+    import iconpilot.recraft as rc
+
+    monkeypatch.setattr(rc, "style_cache_path", lambda: tmp_path / "style_cache.json")
+    assert rc.style_cache_get("h1") is None
+    rc.style_cache_put("h1", "id-aaa", "mono-line")
+    assert rc.style_cache_get("h1") == "id-aaa"
+    # replacing an id drops stale entries pointing at it
+    rc.style_cache_put("h2", "id-aaa", "mono-line")
+    rc.style_cache_put("h1", "id-bbb", "mono-line")
+    assert rc.style_cache_get("h1") == "id-bbb"
+    assert rc.style_cache_get("h2") is None  # old hash entry for id-aaa removed
+    # corrupt cache never raises
+    (tmp_path / "style_cache.json").write_text("{not json")
+    assert rc.style_cache_get("h1") is None
