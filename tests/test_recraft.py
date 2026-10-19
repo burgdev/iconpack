@@ -965,11 +965,12 @@ def test_account_style_cache_shared_across_packs(tmp_path, monkeypatch) -> None:
     assert rc.style_cache_get("h1") is None
     rc.style_cache_put("h1", "id-aaa", "mono-line")
     assert rc.style_cache_get("h1") == "id-aaa"
-    # replacing an id drops stale entries pointing at it
+    # one id belongs to one hash: re-registering id-aaa under h2 moves it
     rc.style_cache_put("h2", "id-aaa", "mono-line")
+    assert rc.style_cache_get("h1") is None
+    assert rc.style_cache_get("h2") == "id-aaa"
     rc.style_cache_put("h1", "id-bbb", "mono-line")
     assert rc.style_cache_get("h1") == "id-bbb"
-    assert rc.style_cache_get("h2") is None  # old hash entry for id-aaa removed
     # corrupt cache never raises
     (tmp_path / "style_cache.json").write_text("{not json")
     assert rc.style_cache_get("h1") is None
