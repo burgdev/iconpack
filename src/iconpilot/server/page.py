@@ -1134,26 +1134,17 @@ footer { text-align:center; color:var(--muted); font-size:.75rem; padding:20px 0
           </tbody>
         </table>
       </div>
-      <details :open="refineActive().length > 0" style="margin-bottom:8px">
-        <summary class="muted" style="cursor:pointer; font-size:.8rem">feedback for {{ refineActive().length }} selected variant(s) — required</summary>
+      <div v-if="refineActive().length" style="margin-bottom:8px; border:1px solid var(--line); border-radius:10px; padding:8px 10px">
+        <p class="muted" style="margin:0 0 6px; font-size:.75rem">Feedback — required for refine. Click 💬 to write/review.</p>
         <div v-for="it in S.refineDlg.items.filter(x => !x.skip)" :key="it.icon + '#' + it.variant"
-             class="row" style="gap:8px; margin:4px 0; align-items:center">
+             class="row" style="gap:8px; margin:3px 0; align-items:center">
           <span class="chip" style="flex:none; font-size:.72rem">{{ it.icon }} · {{ it.variant }}</span>
-          <input v-model="it.feedback" style="flex:1; height:32px; font-size:.8rem"
-                 :placeholder="'what to change — e.g. flame too heavy, thin the logs'">
-        </div>
-      </details>
-      <div class="only-narrow">
-        <div v-for="it in S.refineDlg.items" :key="it.icon + '#' + it.variant" style="margin-bottom:8px">
-          <div class="row" style="gap:6px; margin-bottom:3px">
-            <button class="selchip" :class="{ on: !it.skip }" @click="it.skip = !it.skip">{{ it.icon }} · {{ it.variant }}</button>
-          </div>
-          <input v-if="!it.skip" v-model="it.feedback" style="width:100%; height:36px; font-size:.82rem"
-                 :placeholder="'what to change in ' + it.icon + ' ' + it.variant">
-        </div>
-        <div class="row" style="gap:6px; margin-bottom:8px">
-          <button class="subtle" style="height:36px" @click="refineSetAll(true)">all</button>
-          <button class="subtle" style="height:36px" @click="refineSetAll(false)">none</button>
+          <span v-if="it.feedback" class="muted" style="flex:1; font-size:.75rem; overflow:hidden; text-overflow:ellipsis; white-space:nowrap">✓ {{ it.feedback }}</span>
+          <span v-else class="muted" style="flex:1; font-size:.75rem; color:var(--warn)">⚠ missing — refine needs it</span>
+          <button class="iconbtn" @click="openFb('variant', it.icon, it.variant)"
+                  :title="'feedback for ' + it.icon + ' ' + it.variant" :aria-label="'feedback for ' + it.icon + ' ' + it.variant">
+            <span class="ic" v-html="IC.comment"></span>
+          </button>
         </div>
       </div>
       <div class="row" style="margin-top:8px; gap:10px">
