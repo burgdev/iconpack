@@ -947,13 +947,13 @@ footer { text-align:center; color:var(--muted); font-size:.75rem; padding:20px 0
           <button class="subtle" style="height:36px" @click="batchSelAll(false)">none</button>
           <span class="muted" style="font-size:.75rem; align-self:center">{{ batchSelCount() }}/{{ batchTotal() }} selected</span>
         </div>
-        <div v-for="col in batchGrid().cols" :key="col.style" style="margin-bottom:10px">
+        <div v-for="col in batchGrid().cols" :key="col.variant" style="margin-bottom:10px">
           <div class="row" style="justify-content:space-between; margin-bottom:4px">
-            <button class="subtle" style="height:36px; font-weight:600" :class="{ on: batchColState(col.style) === 'all' }" @click="batchToggleCol(col.style)">{{ col.style }}</button>
+            <button class="subtle" style="height:36px; font-weight:600" :class="{ on: batchColState(col.variant) === 'all' }" @click="batchToggleCol(col.variant)">{{ col.variant }}</button>
             <span class="muted" style="font-size:.75rem">{{ col.count }}</span>
           </div>
           <div class="row" style="flex-wrap:wrap; gap:6px">
-            <button v-for="tg in Object.values(col.cells).flat()" :key="tg" class="selchip" :class="{ on: S.batchDlg.sel[tg] }"
+            <button v-for="tg in Object.values(col.cells)" :key="tg" class="selchip" :class="{ on: S.batchDlg.sel[tg] }"
                     @click="S.batchDlg.sel[tg] = !S.batchDlg.sel[tg]" :aria-pressed="!!S.batchDlg.sel[tg]">
               {{ tg.replace('#', ' · ') }}
             </button>
@@ -1116,18 +1116,18 @@ footer { text-align:center; color:var(--muted); font-size:.75rem; padding:20px 0
           <thead>
             <tr>
               <th></th>
-              <th v-for="col in refineGrid().cols" :key="col.style">
-                <button class="subtle" :class="{ armed: refineColState(col.style) === 'all' }" @click="refineToggleCol2(col.style)">{{ col.style }}</button>
+              <th v-for="col in refineGrid().cols" :key="col.variant">
+                <button class="subtle" :class="{ armed: refineColState(col.variant) === 'all' }" @click="refineToggleCol2(col.variant)">{{ col.variant }}</button>
               </th>
             </tr>
           </thead>
           <tbody>
             <tr v-for="row in refineGrid().rows" :key="row.icon">
               <td><button class="subtle" :class="{ armed: refineRowState(row.icon) === 'all' }" @click="refineToggleRow2(row.icon)">{{ row.icon }}</button></td>
-              <td v-for="col in refineGrid().cols" :key="col.style" style="text-align:center">
+              <td v-for="col in refineGrid().cols" :key="col.variant" style="text-align:center">
                 <input v-if="col.cells[row.icon]" type="checkbox"
                        :checked="refineCellAll(col.cells[row.icon])" @change="refineToggleCell(col.cells[row.icon])"
-                       :aria-label="row.icon + ' ' + col.style">
+                       :aria-label="row.icon + ' ' + col.variant">
                 <span v-else class="muted">·</span>
               </td>
             </tr>
@@ -1182,19 +1182,19 @@ footer { text-align:center; color:var(--muted); font-size:.75rem; padding:20px 0
           <thead>
             <tr>
               <th></th>
-              <th v-for="col in batchGrid().cols" :key="col.style">
-                <button class="subtle" :class="{ armed: batchColState(col.style) === 'all' }" @click="batchToggleCol(col.style)"
-                        :title="'toggle all ' + col.style + ' (' + col.count + ' variants)'">{{ col.style }}</button>
+              <th v-for="col in batchGrid().cols" :key="col.variant">
+                <button class="subtle" :class="{ armed: batchColState(col.variant) === 'all' }" @click="batchToggleCol(col.variant)"
+                        :title="'toggle all ' + col.variant + ' (' + col.count + ')'">{{ col.variant }}</button>
               </th>
             </tr>
           </thead>
           <tbody>
             <tr v-for="row in batchGrid().rows" :key="row.icon">
               <td><button class="subtle" :class="{ armed: batchRowState(row.icon) === 'all' }" @click="batchToggleRow(row.icon)">{{ row.icon }}</button></td>
-              <td v-for="col in batchGrid().cols" :key="col.style" style="text-align:center">
+              <td v-for="col in batchGrid().cols" :key="col.variant" style="text-align:center">
                 <input v-if="col.cells[row.icon]" type="checkbox"
                        :checked="batchCellAll(col.cells[row.icon])" @change="batchToggleCell(col.cells[row.icon])"
-                       :aria-label="row.icon + ' ' + col.style" :title="col.cells[row.icon].join(', ')">
+                       :aria-label="row.icon + ' ' + col.variant">
                 <span v-else class="muted">·</span>
               </td>
             </tr>
@@ -1207,13 +1207,13 @@ footer { text-align:center; color:var(--muted); font-size:.75rem; padding:20px 0
           <button class="subtle" style="height:36px" @click="batchSelAll(false)">none</button>
           <span class="muted" style="font-size:.75rem; align-self:center">{{ batchSelCount() }}/{{ batchTotal() }} selected</span>
         </div>
-        <div v-for="col in batchGrid().cols" :key="col.style" style="margin-bottom:10px">
+        <div v-for="col in batchGrid().cols" :key="col.variant" style="margin-bottom:10px">
           <div class="row" style="justify-content:space-between; margin-bottom:4px">
-            <button class="subtle" style="height:36px; font-weight:600" :class="{ on: batchColState(col.style) === 'all' }" @click="batchToggleCol(col.style)">{{ col.style }}</button>
+            <button class="subtle" style="height:36px; font-weight:600" :class="{ on: batchColState(col.variant) === 'all' }" @click="batchToggleCol(col.variant)">{{ col.variant }}</button>
             <span class="muted" style="font-size:.75rem">{{ col.count }}</span>
           </div>
           <div class="row" style="flex-wrap:wrap; gap:6px">
-            <button v-for="tg in Object.values(col.cells).flat()" :key="tg" class="selchip" :class="{ on: S.batchDlg.sel[tg] }"
+            <button v-for="tg in Object.values(col.cells)" :key="tg" class="selchip" :class="{ on: S.batchDlg.sel[tg] }"
                     @click="S.batchDlg.sel[tg] = !S.batchDlg.sel[tg]" :aria-pressed="!!S.batchDlg.sel[tg]">
               {{ tg.replace('#', ' · ') }}
             </button>
@@ -2081,24 +2081,20 @@ function openRefineDlg(iconId) {
   focusDialog();
 }
 function refineGrid() {
-  const rows = [], cols = [], cellsByStyle = {};
+  const rows = [], cols = [], cell = {};
   for (const it of S.refineDlg?.items || []) {
-    const st = S.pack.icons?.[it.icon]?.variants?.[it.variant]?.style || '?';
-    if (!cellsByStyle[st]) { cellsByStyle[st] = {}; cols.push(st); }
-    (cellsByStyle[st][it.icon] = cellsByStyle[st][it.icon] || []).push(it);
+    if (!cell[it.variant]) { cell[it.variant] = {}; cols.push(it.variant); }
+    cell[it.variant][it.icon] = it;
     if (!rows.some(r => r.icon === it.icon)) rows.push({ icon: it.icon });
   }
   cols.sort();
-  return { rows, cols: cols.map(st => ({ style: st, cells: cellsByStyle[st] })) };
+  return { rows, cols: cols.map(v => ({ variant: v, cells: cell[v] })) };
 }
 function refineSetAll(on) {
   (S.refineDlg?.items || []).forEach(it => { it.skip = !on; });
 }
-function refineCellAll(items) { return items.every(it => !it.skip); }
-function refineToggleCell(items) {
-  const on = !refineCellAll(items);
-  items.forEach(it => { it.skip = !on; });
-}
+function refineCellAll(it) { return it && !it.skip; }
+function refineToggleCell(it) { it.skip = !it.skip; }
 function refineRowState(icon) {
   const t = (S.refineDlg?.items || []).filter(it => it.icon === icon);
   const on = t.filter(it => !it.skip).length;
@@ -2108,18 +2104,14 @@ function refineToggleRow2(icon) {
   const turnOn = refineRowState(icon) !== 'all';
   (S.refineDlg?.items || []).filter(it => it.icon === icon).forEach(it => { it.skip = !turnOn; });
 }
-function refineColState(style) {
-  const g = refineGrid();
-  const col = g.cols.find(c => c.style === style);
-  const t = col ? Object.values(col.cells).flat() : [];
+function refineColState(variant) {
+  const t = (S.refineDlg?.items || []).filter(it => it.variant === variant);
   const on = t.filter(it => !it.skip).length;
   return on === t.length ? 'all' : on === 0 ? 'none' : 'some';
 }
-function refineToggleCol2(style) {
-  const turnOn = refineColState(style) !== 'all';
-  const g = refineGrid();
-  const col = g.cols.find(c => c.style === style);
-  if (col) Object.values(col.cells).flat().forEach(it => { it.skip = !turnOn; });
+function refineToggleCol2(variant) {
+  const turnOn = refineColState(variant) !== 'all';
+  (S.refineDlg?.items || []).filter(it => it.variant === variant).forEach(it => { it.skip = !turnOn; });
 }
 function refineFeedback(it) {
   // the fb overlay renders behind the refine overlay — close refine,
@@ -2211,28 +2203,24 @@ async function planCheck() {
   } catch { d.warn = ''; }
 }
 function batchGrid() {
-  const rows = [], cols = [], cellsByStyle = {};
+  const rows = [], cols = [], cell = {};
   for (const tg of Object.keys(S.batchDlg?.sel || {})) {
     const [iid, vid] = tg.split('#');
-    const st = S.pack.icons?.[iid]?.variants?.[vid]?.style || '?';
-    if (!cellsByStyle[st]) { cellsByStyle[st] = {}; cols.push(st); }
-    (cellsByStyle[st][iid] = cellsByStyle[st][iid] || []).push(tg);
+    if (!cell[vid]) { cell[vid] = {}; cols.push(vid); }
+    cell[vid][iid] = tg;
     if (!rows.some(r => r.icon === iid)) rows.push({ icon: iid });
   }
   cols.sort();
   return {
     rows, // [{icon}]
-    cols: cols.map(st => ({ style: st, cells: cellsByStyle[st], count: Object.values(cellsByStyle[st]).flat().length })),
+    cols: cols.map(v => ({ variant: v, cells: cell[v], count: Object.keys(cell[v]).length })),
   };
 }
 function batchSelAll(on) {
   for (const tg of Object.keys(S.batchDlg.sel || {})) S.batchDlg.sel[tg] = on;
 }
-function batchCellAll(targets) { return targets.every(tg => S.batchDlg.sel[tg]); }
-function batchToggleCell(targets) {
-  const on = !batchCellAll(targets);
-  targets.forEach(tg => { S.batchDlg.sel[tg] = on; });
-}
+function batchCellAll(tg) { return !!S.batchDlg.sel[tg]; }
+function batchToggleCell(tg) { S.batchDlg.sel[tg] = !S.batchDlg.sel[tg]; }
 function batchRowState(icon) {
   const t = Object.keys(S.batchDlg.sel).filter(tg => tg.startsWith(icon + '#'));
   const on = t.filter(tg => S.batchDlg.sel[tg]).length;
@@ -2243,17 +2231,14 @@ function batchToggleRow(icon) {
   const turnOn = batchRowState(icon) !== 'all';
   t.forEach(tg => { S.batchDlg.sel[tg] = turnOn; });
 }
-function batchColState(style) {
-  const t = [], g = batchGrid();
-  for (const col of g.cols) if (col.style === style) { t.push(...Object.values(col.cells).flat()); break; }
+function batchColState(variant) {
+  const t = Object.keys(S.batchDlg.sel).filter(tg => tg.split('#')[1] === variant);
   const on = t.filter(tg => S.batchDlg.sel[tg]).length;
   return on === t.length ? 'all' : on === 0 ? 'none' : 'some';
 }
-function batchToggleCol(style) {
-  const turnOn = batchColState(style) !== 'all';
-  for (const col of batchGrid().cols) {
-    if (col.style === style) { Object.values(col.cells).flat().forEach(tg => { S.batchDlg.sel[tg] = turnOn; }); break; }
-  }
+function batchToggleCol(variant) {
+  const turnOn = batchColState(variant) !== 'all';
+  Object.keys(S.batchDlg.sel).filter(tg => tg.split('#')[1] === variant).forEach(tg => { S.batchDlg.sel[tg] = turnOn; });
 }
 function batchSelCount() { return Object.values(S.batchDlg?.sel || {}).filter(Boolean).length; }
 function batchTotal() { return Object.keys(S.batchDlg?.sel || {}).length; }
