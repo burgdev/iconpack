@@ -165,6 +165,11 @@ progress { flex:1; height:6px; accent-color: var(--accent); }
 .progressrow progress { flex:1; margin-left:8px; }
 .chip.fit { display:inline-block; width:auto; align-self:center; }
 .dropzone { outline: 2px dashed var(--accent); outline-offset: 4px; border-radius: 8px; }
+.selmatrix { border-collapse:collapse; font-size:.78rem; }
+.selmatrix .sh { position:sticky; left:0; background:var(--card); text-align:left; padding:2px 8px 2px 0; border-bottom:1px solid var(--line); white-space:nowrap; }
+.selmatrix .ih { padding:2px 6px; border-bottom:1px solid var(--line); }
+.selmatrix .cell { padding:2px 6px; border-bottom:1px solid var(--line); vertical-align:middle; }
+.selmatrix .cell:empty { background:var(--card-2); }
 @media (max-width:480px) { .actionbar .statustext { display:none; } }
 @media (max-width:640px) {
   button, button.subtle, .iconbtn, .iconbtn-lg, .aistat { height:40px; }
@@ -1112,17 +1117,29 @@ footer { text-align:center; color:var(--muted); font-size:.75rem; padding:20px 0
       <h3><span><span class="ic-lg" v-html="IC.bolt"></span> draft pack — {{ batchSelCount() }} icons × {{ S.batchDlg.takes }} takes</span>
           <button class="subtle" @click="S.batchDlg = null" aria-label="Close">close</button></h3>
       <p class="muted" style="margin:0 0 10px">One Recraft request per style: <b>same icons on every 3×3 sheet</b> (≤9 icons per sheet, one icon per cell), <b>one different take per sheet</b>. You review every take before anything is written.</p>
-      <div v-for="grp in batchGroups()" :key="grp.style" style="margin-bottom:10px">
-        <div class="row" style="gap:8px; align-items:baseline">
-          <b>{{ grp.style }}</b>
-          <button class="subtle" style="padding:1px 6px; font-size:.75rem" @click="toggleGrp(grp)">{{ grpAll(grp) ? 'none' : 'all' }}</button>
-          <span class="muted" style="font-size:.75rem">{{ grp.targets.length }}</span>
-        </div>
-        <div class="row" style="flex-wrap:wrap; gap:4px 14px">
-          <label v-for="tg in grp.targets" :key="tg" style="display:flex; gap:5px; align-items:center; cursor:pointer">
-            <input type="checkbox" v-model="S.batchDlg.sel[tg]"> <span>{{ tg }}</span>
-          </label>
-        </div>
+      <div style="overflow-x:auto; margin-bottom:6px">
+        <table class="selmatrix">
+          <thead>
+            <tr>
+              <th class="sh"><button class="subtle" style="padding:0 6px; font-size:.72rem" @click="batchSelAll(true)">all</button> <button class="subtle" style="padding:0 6px; font-size:.72rem" @click="batchSelAll(false)">none</button></th>
+              <th v-for="ic in batchMatrix().icons" :key="ic" class="ih">
+                <button class="subtle" style="padding:0 4px; font-size:.72rem" :class="{ on: batchColAll(ic) }" @click="batchToggleCol(ic)">{{ ic }}</button>
+              </th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr v-for="row in batchMatrix().styles" :key="row.style">
+              <th class="sh">
+                <button class="subtle" style="padding:0 6px; font-size:.75rem" :class="{ on: batchRowAll(row) }" @click="batchToggleRow(row)" :title="row.style">{{ row.style }}</button>
+              </th>
+              <td v-for="ic in batchMatrix().icons" :key="ic" class="cell">
+                <label v-for="tg in (row.cells[ic] || [])" :key="tg" style="display:inline-flex; gap:3px; align-items:center; cursor:pointer; margin:1px">
+                  <input type="checkbox" v-model="S.batchDlg.sel[tg]"> <span style="font-size:.7rem">{{ tg.split('#')[1] }}</span>
+                </label>
+              </td>
+            </tr>
+          </tbody>
+        </table>
       </div>
       <div class="row" style="margin-top:8px; gap:8px">
         <label class="muted">takes per icon</label>
@@ -2055,21 +2072,40 @@ async function planCheck() {
     }
   } catch { d.warn = ''; }
 }
-function batchGroups() {
-  const groups = [];
-  const byStyle = {};
+function batchMatrix() {
+  const styles = [], icons = [], cells = {};
   for (const tg of Object.keys(S.batchDlg?.sel || {})) {
     const [iid, vid] = tg.split('#');
     const st = S.pack.icons?.[iid]?.variants?.[vid]?.style || '?';
-    (byStyle[st] = byStyle[st] || []).push(tg);
+    if (!cells[st]) { cells[st] = {}; styles.push(st); }
+    (cells[st][iid] = cells[st][iid] || []).push(tg);
+    if (!icons.includes(iid)) icons.push(iid);
   }
-  for (const [style, targets] of Object.entries(byStyle)) groups.push({ style, targets });
-  return groups;
+  styles.sort(); icons.sort();
+  return { styles: styles.map(s => ({ style: s, cells: cells[s] })), icons };
 }
-function grpAll(grp) { return grp.targets.every(tg => S.batchDlg.sel[tg]); }
-function toggleGrp(grp) {
-  const on = !grpAll(grp);
-  grp.targets.forEach(tg => { S.batchDlg.sel[tg] = on; });
+function batchRowTargets(row) {
+  const out = [];
+  for (const list of Object.values(row.cells || {})) out.push(...list);
+  return out;
+}
+function batchRowAll(row) { return batchRowTargets(row).every(tg => S.batchDlg.sel[tg]); }
+function batchToggleRow(row) {
+  const on = !batchRowAll(row);
+  batchRowTargets(row).forEach(tg => { S.batchDlg.sel[tg] = on; });
+}
+function batchColTargets(ic) {
+  const out = [];
+  for (const row of batchMatrix().styles) out.push(...((row.cells[ic] || [])));
+  return out;
+}
+function batchColAll(ic) { const t = batchColTargets(ic); return t.length > 0 && t.every(tg => S.batchDlg.sel[tg]); }
+function batchToggleCol(ic) {
+  const on = !batchColAll(ic);
+  batchColTargets(ic).forEach(tg => { S.batchDlg.sel[tg] = on; });
+}
+function batchSelAll(on) {
+  for (const tg of Object.keys(S.batchDlg.sel || {})) S.batchDlg.sel[tg] = on;
 }
 function batchSelCount() { return Object.values(S.batchDlg?.sel || {}).filter(Boolean).length; }
 function batchTotal() { return Object.keys(S.batchDlg?.sel || {}).length; }
@@ -2827,7 +2863,7 @@ const App = {
       showDebug, debugCopy, openNextDlg, addVariantBulk, addCustomStyle, saveRecraftDefaults,
       GATE_HELP, styleRules, stylePalette, ruleTitle, styleUsageCount, isPostponed, togglePostpone, applyAndNext, colState, toggleCol, toggleAll, usedStyles, setTab, iconSuggest, pickSuggestion, addNewIcon, startRoundWithNew,
       styleSummary, isOwnRef, editStyle, toggleGate, saveStyleRules, removeStyle, addStyleToPack, pickRefFile, removeRef,
-      vectorModels, curatedNames, styleDetail, editCustomStyle, recraftGenerate, commitResults, iconStylePalette, toggleIconColor, waitingForAgent, waitTargets, adoptPreview, adoptCommit, openRefineDlg, refineActive, refineReady, refineEst, refineGenerate, openStyleRc, styleRcCreate, styleRcSave, openBatchDlg, batchGroups, grpAll, toggleGrp, batchSelCount, batchTotal, batchSheets, batchDebug, batchEst, batchGenerate, batchElapsed, batchProgress, planCheck, dropResult, keptCount, totalCount, keepAll,
+      vectorModels, curatedNames, styleDetail, editCustomStyle, recraftGenerate, commitResults, iconStylePalette, toggleIconColor, waitingForAgent, waitTargets, adoptPreview, adoptCommit, openRefineDlg, refineActive, refineReady, refineEst, refineGenerate, openStyleRc, styleRcCreate, styleRcSave, openBatchDlg, batchMatrix, batchRowAll, batchToggleRow, batchColAll, batchToggleCol, batchSelAll, batchSelCount, batchTotal, batchSheets, batchDebug, batchEst, batchGenerate, batchElapsed, batchProgress, planCheck, dropResult, keptCount, totalCount, keepAll,
 
     };
   },
