@@ -170,6 +170,17 @@ progress { flex:1; height:6px; accent-color: var(--accent); }
 .selmatrix .ih { padding:2px 6px; border-bottom:1px solid var(--line); }
 .selmatrix .cell { padding:2px 6px; border-bottom:1px solid var(--line); vertical-align:middle; }
 .selmatrix .cell:empty { background:var(--card-2); }
+.only-wide { display:block; }
+.only-narrow { display:none; }
+@media (max-width:700px) {
+  .only-wide { display:none; }
+  .only-narrow { display:block; }
+}
+.selchip { display:inline-flex; align-items:center; gap:4px; min-height:36px; padding:0 12px;
+           border-radius:99px; border:1px solid var(--line); background:var(--card);
+           color:var(--muted); font-size:.78rem; cursor:pointer; }
+.selchip.on { border-color:var(--accent); color:var(--accent); font-weight:600;
+              background:color-mix(in srgb, var(--accent) 10%, transparent); }
 @media (max-width:480px) { .actionbar .statustext { display:none; } }
 @media (max-width:640px) {
   button, button.subtle, .iconbtn, .iconbtn-lg, .aistat { height:40px; }
@@ -930,6 +941,25 @@ footer { text-align:center; color:var(--muted); font-size:.75rem; padding:20px 0
           </tbody>
         </table>
       </div>
+      <div class="only-narrow">
+        <div class="row" style="gap:6px; margin-bottom:8px">
+          <button class="subtle" style="height:36px" @click="batchSelAll(true)">all</button>
+          <button class="subtle" style="height:36px" @click="batchSelAll(false)">none</button>
+          <span class="muted" style="font-size:.75rem; align-self:center">{{ batchSelCount() }}/{{ batchTotal() }} selected</span>
+        </div>
+        <div v-for="row in batchMatrix().styles" :key="row.style" style="margin-bottom:10px">
+          <div class="row" style="justify-content:space-between; margin-bottom:4px">
+            <button class="subtle" style="height:36px; font-weight:600" :class="{ on: batchRowAll(row) }" @click="batchToggleRow(row)">{{ row.style }}</button>
+            <span class="muted" style="font-size:.75rem">{{ batchRowTargets(row).filter(tg => S.batchDlg.sel[tg]).length }}/{{ batchRowTargets(row).length }}</span>
+          </div>
+          <div class="row" style="flex-wrap:wrap; gap:6px">
+            <button v-for="tg in batchRowTargets(row)" :key="tg" class="selchip" :class="{ on: S.batchDlg.sel[tg] }"
+                    @click="S.batchDlg.sel[tg] = !S.batchDlg.sel[tg]" :aria-pressed="!!S.batchDlg.sel[tg]">
+              {{ tg.replace('#', ' · ') }}
+            </button>
+          </div>
+        </div>
+      </div>
       <div class="row" style="margin-top:10px; align-items:flex-start">
         <div style="flex:1; position:relative">
           <input v-model="S.nextDlg.newIcon" placeholder="add a new icon — name — brief, e.g. 'sunset — orange sun over horizon'"
@@ -1117,7 +1147,7 @@ footer { text-align:center; color:var(--muted); font-size:.75rem; padding:20px 0
       <h3><span><span class="ic-lg" v-html="IC.bolt"></span> draft pack — {{ batchSelCount() }} icons × {{ S.batchDlg.takes }} takes</span>
           <button class="subtle" @click="S.batchDlg = null" aria-label="Close">close</button></h3>
       <p class="muted" style="margin:0 0 10px">One Recraft request per style: <b>same icons on every 3×3 sheet</b> (≤9 icons per sheet, one icon per cell), <b>one different take per sheet</b>. You review every take before anything is written.</p>
-      <div style="overflow-x:auto; margin-bottom:6px">
+      <div class="only-wide" style="overflow-x:auto; margin-bottom:6px">
         <table class="selmatrix">
           <thead>
             <tr>
@@ -1140,6 +1170,25 @@ footer { text-align:center; color:var(--muted); font-size:.75rem; padding:20px 0
             </tr>
           </tbody>
         </table>
+      </div>
+      <div class="only-narrow">
+        <div class="row" style="gap:6px; margin-bottom:8px">
+          <button class="subtle" style="height:36px" @click="batchSelAll(true)">all</button>
+          <button class="subtle" style="height:36px" @click="batchSelAll(false)">none</button>
+          <span class="muted" style="font-size:.75rem; align-self:center">{{ batchSelCount() }}/{{ batchTotal() }} selected</span>
+        </div>
+        <div v-for="row in batchMatrix().styles" :key="row.style" style="margin-bottom:10px">
+          <div class="row" style="justify-content:space-between; margin-bottom:4px">
+            <button class="subtle" style="height:36px; font-weight:600" :class="{ on: batchRowAll(row) }" @click="batchToggleRow(row)">{{ row.style }}</button>
+            <span class="muted" style="font-size:.75rem">{{ batchRowTargets(row).filter(tg => S.batchDlg.sel[tg]).length }}/{{ batchRowTargets(row).length }}</span>
+          </div>
+          <div class="row" style="flex-wrap:wrap; gap:6px">
+            <button v-for="tg in batchRowTargets(row)" :key="tg" class="selchip" :class="{ on: S.batchDlg.sel[tg] }"
+                    @click="S.batchDlg.sel[tg] = !S.batchDlg.sel[tg]" :aria-pressed="!!S.batchDlg.sel[tg]">
+              {{ tg.replace('#', ' · ') }}
+            </button>
+          </div>
+        </div>
       </div>
       <div class="row" style="margin-top:8px; gap:8px">
         <label class="muted">takes per icon</label>
@@ -2863,7 +2912,7 @@ const App = {
       showDebug, debugCopy, openNextDlg, addVariantBulk, addCustomStyle, saveRecraftDefaults,
       GATE_HELP, styleRules, stylePalette, ruleTitle, styleUsageCount, isPostponed, togglePostpone, applyAndNext, colState, toggleCol, toggleAll, usedStyles, setTab, iconSuggest, pickSuggestion, addNewIcon, startRoundWithNew,
       styleSummary, isOwnRef, editStyle, toggleGate, saveStyleRules, removeStyle, addStyleToPack, pickRefFile, removeRef,
-      vectorModels, curatedNames, styleDetail, editCustomStyle, recraftGenerate, commitResults, iconStylePalette, toggleIconColor, waitingForAgent, waitTargets, adoptPreview, adoptCommit, openRefineDlg, refineActive, refineReady, refineEst, refineGenerate, openStyleRc, styleRcCreate, styleRcSave, openBatchDlg, batchMatrix, batchRowAll, batchToggleRow, batchColAll, batchToggleCol, batchSelAll, batchSelCount, batchTotal, batchSheets, batchDebug, batchEst, batchGenerate, batchElapsed, batchProgress, planCheck, dropResult, keptCount, totalCount, keepAll,
+      vectorModels, curatedNames, styleDetail, editCustomStyle, recraftGenerate, commitResults, iconStylePalette, toggleIconColor, waitingForAgent, waitTargets, adoptPreview, adoptCommit, openRefineDlg, refineActive, refineReady, refineEst, refineGenerate, openStyleRc, styleRcCreate, styleRcSave, openBatchDlg, batchMatrix, batchRowTargets, batchRowAll, batchToggleRow, batchColAll, batchToggleCol, batchSelAll, batchSelCount, batchTotal, batchSheets, batchDebug, batchEst, batchGenerate, batchElapsed, batchProgress, planCheck, dropResult, keptCount, totalCount, keepAll,
 
     };
   },
