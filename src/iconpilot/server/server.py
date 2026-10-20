@@ -1519,6 +1519,11 @@ class ReviewHandler(BaseHTTPRequestHandler):
         skipped: list[dict] = []
         calls: list[dict] = []
         cost = 0.0
+        try:
+            grid_sel = max(0, min(int(data.get("grid") or 0), 5))
+        except (TypeError, ValueError):
+            grid_sel = 0
+        ready: list[dict] = []  # targets with source + feedback, in request order
         for target in data.get("targets", []):
             iid, _, vid = str(target).partition("#")
             icon = pack["icons"].get(iid)
@@ -1563,40 +1568,107 @@ class ReviewHandler(BaseHTTPRequestHandler):
                     {"target": target, "reason": "no feedback this round — add feedback first"}
                 )
                 continue
-            c_cost = round(rc.price_per_image(model) * takes, 4)
-            calls.append(
+            ready.append(
                 {
                     "target": target,
-                    "source": str(source_path.relative_to(self.pack_dir)),
-                    "prompt": fb,
-                    "strength": strength,
-                    "takes": takes,
-                    "model": model,
-                    "cost": c_cost,
+                    "iid": iid,
+                    "vid": vid,
+                    "style": var["style"],
+                    "source": source_path,
+                    "fb": fb,
                 }
             )
-            cost += c_cost
-            if data.get("debug"):
-                continue
-            svgs = rc.refine(token, source_path.read_text(), fb, strength, model=model, n=takes)
-            style = styles[var["style"]]
-            mono = style.color_mode == "mono"
-            viewbox = pack["spec"]["viewBox"]
-            results = []
-            for i, raw in enumerate(svgs):
-                svg = rc.normalize(rc.strip_metadata(raw), viewbox, mono=mono)
-                b64 = _b64.b64encode(svg.encode()).decode()
-                results.append(
+
+        def _norm_gate(raw_svg: str, style_id: str, iid2: str, vid2: str) -> dict:
+            style = styles[style_id]
+            svg = rc.normalize(
+                rc.strip_metadata(raw_svg), pack["spec"]["viewBox"], mono=style.color_mode == "mono"
+            )
+            b64 = _b64.b64encode(svg.encode()).decode()
+            return {
+                "id": 0,
+                "svg_data": f"data:image/svg+xml;base64,{b64}",
+                "gate_pass": run_gate_svg(svg, pack, styles, iid2, vid2),
+            }
+
+        if grid_sel >= 2:
+            # grid refine: chunk ready targets (grouped by style) into
+            # g×g sheets of source images — ONE i2i call per sheet, then
+            # split the returned sheet back into per-icon candidates
+            by_style: dict[str, list[dict]] = {}
+            for r_ in ready:
+                by_style.setdefault(r_["style"], []).append(r_)
+            for style_id, group in by_style.items():
+                label = styles[style_id].label
+                for i0 in range(0, len(group), grid_sel * grid_sel):
+                    chunk = group[i0 : i0 + grid_sel * grid_sel]
+                    g = rc.pack_grid(len(chunk), max_grid=grid_sel)
+                    changes = [f"{c_['iid']} icon ({label}) — change: {c_['fb']}" for c_ in chunk]
+                    prompt = rc.refine_sheet_prompt(changes, g, model=model)
+                    grid_svg = rc.refine_grid_svg([c_["source"].read_text() for c_ in chunk], g)
+                    c_cost = round(rc.price_per_image(model) * takes, 4)
+                    calls.append(
+                        {
+                            "target": "+".join(c_["target"] for c_ in chunk),
+                            "grid": g,
+                            "cells": len(chunk),
+                            "source": "grid sheet",
+                            "prompt": prompt,
+                            "strength": strength,
+                            "takes": takes,
+                            "model": model,
+                            "cost": c_cost,
+                        }
+                    )
+                    cost += c_cost
+                    if data.get("debug"):
+                        continue
+                    sheets = rc.refine(
+                        token, grid_svg, prompt, strength, model=model, n=takes, size=g * 512
+                    )
+                    split_sheets = [rc.split_sheet(s, g) for s in sheets]
+                    for k, c_ in enumerate(chunk):
+                        results = []
+                        for cells in split_sheets:
+                            if k >= len(cells):
+                                continue
+                            r2 = _norm_gate(cells[k], c_["style"], c_["iid"], c_["vid"])
+                            r2["id"] = len(results)
+                            results.append(r2)
+                        if results:
+                            items.append(
+                                {"icon": c_["iid"], "variant": c_["vid"], "results": results}
+                            )
+        else:
+            for r_ in ready:
+                c_cost = round(rc.price_per_image(model) * takes, 4)
+                calls.append(
                     {
-                        "id": i,
-                        "svg_data": f"data:image/svg+xml;base64,{b64}",
-                        "gate_pass": run_gate_svg(svg, pack, styles, iid, vid),
+                        "target": r_["target"],
+                        "source": str(r_["source"].relative_to(self.pack_dir)),
+                        "prompt": r_["fb"],
+                        "strength": strength,
+                        "takes": takes,
+                        "model": model,
+                        "cost": c_cost,
                     }
                 )
-            items.append({"icon": iid, "variant": vid, "results": results})
+                cost += c_cost
+                if data.get("debug"):
+                    continue
+                svgs = rc.refine(
+                    token, r_["source"].read_text(), r_["fb"], strength, model=model, n=takes
+                )
+                results = []
+                for i, raw in enumerate(svgs):
+                    res = _norm_gate(raw, r_["style"], r_["iid"], r_["vid"])
+                    res["id"] = i
+                    results.append(res)
+                items.append({"icon": r_["iid"], "variant": r_["vid"], "results": results})
 
         out: dict = {
             "takes": takes,
+            "grid": grid_sel,
             "strength": strength,
             "model": model,
             "cost_usd": round(cost, 4),

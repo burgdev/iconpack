@@ -11,8 +11,12 @@ Everything public is importable from the package root:
 
 ```python
 from iconpilot import (
-    load_pack, run_gate, build_context,
-    collect_exportables, export_maplibre, export_iconify,
+    load_pack,
+    run_gate,
+    build_context,
+    collect_exportables,
+    export_maplibre,
+    export_iconify,
 )
 ```
 
@@ -37,10 +41,10 @@ link targets, DAG cycles), never just the first.
 from iconpilot import run_gate
 
 report = run_gate("candidate.svg", pack, styles["mono-line"])
-report.passed      # bool
-report.errors      # ["geometry: 47 nodes > style max 40 (mono-line)", …]
-report.checks      # what passed
-report.metrics     # {"node_count": 47, "bbox": [...], "ink_ratio": {...}, "phash": "…"}
+report.passed  # bool
+report.errors  # ["geometry: 47 nodes > style max 40 (mono-line)", …]
+report.checks  # what passed
+report.metrics  # {"node_count": 47, "bbox": [...], "ink_ratio": {...}, "phash": "…"}
 ```
 
 ## Export from source (the "commit only sources" pattern)
@@ -55,7 +59,7 @@ from iconpilot import load_pack, collect_exportables, export_maplibre
 repo = Path(__file__).resolve().parents[2]
 pack_dir = repo / "iconpacks" / "accommodation"
 pack, _ = load_pack(pack_dir / "pack.json")
-entries, skipped = collect_exportables(pack_dir, pack)   # approved + approved links
+entries, skipped = collect_exportables(pack_dir, pack)  # approved + approved links
 export_maplibre(entries, repo / "martin_sync/sprites/accommodation", size=48)
 ```
 
@@ -72,7 +76,7 @@ if hamming(hash_file("a.svg"), hash_file("b.svg")) <= 8:
     ...  # near-duplicate → suggest a link (human confirms intent)
 
 ctx = build_context(pack_dir, pack, styles, "hut", "mono")
-prompt = render_markdown(ctx)   # feed verbatim to a drafting model
+prompt = render_markdown(ctx)  # feed verbatim to a drafting model
 ```
 
 ## API index

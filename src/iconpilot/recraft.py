@@ -353,18 +353,20 @@ def refine(
     strength: float,
     model: str = "recraftv4_1_vector",
     n: int = 2,
+    size: int = 512,
 ) -> list[str]:
     """Image-to-image refine: same icon, targeted change (V4+ vector only).
 
-    The input SVG is sent directly (stamped to 512px) — vector in, vector
-    out. `prompt` describes WHAT to change (the round feedback);
-    `strength` 0=almost identical … 1=least similar.
+    The input SVG is sent directly (stamped to `size` px, 512 for single
+    icons, grid*512 for sheets) — vector in, vector out. `prompt` describes
+    WHAT to change (the round feedback); `strength` 0=almost identical …
+    1=least similar.
     """
     if model not in REFINE_MODELS:
         raise RecraftError(f"refine needs a v4+ vector model, got '{model}'")
     if not prompt.strip():
         raise RecraftError("refine needs feedback text — nothing to change")
-    svg = with_px_size(strip_metadata(svg_text), 512)
+    svg = with_px_size(strip_metadata(svg_text), size)
     payload: dict = {
         "image_url": _svg_data_url(svg),
         "prompt": prompt.strip()[: prompt_limit(model)],
@@ -381,6 +383,66 @@ def refine(
             raise RecraftError("recraft returned an image without b64_json")
         svgs.append(base64.b64decode(b64).decode())
     return svgs
+
+
+def refine_grid_svg(sources: list[str], grid: int, cell: int = 512) -> str:
+    """Compose source SVGs into one grid sheet for image-to-image.
+
+    Row-major cells (splitter order): source k sits at
+    (row=k//g, col=k%g) * cell. Each source keeps its own viewBox and is
+    nested at exact pixel geometry — no rescaling, no labels, images only.
+    """
+    g = int(grid)
+    total = g * cell
+    inner: list[str] = []
+    for k, src in enumerate(sources):
+        row, col = divmod(k, g)
+        m = re.search(r'viewBox="([-%0-9.eE ]+)"', src)
+        vb = m.group(1) if m else "0 0 24 24"
+        tag = (
+            f'<svg x="{col * cell}" y="{row * cell}" width="{cell}" height="{cell}" viewBox="{vb}"'
+        )
+        body = re.sub(r"<svg\b", tag, src, count=1)
+        inner.append(body)
+    return (
+        f'<svg xmlns="http://www.w3.org/2000/svg" width="{total}" height="{total}" '
+        f'viewBox="0 0 {total} {total}">' + "".join(inner) + "</svg>"
+    )
+
+
+def refine_sheet_prompt(changes: list[str], grid: int, model: str | None = None) -> str:
+    """Grid refine prompt: cell anchors + per-cell change instructions.
+
+    `changes[k]` describes the icon in cell k and WHAT to change (the
+    round feedback). Structure mirrors pack_sheet_prompt — the proven
+    anchor pattern — but every cell keeps its own icon.
+    """
+    g = int(grid)
+    corners = {
+        (0, 0): "top left",
+        (0, g - 1): "top right",
+        (g - 1, 0): "bottom left",
+        (g - 1, g - 1): "bottom right",
+    }
+    parts = []
+    for i, ch in enumerate(changes):
+        row, col = divmod(i, g)
+        pos = corners.get((row, col), f"row {row + 1}, column {col + 1}")
+        parts.append(f"cell {i + 1} at {pos} ({row + 1},{col + 1}): {ch}")
+    cells = "; ".join(parts)
+    empty = ""
+    if len(changes) < g * g:
+        empty = f" Leave the remaining {g * g - len(changes)} cell(s) empty."
+    body = (
+        f"Refine this icon set sheet: {len(changes)} icons in a {g} by {g} grid, "
+        "one icon per cell, cells numbered left to right, top to bottom, "
+        f"starting at the top left. Keep each cell's icon recognisable and its "
+        f"style, stroke weight and color system; apply only the requested "
+        f"change per cell — {cells}.{empty} Keep generous clean margins "
+        "between cells — no touching, no overlapping. Plain empty background, "
+        "no grid lines, no borders, no labels, no text."
+    )
+    return body[: prompt_limit(model or "")]
 
 
 def sheet_prompt(prompt: str, grid: int, model: str | None = None) -> str:

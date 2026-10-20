@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import base64
 import json
+import tempfile
 from pathlib import Path
 
 import pytest
@@ -1032,7 +1033,7 @@ def test_adopt_svg_deterministic_pipeline(tmp_path) -> None:
     )
     style = resolve_styles({})["color-flat"]
     pack = {"icons": {}, "spec": {"viewBox": "0 0 48 48", "precision": 0.5}}
-    out, fixes, errors = adopt_svg(seed, style, pack)
+    out, fixes, _errors = adopt_svg(seed, style, pack)
     assert "0 0 48 48" in out  # style design grid
     assert "<g" not in out and "transform=" not in out  # baked
     assert "url(" not in out and "linearGradient" not in out  # gradients collapsed
@@ -1048,3 +1049,129 @@ def test_adopt_svg_deterministic_pipeline(tmp_path) -> None:
     from xml.etree import ElementTree as ET
 
     ET.fromstring(out)
+
+
+def test_refine_grid_svg_composition() -> None:
+    """Grid sheet: row-major nesting, own viewBox per cell, true total size."""
+    from iconpilot.recraft import refine_grid_svg
+
+    srcs = [
+        f'<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 {sz} {sz}"><path d="M1 1"/></svg>'
+        for sz in (24, 48)
+    ] * 2  # 4 sources → 2×2
+    out = refine_grid_svg(srcs, 2)
+    assert 'width="1024"' in out and 'height="1024"' in out  # 2×512
+    assert 'viewBox="0 0 1024 1024"' in out
+    # cell 0 top-left, cell 1 top-right, cell 2 bottom-left (row-major)
+    assert '<svg x="0" y="0" width="512"' in out
+    assert '<svg x="512" y="0" width="512"' in out
+    assert '<svg x="0" y="512" width="512"' in out
+    assert out.count("<svg") == 5  # outer + 4 nested
+
+
+def test_refine_sheet_prompt_anchors() -> None:
+    """Cell anchors + per-cell change instructions + empty-cell note."""
+    from iconpilot.recraft import refine_sheet_prompt
+
+    p = refine_sheet_prompt(
+        [
+            "campfire icon (Mono line) — change: flame too heavy",
+            "peak icon (Mono line) — change: thinner ridge",
+        ],
+        2,
+    )
+    assert "2 by 2 grid" in p
+    assert "cell 1 at top left (1,1)" in p
+    assert "cell 2 at top right (1,2)" in p
+    assert "change: flame too heavy" in p
+    assert "Leave the remaining 2 cell(s) empty" in p  # 2 of 4 used
+    assert "no text" in p
+
+
+def test_refine_grid_debug_flow() -> None:
+    """Server grid refine: one call per sheet, cells mapped back per icon."""
+    from types import SimpleNamespace
+
+    from iconpilot.server.server import ReviewHandler
+
+    with tempfile.TemporaryDirectory() as td:
+        pack_dir = Path(td)
+        (pack_dir / "icons" / "sail").mkdir(parents=True)
+        (pack_dir / "icons" / "sail" / "flat.svg").write_text(
+            '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48"><path d="M4 4H44V44Z"/></svg>'
+        )
+        (pack_dir / ".runs" / "r001" / "flat" / "campfire").mkdir(parents=True)
+        (pack_dir / ".runs" / "r001" / "flat" / "campfire" / "r1.svg").write_text(
+            '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48"><path d="M4 4L44 44"/></svg>'
+        )
+        pack = {
+            "schema": 2,
+            "name": "gridrefine-test",
+            "provenance": {"created_by": "user"},
+            "spec": {
+                "viewBox": "0 0 48 48",
+                "live_area": {"padding": 4},
+                "stroke": {"width": 2, "linecap": "round", "linejoin": "round"},
+                "fill": "none",
+                "allowed_elements": [
+                    "path",
+                    "circle",
+                    "rect",
+                    "line",
+                    "polyline",
+                    "polygon",
+                    "ellipse",
+                ],
+                "precision": 0.5,
+            },
+            "styles": {},
+            "icons": {
+                "sail": {
+                    "brief": "a sailboat",
+                    "variants": {"flat": {"style": "color-flat", "status": "todo"}},
+                },
+                "campfire": {
+                    "brief": "a campfire",
+                    "variants": {"flat": {"style": "color-flat", "status": "todo"}},
+                },
+            },
+            "version": "0.1.0",
+            "feedback": [
+                {
+                    "id": "fb1",
+                    "scope": "variant",
+                    "icon": "sail",
+                    "variant": "flat",
+                    "round": "r001",
+                    "text": "boom longer",
+                    "author": "user",
+                },
+                {
+                    "id": "fb2",
+                    "scope": "variant",
+                    "icon": "campfire",
+                    "variant": "flat",
+                    "round": "r001",
+                    "text": "flame smaller",
+                    "author": "user",
+                },
+            ],
+        }
+        (pack_dir / "pack.json").write_text(json.dumps(pack))
+        self_ns = SimpleNamespace(pack_dir=pack_dir)
+        out = ReviewHandler._recraft_refine(
+            self_ns,
+            {"targets": ["sail#flat", "campfire#flat"], "grid": 2, "takes": 2, "debug": True},
+        )
+        assert out["grid"] == 2
+        assert len(out["calls"]) == 1  # ONE sheet for both icons
+        call = out["calls"][0]
+        assert call["cells"] == 2
+        assert "sail" in call["prompt"] and "campfire" in call["prompt"]
+        assert "change: boom longer" in call["prompt"] and "change: flame smaller" in call["prompt"]
+        assert "items" not in out  # debug preview only
+        # per-icon flow unchanged when grid=0
+        out1 = ReviewHandler._recraft_refine(
+            self_ns, {"targets": ["sail#flat", "campfire#flat"], "takes": 2, "debug": True}
+        )
+        assert len(out1["calls"]) == 2  # one call per icon

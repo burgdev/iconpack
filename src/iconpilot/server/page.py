@@ -1170,9 +1170,14 @@ footer { text-align:center; color:var(--muted); font-size:.75rem; padding:20px 0
         <span class="chip">{{ S.refineDlg.strength }}</span>
         <span class="muted" style="font-size:.75rem">0 = identical · 1 = reinvent</span>
       </div>
-      <div class="row" style="margin-top:6px; gap:8px">
+      <div class="row" style="margin-top:6px; gap:8px; flex-wrap:wrap">
         <label class="muted">takes</label>
         <select v-model.number="S.refineDlg.takes"><option v-for="tk in [1,2,3,4,5,6]" :key="tk" :value="tk">{{ tk }}</option></select>
+        <label class="muted">grid</label>
+        <select v-model.number="S.refineDlg.grid">
+          <option :value="0">off — one call per icon</option>
+          <option v-for="g in [2,3,4,5]" :key="g" :value="g">{{ g }}×{{ g }} sheet ({{ g * g }} icons)</option>
+        </select>
         <label class="muted">model</label>
         <select v-model="S.refineDlg.model">
           <option v-for="m in ['recraftv4_vector', 'recraftv4_1_vector']" :key="m" :value="m">{{ m }} (${{ (S.recraftModels.prices || {})[m] || '?' }}/img)</option>
@@ -1181,7 +1186,7 @@ footer { text-align:center; color:var(--muted); font-size:.75rem; padding:20px 0
       </div>
       <div class="row" style="margin-top:12px">
         <button class="primary" :class="{ busy: S.refineDlg.busy }" :disabled="!refineReady()" @click="refineGenerate()">
-          <span class="ic" v-html="IC.spark"></span> refine {{ refineSel().filter(i => hasSrc(i.icon, i.variant)).length * S.refineDlg.takes }} variants · ~${{ refineEst() }}
+          <span class="ic" v-html="IC.spark"></span> refine {{ refineUnits() * S.refineDlg.takes }} variants · ~${{ refineEst() }}
         </button>
         <span v-if="refineMissing().length" class="muted" style="font-size:.75rem; color:var(--warn)">⚠ {{ refineMissing().length }} missing feedback</span>
       </div>
@@ -2094,7 +2099,7 @@ function openRefineDlg(iconId) {
   });
   // pre-select only variants that have feedback (refine needs it)
   items.forEach(it => { if (it.feedback && hasSrc(it.icon, it.variant)) it.skip = false; });
-  S.refineDlg = { items, strength: 0.3, takes: 2, model: 'recraftv4_1_vector', busy: false, err: '' };
+  S.refineDlg = { items, strength: 0.3, takes: 2, model: 'recraftv4_1_vector', grid: 0, busy: false, err: '' };
   focusDialog();
 }
 function refineGrid() {
@@ -2176,10 +2181,16 @@ function refineSel() { return (S.refineDlg?.items || []).filter(i => !i.skip); }
 function refineActive() { return refineSel().filter(i => (i.feedback || '').trim()); }
 function refineMissing() { return refineSel().filter(i => hasSrc(i.icon, i.variant) && !(i.feedback || '').trim()); }
 function refineReady() { const r = refineSel().filter(i => hasSrc(i.icon, i.variant)); return r.length > 0 && r.every(i => (i.feedback || '').trim()) && !S.refineDlg.busy; }
+function refineUnits() {
+  const d = S.refineDlg; if (!d) return 0;
+  const n = refineSel().filter(i => hasSrc(i.icon, i.variant)).length;
+  if (d.grid >= 2) return Math.ceil(n / (d.grid * d.grid));
+  return n;
+}
 function refineEst() {
   const d = S.refineDlg; if (!d) return '0.00';
   const price = (S.recraftModels.prices || {})[d.model] || 0.08;
-  return (refineSel().filter(i => hasSrc(i.icon, i.variant)).length * d.takes * price).toFixed(2);
+  return (refineUnits() * d.takes * price).toFixed(2);
 }
 async function refineGenerate() {
   const d = S.refineDlg;
@@ -2193,7 +2204,7 @@ async function refineGenerate() {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         targets: active.map(i => i.icon + '#' + i.variant),
-        feedback, strength: d.strength, takes: d.takes, model: d.model,
+        feedback, strength: d.strength, takes: d.takes, model: d.model, grid: d.grid || 0,
       }) });
     S.refineDlg = null;
     if ((r.skipped || []).length) {
@@ -3037,7 +3048,7 @@ const App = {
       showDebug, debugCopy, openNextDlg, addVariantBulk, addCustomStyle, saveRecraftDefaults,
       GATE_HELP, styleRules, stylePalette, ruleTitle, styleUsageCount, isPostponed, togglePostpone, applyAndNext, colState, toggleCol, toggleAll, usedStyles, setTab, iconSuggest, pickSuggestion, addNewIcon, startRoundWithNew,
       styleSummary, isOwnRef, editStyle, toggleGate, saveStyleRules, removeStyle, addStyleToPack, pickRefFile, removeRef,
-      vectorModels, curatedNames, styleDetail, editCustomStyle, recraftGenerate, commitResults, iconStylePalette, toggleIconColor, waitingForAgent, waitTargets, refineFeedback, refineResume, adoptPreview, adoptCommit, openRefineDlg, hasSrc, refinePreview, fbSrc, refineSel, refineMissing, refineGrid, refineSetAll, refineCellAll, refineToggleCell, refineRowState, refineToggleRow2, refineColState, refineToggleCol2, refineActive, refineReady, refineEst, refineGenerate, openStyleRc, styleRcCreate, styleRcSave, openBatchDlg, batchGrid, batchCellAll, batchToggleCell, batchRowState, batchToggleRow, batchColState, batchToggleCol, batchSelAll, batchSelCount, batchTotal, batchSheets, batchDebug, batchEst, batchGenerate, batchElapsed, batchProgress, planCheck, dropResult, keptCount, totalCount, keepAll,
+      vectorModels, curatedNames, styleDetail, editCustomStyle, recraftGenerate, commitResults, iconStylePalette, toggleIconColor, waitingForAgent, waitTargets, refineFeedback, refineResume, adoptPreview, adoptCommit, openRefineDlg, hasSrc, refinePreview, fbSrc, refineSel, refineMissing, refineUnits, refineGrid, refineSetAll, refineCellAll, refineToggleCell, refineRowState, refineToggleRow2, refineColState, refineToggleCol2, refineActive, refineReady, refineEst, refineGenerate, openStyleRc, styleRcCreate, styleRcSave, openBatchDlg, batchGrid, batchCellAll, batchToggleCell, batchRowState, batchToggleRow, batchColState, batchToggleCol, batchSelAll, batchSelCount, batchTotal, batchSheets, batchDebug, batchEst, batchGenerate, batchElapsed, batchProgress, planCheck, dropResult, keptCount, totalCount, keepAll,
 
     };
   },
