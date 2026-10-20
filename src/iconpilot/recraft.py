@@ -399,11 +399,16 @@ def refine_grid_svg(sources: list[str], grid: int, cell: int = 512) -> str:
         row, col = divmod(k, g)
         m = re.search(r'viewBox="([-%0-9.eE ]+)"', src)
         vb = m.group(1) if m else "0 0 24 24"
-        tag = (
-            f'<svg x="{col * cell}" y="{row * cell}" width="{cell}" height="{cell}" viewBox="{vb}"'
+        root = re.search(r"<svg\b[^>]*>", src)
+        if not root:
+            continue
+        # strip conflicting geometry (a re-defined attribute is a parse
+        # error upstream) and stamp exact cell geometry on the root only
+        clean = re.sub(r'\s+(?:width|height|viewBox|x|y)="[^"]*"', "", root.group(0))
+        stamped = clean[:-1] + (
+            f' x="{col * cell}" y="{row * cell}" width="{cell}" height="{cell}" viewBox="{vb}">'
         )
-        body = re.sub(r"<svg\b", tag, src, count=1)
-        inner.append(body)
+        inner.append(src[: root.start()] + stamped + src[root.end() :])
     return (
         f'<svg xmlns="http://www.w3.org/2000/svg" width="{total}" height="{total}" '
         f'viewBox="0 0 {total} {total}">' + "".join(inner) + "</svg>"

@@ -1053,20 +1053,31 @@ def test_adopt_svg_deterministic_pipeline(tmp_path) -> None:
 
 def test_refine_grid_svg_composition() -> None:
     """Grid sheet: row-major nesting, own viewBox per cell, true total size."""
+    import re
+    import xml.etree.ElementTree as ET
+
     from iconpilot.recraft import refine_grid_svg
 
+    # sources already stamped with px size + viewBox (like with_px_size does)
     srcs = [
-        f'<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 {sz} {sz}"><path d="M1 1"/></svg>'
+        f'<svg xmlns="http://www.w3.org/2000/svg" width="512" height="512" '
+        f'viewBox="0 0 {sz} {sz}"><path d="M1 1"/></svg>'
         for sz in (24, 48)
     ] * 2  # 4 sources → 2×2
     out = refine_grid_svg(srcs, 2)
+    ET.fromstring(out)  # must parse: no re-defined attributes
     assert 'width="1024"' in out and 'height="1024"' in out  # 2×512
     assert 'viewBox="0 0 1024 1024"' in out
     # cell 0 top-left, cell 1 top-right, cell 2 bottom-left (row-major)
-    assert '<svg x="0" y="0" width="512"' in out
-    assert '<svg x="512" y="0" width="512"' in out
-    assert '<svg x="0" y="512" width="512"' in out
+    # xmlns stays (kept from the source root), geometry attrs appear once
+    assert re.search(r'<svg[^>]*\sx="0" y="0" width="512"', out)
+    assert re.search(r'<svg[^>]*\sx="512" y="0" width="512"', out)
+    assert re.search(r'<svg[^>]*\sx="0" y="512" width="512"', out)
     assert out.count("<svg") == 5  # outer + 4 nested
+    # no re-defined attributes anywhere (Recraft XML-parses the sheet)
+    for tag in re.findall(r"<svg[^>]*>", out):
+        for attr in ("viewBox", "width", "height", "x", "y"):
+            assert len(re.findall(rf'\b{attr}="', tag)) <= 1, f"{attr} re-defined in {tag}"
 
 
 def test_refine_sheet_prompt_anchors() -> None:
