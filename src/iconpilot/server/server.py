@@ -2003,6 +2003,57 @@ class ReviewHandler(BaseHTTPRequestHandler):
                 write_pack_atomic(self.pack_dir, pack)
                 return {"item": item, "count": len(items)}
 
+            if op == "revive":
+                # bring an archived comment back to the live list: reads
+                # .runs/<round>/feedback.json, appends a fresh live copy
+                import json as _json
+
+                src_round = str(data.get("round") or "")
+                fid = str(data.get("id") or "")
+                fb_file = runs_dir / src_round / "feedback.json"
+                if not src_round or not fb_file.is_file():
+                    raise ValueError(f"no archived feedback for round '{src_round}'")
+                try:
+                    archived = _json.loads(fb_file.read_text())
+                except (ValueError, OSError) as exc:
+                    raise ValueError(f"cannot read archived feedback: {exc}") from exc
+                src = next((i for i in archived if i.get("id") == fid), None)
+                if src is None:
+                    raise ValueError(f"no archived feedback item '{fid}' in {src_round}")
+                scope = src.get("scope") or "pack"
+                icon_id = src.get("icon")
+                if scope in ("icon", "variant"):
+                    if icon_id not in pack.get("icons", {}):
+                        raise ValueError(f"icon '{icon_id}' no longer in the pack")
+                    item = {
+                        "id": uuid.uuid4().hex[:8],
+                        "scope": scope,
+                        "icon": icon_id,
+                        "text": str(src.get("text", ""))[:500],
+                        "author": src.get("author") or "user",
+                        "round": cur_round,
+                        "created": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
+                        "revived_from": f"{src_round}/{fid}",
+                    }
+                    if scope == "variant":
+                        vid = src.get("variant")
+                        if vid not in pack["icons"][icon_id].get("variants", {}):
+                            raise ValueError(f"variant '{icon_id}#{vid}' no longer in the pack")
+                        item["variant"] = vid
+                else:
+                    item = {
+                        "id": uuid.uuid4().hex[:8],
+                        "scope": "pack",
+                        "text": str(src.get("text", ""))[:500],
+                        "author": src.get("author") or "user",
+                        "round": cur_round,
+                        "created": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
+                        "revived_from": f"{src_round}/{fid}",
+                    }
+                items.append(item)
+                write_pack_atomic(self.pack_dir, pack)
+                return {"item": item, "count": len(items)}
+
             fid = data.get("id") or ""
             item = next((i for i in items if i["id"] == fid), None)
             if item is None:
@@ -2109,6 +2160,15 @@ class ReviewHandler(BaseHTTPRequestHandler):
             data = self._body()
             try:
                 self._json(200, self._feedback_write("resolve", data))
+            except ValueError as exc:
+                self._json(400, {"error": str(exc)})
+            except Exception as exc:
+                self._json(500, {"error": str(exc)})
+            return
+        if url.path == "/api/feedback/revive":
+            data = self._body()
+            try:
+                self._json(200, self._feedback_write("revive", data))
             except ValueError as exc:
                 self._json(400, {"error": str(exc)})
             except Exception as exc:

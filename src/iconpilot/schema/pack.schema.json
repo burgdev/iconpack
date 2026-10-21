@@ -467,6 +467,10 @@
         "created": {
           "type": "string",
           "description": "ISO timestamp when the item was written."
+        },
+        "revived_from": {
+          "type": "string",
+          "description": "Provenance for revived items: '<round>/<id>' of the archived original."
         }
       },
       "required": [

@@ -853,3 +853,40 @@ def test_recraft_batch_saves_raw_sheets(server: _Server, srvpack: Path, monkeypa
     assert svgs[0].read_text().startswith("<svg")
     assert len(prompts) == 1
     assert "grid" in prompts[0].read_text()
+
+
+def test_feedback_revive_bring_archived_back_to_live(server: _Server, srvpack: Path) -> None:
+    """Revive copies an archived round's comment into the live list."""
+    # seed: round r001 with archived feedback, r002 current with none live
+    fb_file = srvpack / ".runs" / "r001" / "feedback.json"
+    fb_file.parent.mkdir(parents=True, exist_ok=True)
+    fb_file.write_text(
+        json.dumps(
+            [
+                {
+                    "id": "abc123",
+                    "scope": "variant",
+                    "icon": "hut",
+                    "variant": "mono",
+                    "text": "roof too flat",
+                    "author": "user",
+                    "round": "r001",
+                }
+            ]
+        )
+    )
+    (srvpack / ".runs" / "r002").mkdir(exist_ok=True)
+    code, data = server.req("POST", "/api/feedback/revive", {"round": "r001", "id": "abc123"})
+    assert code == 200, data
+    item = data["item"]
+    assert item["text"] == "roof too flat"
+    assert item["scope"] == "variant" and item["icon"] == "hut"
+    assert item["round"] == "r002"  # live for the current round
+    assert item["revived_from"] == "r001/abc123"
+    pack = json.loads((srvpack / "pack.json").read_text())
+    assert any(f["id"] == item["id"] for f in pack["feedback"])  # now live
+    # unknown id / round → 400
+    code, _ = server.req("POST", "/api/feedback/revive", {"round": "r001", "id": "nope"})
+    assert code == 400
+    code, _ = server.req("POST", "/api/feedback/revive", {"round": "r099", "id": "abc123"})
+    assert code == 400

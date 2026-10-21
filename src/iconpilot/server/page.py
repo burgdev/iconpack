@@ -918,6 +918,7 @@ footer { text-align:center; color:var(--muted); font-size:.75rem; padding:20px 0
             <span v-if="isNew(i)" class="chip new">new</span>
             <span class="bubble-time">{{ relTime(i.created) }}</span>
             <button v-if="!r.archived" class="subtle armed-x" title="resolve (done / addressed)" @click="resolveFeedback(i)">✕</button>
+            <button v-if="r.archived" class="subtle armed-x" title="make live again — carries into the next draft" @click="reviveFeedback(i, r.round)">↺</button>
           </div>
         </template>
         <p v-if="!fbChat().length" class="muted">no comments yet for this scope</p>
@@ -1729,6 +1730,13 @@ async function addFeedback() {
       body: JSON.stringify({ scope: d.scope, icon: d.icon, variant: d.variant, text: d.text.trim(), author: 'user' }) });
     d.text = ''; await load(); chatToBottom();
   } catch (e) { flash('feedback: ' + e.message, false); }
+}
+async function reviveFeedback(i, round) {
+  try {
+    await api('/api/feedback/revive', { method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ round, id: i.id }) });
+    await load(); chatToBottom();
+  } catch (e) { flash('revive: ' + (e.d?.error || e.message), false); }
 }
 async function resolveFeedback(i) {
   try {
@@ -3081,7 +3089,7 @@ const App = {
       showDebug, debugCopy, openNextDlg, addVariantBulk, addCustomStyle, saveRecraftDefaults,
       GATE_HELP, styleRules, stylePalette, ruleTitle, styleUsageCount, isPostponed, togglePostpone, applyAndNext, colState, toggleCol, toggleAll, usedStyles, setTab, iconSuggest, pickSuggestion, addNewIcon, startRoundWithNew,
       styleSummary, isOwnRef, editStyle, toggleGate, saveStyleRules, removeStyle, addStyleToPack, pickRefFile, removeRef,
-      vectorModels, curatedNames, styleDetail, editCustomStyle, recraftGenerate, commitResults, iconStylePalette, toggleIconColor, waitingForAgent, waitTargets, refineFeedback, refineResume, adoptPreview, adoptCommit, openRefineDlg, hasSrc, refinePreview, fbSrc, refineSel, refineMissing, refineUnits, refineGrid, refineSetAll, refineCellAll, refineToggleCell, refineRowState, refineToggleRow2, refineColState, refineToggleCol2, refineActive, refineReady, refineEst, refineElapsed, refineProgress, refineGenerate, openStyleRc, styleRcCreate, styleRcSave, openBatchDlg, batchGrid, batchCellAll, batchToggleCell, batchRowState, batchToggleRow, batchColState, batchToggleCol, batchSelAll, batchSelCount, batchTotal, batchSheets, batchDebug, batchEst, batchGenerate, batchElapsed, batchProgress, planCheck, dropResult, keptCount, totalCount, keepAll,
+      vectorModels, curatedNames, styleDetail, editCustomStyle, recraftGenerate, commitResults, iconStylePalette, toggleIconColor, waitingForAgent, waitTargets, reviveFeedback, refineFeedback, refineResume, adoptPreview, adoptCommit, openRefineDlg, hasSrc, refinePreview, fbSrc, refineSel, refineMissing, refineUnits, refineGrid, refineSetAll, refineCellAll, refineToggleCell, refineRowState, refineToggleRow2, refineColState, refineToggleCol2, refineActive, refineReady, refineEst, refineElapsed, refineProgress, refineGenerate, openStyleRc, styleRcCreate, styleRcSave, openBatchDlg, batchGrid, batchCellAll, batchToggleCell, batchRowState, batchToggleRow, batchColState, batchToggleCol, batchSelAll, batchSelCount, batchTotal, batchSheets, batchDebug, batchEst, batchGenerate, batchElapsed, batchProgress, planCheck, dropResult, keptCount, totalCount, keepAll,
 
     };
   },
