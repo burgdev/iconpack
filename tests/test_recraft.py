@@ -1184,3 +1184,90 @@ def test_refine_grid_debug_flow() -> None:
             {"targets": ["sail#flat", "campfire#flat"], "takes": 2, "debug": True}
         )
         assert len(out1["calls"]) == 2  # one call per icon
+
+
+def test_next_carry_keeps_survivors_drops_rejects(tmp_path: Path) -> None:
+    """--carry: surviving takes move into the new round; rejects and 0-ratings stay behind."""
+    d = _pack(tmp_path)
+    runner.invoke(app, ["next", str(d)])
+    cdir = d / ".runs" / "r001" / "flat" / "sun"
+    cdir.mkdir(parents=True)
+    for n in ("r1.svg", "r2.svg", "r3.svg"):
+        (cdir / n).write_text(f"<svg>{n}</svg>")
+    # decisions: r2 rejected, r3 rated 0, r1 rated 7
+    (d / ".runs" / "r001" / "decisions.json").write_text(
+        json.dumps(
+            {
+                "round": "r001",
+                "icons": {
+                    "sun/flat": {
+                        "items": [
+                            {"rate_cand": "r1", "rate_n": "7"},
+                            {"cand": "r2", "action": "no"},
+                            {"rate_cand": "r3", "rate_n": "0"},
+                        ]
+                    }
+                },
+            }
+        )
+    )
+    r = runner.invoke(app, ["next", str(d), "--carry"])
+    assert r.exit_code == 0, r.output
+    assert "carried takes" in r.output
+    new = d / ".runs" / "r002" / "flat" / "sun"
+    assert (new / "r1.svg").is_file()  # rated 7 → survives
+    assert not (new / "r2.svg").is_file()  # rejected → dropped
+    assert not (new / "r3.svg").is_file()  # rated 0 → dropped
+    assert (cdir / "r2.svg").is_file()  # history keeps everything
+
+
+def test_context_embeds_current_candidates_with_verdicts(tmp_path: Path) -> None:
+    """context includes prior-round takes + verdicts — feedback names take ids."""
+    d = _pack(tmp_path)
+    runner.invoke(app, ["next", str(d)])
+    cdir = d / ".runs" / "r001" / "flat" / "sun"
+    cdir.mkdir(parents=True)
+    (cdir / "r1.svg").write_text('<svg viewBox="0 0 24 24"><path d="M2 2"/></svg>')
+    (cdir / "r2.svg").write_text('<svg viewBox="0 0 24 24"><path d="M4 4"/></svg>')
+    (d / ".runs" / "r001" / "decisions.json").write_text(
+        json.dumps(
+            {
+                "round": "r001",
+                "icons": {"sun/flat": {"items": [{"rate_cand": "r2", "rate_n": "8"}]}},
+            }
+        )
+    )
+    r = runner.invoke(app, ["context", str(d), "--icon", "sun", "--variant", "flat", "--json"])
+    assert r.exit_code == 0, r.output
+    ctx = json.loads(r.output)
+    cands = ctx["current_candidates"]
+    assert len(cands) == 2
+    by_id = {c["id"]: c for c in cands}
+    assert by_id["r1"]["verdict"] == "unrated"
+    assert by_id["r2"]["verdict"] == "rated 8/10"
+    assert 'd="M4 4"' in by_id["r2"]["svg"]  # full SVG source embedded
+
+
+def test_adopt_cli_reports_fixes_and_gate(tmp_path: Path) -> None:
+    """adopt converts a raw seed and reports residuals instead of failing."""
+    from tests.test_pack_schema import SPEC, example_pack
+
+    d = tmp_path / "adoptpack"
+    d.mkdir()
+    pack = example_pack()
+    pack["spec"] = json.loads(json.dumps(SPEC))
+    (d / "pack.json").write_text(json.dumps(pack))
+    seed = d / "seed.svg"
+    seed.write_text(
+        '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24">'
+        '<rect x="0" y="0" width="24" height="24" fill="#ffffff"/>'
+        '<g transform="translate(-2 -2) scale(1.2)">'
+        '<path fill="rgb(40,80,60)" d="M5 5 L15 5 L15 15 Z"/>'
+        "</g></svg>"
+    )
+    r = runner.invoke(
+        app,
+        ["adopt", str(seed), "--pack", str(d), "--icon", "hut", "--variant", "mono"],
+    )
+    assert r.exit_code == 0, r.output
+    assert "fixes applied" in r.output or "gate: clean" in r.output

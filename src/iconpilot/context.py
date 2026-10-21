@@ -155,6 +155,47 @@ def build_context(
                     )
     if pinned_refs:
         ctx["pinned_references"] = pinned_refs
+    # current candidates from the latest round, with their verdicts —
+    # feedback references take ids (r1/r2…); a drafter without these SVGs
+    # cannot act on "r2 is good, mix in r1"
+    if runs_dir.is_dir():
+        ctx_runs = sorted(p.name for p in runs_dir.glob("r*") if p.is_dir())
+        if ctx_runs:
+            run = ctx_runs[-1]
+            verdicts: dict[str, str] = {}
+            dec_file = runs_dir / run / "decisions.json"
+            if dec_file.is_file():
+                try:
+                    dec = json.loads(dec_file.read_text())
+                    for i in (
+                        dec.get("icons", {}).get(f"{icon_id}/{variant_id}", {}).get("items", [])
+                    ):
+                        if "action" in i:
+                            verdicts[i["cand"]] = (
+                                "approved"
+                                if i["action"] == "ok"
+                                else "rejected"
+                                if i["action"] == "no"
+                                else str(i["action"])
+                            )
+                        elif "rate_cand" in i:
+                            verdicts[i["rate_cand"]] = f"rated {i['rate_n']}/10"
+                except (ValueError, OSError):
+                    pass
+            cdir = runs_dir / run / variant_id / icon_id
+            if cdir.is_dir():
+                cands = []
+                for svg in sorted(cdir.glob("*.svg"))[:6]:
+                    cands.append(
+                        {
+                            "id": svg.stem,
+                            "verdict": verdicts.get(svg.stem, "unrated"),
+                            "svg": svg.read_text(),
+                        }
+                    )
+                if cands:
+                    ctx["current_candidates"] = cands
+                    ctx["current_candidates_round"] = run
     if variant.get("comments"):
         ctx["comments"] = variant["comments"]
     if variant.get("rejected_ideas"):

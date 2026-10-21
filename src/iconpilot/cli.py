@@ -230,18 +230,95 @@ def open_variants(pack_data: dict) -> list[tuple[str, str, str]]:
     return out
 
 
+@app.command(name="adopt")
+def adopt_cmd(
+    svg: str = typer.Argument(..., help="Seed SVG file to convert (e.g. a Recraft take)."),
+    pack: str = typer.Option(..., "--pack", help="Pack directory or pack.json path."),
+    icon: str = typer.Option(..., "--icon", help="Target icon id."),
+    variant: str = typer.Option(..., "--variant", help="Target variant id."),
+    out: str = typer.Option(None, "--out", help="Write the converted SVG here instead of stdout."),
+    write: bool = typer.Option(
+        False,
+        "--write",
+        help="Write into the current round as a new candidate (r<next>.svg) instead of stdout.",
+    ),
+) -> None:
+    """Deterministically adopt a seeded SVG into the pack contract.
+
+    Bakes transforms, snaps grid/precision, collapses gradients, snaps the
+    palette, enforces the node budget (best-effort ladder). Soft-gated:
+    residual gate findings are reported, never silently ignored.
+    """
+    from iconpilot.adopt import adopt_svg
+
+    try:
+        pack_data, styles = _load_pack_arg(pack)
+    except PackError as exc:
+        typer.secho(str(exc), fg=typer.colors.RED, err=True)
+        raise typer.Exit(code=2) from exc
+    var = pack_data.get("icons", {}).get(icon, {}).get("variants", {}).get(variant)
+    if var is None or "style" not in var:
+        typer.secho(f"no authored variant {icon}#{variant}", fg=typer.colors.RED, err=True)
+        raise typer.Exit(code=2)
+    src = Path(svg)
+    if not src.is_file():
+        typer.secho(f"no such file: {src}", fg=typer.colors.RED, err=True)
+        raise typer.Exit(code=2)
+    converted, fixes, gate_errors = adopt_svg(src.read_text(), styles[var["style"]], pack_data)
+
+    if write:
+        pack_dir = resolve_pack_dir(pack)
+        runs_dir = pack_dir / ".runs"
+        runs = sorted(p.name for p in runs_dir.glob("r*")) if runs_dir.is_dir() else []
+        if not runs:
+            typer.secho("no round yet — run `iconpilot next` first", fg=typer.colors.RED, err=True)
+            raise typer.Exit(code=2)
+        cdir = runs_dir / runs[-1] / variant / icon
+        cdir.mkdir(parents=True, exist_ok=True)
+        n = len(list(cdir.glob("r*.svg"))) + 1
+        dst = cdir / f"r{n}.svg"
+        dst.write_text(converted)
+        typer.secho(f"adopted → {dst}", fg=typer.colors.GREEN)
+    elif out:
+        Path(out).write_text(converted)
+        typer.secho(f"adopted → {out}", fg=typer.colors.GREEN)
+    else:
+        typer.echo(converted)
+
+    if fixes:
+        typer.secho(f"fixes applied ({len(fixes)}):", fg=typer.colors.CYAN)
+        for f in fixes:
+            typer.secho(f"  - {f}", fg=typer.colors.CYAN)
+    if gate_errors:
+        typer.secho("residual gate findings (soft — user decides):", fg=typer.colors.YELLOW)
+        for e in gate_errors:
+            typer.secho(f"  ! {e}", fg=typer.colors.YELLOW)
+    if not gate_errors:
+        typer.secho("gate: clean", fg=typer.colors.GREEN)
+
+
 @app.command(name="next")
 def next_round(
     pack: str,
     only: str = typer.Option(
         None, "--only", help="Focus mode: comma list of icon#variant keys to draft."
     ),
+    carry: bool = typer.Option(
+        False,
+        "--carry",
+        help=(
+            "Copy the previous round's surviving takes (not rejected, not rated 0) "
+            "of open variants into the new round — the baseline never regresses; "
+            "new drafts compete against the best so far."
+        ),
+    ),
 ) -> None:
     """Start the next round: fresh run dir, printed open work, history untouched.
 
     Tooling defines what is open: approved/locked variants are excluded, and
     previous comments/decisions stay in their .runs/<round>/ dirs (history).
-    The LLM drafts only what this command lists.
+    The LLM drafts only what this command lists. --carry keeps the previous
+    round's surviving takes in play.
     """
     try:
         pack_data, _styles = _load_pack_arg(pack)
@@ -308,9 +385,49 @@ def next_round(
         + "\n"
     )
 
+    carried_svgs = 0
+    if carry and runs:
+        prev = runs[-1]
+        dec: dict = {}
+        dec_file = runs_dir / prev / "decisions.json"
+        if dec_file.is_file():
+            try:
+                dec = json.loads(dec_file.read_text()).get("icons", {})
+            except (ValueError, OSError):
+                dec = {}
+        open_set = set(open_keys)
+        for var_dir in sorted((runs_dir / prev).glob("*")):
+            if not var_dir.is_dir():
+                continue
+            for icon_dir in sorted(var_dir.glob("*")):
+                key = f"{icon_dir.name}#{var_dir.name}"
+                if key not in open_set:
+                    continue
+                verdicts = dec.get(f"{icon_dir.name}/{var_dir.name}", {}).get("items", [])
+                drop = set()
+                for it in verdicts:
+                    if it.get("action") == "no":
+                        drop.add(str(it.get("cand")))
+                    m_rate = str(it.get("rate_n") or "")
+                    if m_rate.isdigit() and int(m_rate) == 0:
+                        drop.add(str(it.get("rate_cand")))
+                dst = runs_dir / run / var_dir.name / icon_dir.name
+                for svg in sorted(icon_dir.glob("*.svg")):
+                    if svg.stem in drop:
+                        continue
+                    dst.mkdir(parents=True, exist_ok=True)
+                    (dst / svg.name).write_bytes(svg.read_bytes())
+                    carried_svgs += 1
+
     typer.secho(
         f"── round {run} started (history: {len(runs)} round(s) kept)", fg=typer.colors.GREEN
     )
+    if carry:
+        typer.secho(
+            f"  carried takes from {runs[-1] if runs else '—'}: {carried_svgs} svg(s) "
+            "(surviving — rejects and 0-rated dropped)",
+            fg=typer.colors.CYAN,
+        )
     if carried:
         typer.secho(f"  feedback carried into {run}: {len(carried)} item(s)", fg=typer.colors.CYAN)
         for i in carried:

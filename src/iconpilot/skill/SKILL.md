@@ -100,10 +100,18 @@ and style numbers always win over DESIGN.md prose).
 
 ```
 1. CONTEXT   iconpilot context <pack> --icon hut --variant mono
-             → deterministic brief + style + gate thresholds + anchor SVGs.
+             → deterministic brief + style + gate thresholds + anchor SVGs
+             + current_candidates: the previous round's takes WITH their
+             verdicts and full SVG source. READ THEM — user feedback names
+             take ids ("r2 is good, mix in r1"); you cannot act on that
+             without the referenced SVGs in front of you.
 2. DRAFT     You (or a cheap subagent) write N candidate SVGs to
              <pack>/.runs/<round>/<variant>/<icon>/<cand>.svg (a1, a2, …).
              Follow the context exactly: style_words, avoid, node budget.
+             ITERATE, don't restart: the highest-rated prior take is the
+             baseline. New takes compete against it — vary from it per the
+             feedback, never ignore it. A round that drops every previous
+             take is a regression, not a draft.
 3. GATE      iconpilot gate <pack>/.runs/<round> --pack <pack>
              → <cand>.gate.json beside every SVG. Fix failures and re-gate,
              but bounded: after ~2 failed fix attempts on a candidate, drop
@@ -153,14 +161,34 @@ and style numbers always win over DESIGN.md prose).
 6b. REPEAT   When `wait` returns:
              a) read .runs/<round>/decisions.json — applied items + instructions
              b) `iconpilot status <pack>` — see ✎edited markers and new notes
-             c) re-run `context` for every variant you'll draft next
-             d) act on requests (`more N`, `like`, `restart`) and continue    `iconpilot status <pack>` shows what's outstanding (todo,
+             c) re-run `context` for every variant you'll draft next —
+                current_candidates now shows the rated takes; iterate on them
+             d) `iconpilot next <pack> --carry` — surviving takes (rejects and
+                0-ratings dropped) stay in play; the user never loses the
+                previous best while you draft alternatives
+             e) act on requests (`more N`, `like`, `restart`) and continue    `iconpilot status <pack>` shows what's outstanding (todo,
              in_review, `stale` — stale variants must be re-run; `✎edited`
              means the icons/ file changed after approval). Loop until every
              variant is approved; then export.
 ```
 
 Round layout: `.runs/<round>/<variant>/<icon>/<cand>.svg` (r001, r002, …).
+
+## Seeded or externally drafted candidates (Recraft, other models)
+
+Raw generator output (Recraft SVGs, raster-derived paths, other-model SVGs)
+does NOT match the pack contract: nested `<g transform>` groups, `rgb()`
+fills, white background rects, oversized node counts, wrong design grid. The
+gate will (correctly) flag all of it.
+
+- Route seeded output through the deterministic **adopt** pipeline (review
+  page ✅ adopt button, or `iconpilot adopt`) — it bakes transforms, snaps
+  the grid and precision, collapses gradients, snaps the palette and enforces
+  the node budget. Soft-gated: residuals are reported, the user decides.
+- **Never bend the pack to fit raw output** (changing spec viewBox, raising
+  node budgets, or extending the palette to accept a seed) — that inverts
+  who owns the contract. If a seed cannot be adopted cleanly, report the
+  residuals; the user decides.
 
 ## Feedback — the per-round todo list
 
