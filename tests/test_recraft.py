@@ -1101,8 +1101,6 @@ def test_refine_sheet_prompt_anchors() -> None:
 
 def test_refine_grid_debug_flow() -> None:
     """Server grid refine: one call per sheet, cells mapped back per icon."""
-    from types import SimpleNamespace
-
     from iconpilot.server.server import ReviewHandler
 
     with tempfile.TemporaryDirectory() as td:
@@ -1169,9 +1167,9 @@ def test_refine_grid_debug_flow() -> None:
             ],
         }
         (pack_dir / "pack.json").write_text(json.dumps(pack))
-        self_ns = SimpleNamespace(pack_dir=pack_dir)
-        out = ReviewHandler._recraft_refine(
-            self_ns,
+        h = ReviewHandler.__new__(ReviewHandler)  # skip socket init
+        h.pack_dir = pack_dir
+        out = h._recraft_refine(
             {"targets": ["sail#flat", "campfire#flat"], "grid": 2, "takes": 2, "debug": True},
         )
         assert out["grid"] == 2
@@ -1182,7 +1180,7 @@ def test_refine_grid_debug_flow() -> None:
         assert "change: boom longer" in call["prompt"] and "change: flame smaller" in call["prompt"]
         assert "items" not in out  # debug preview only
         # per-icon flow unchanged when grid=0
-        out1 = ReviewHandler._recraft_refine(
-            self_ns, {"targets": ["sail#flat", "campfire#flat"], "takes": 2, "debug": True}
+        out1 = h._recraft_refine(
+            {"targets": ["sail#flat", "campfire#flat"], "takes": 2, "debug": True}
         )
         assert len(out1["calls"]) == 2  # one call per icon

@@ -551,7 +551,14 @@ footer { text-align:center; color:var(--muted); font-size:.75rem; padding:20px 0
     </section>
     <section v-else>
       <h2>Current round</h2>
-      <p class="muted">no candidates in {{ S.viewRound || S.round || 'this pass' }} — the status above shows agent progress.</p>
+      <p class="muted">no candidates in {{ S.viewRound || S.round || 'this pass' }} — wait for the agent, or start picking yourself.</p>
+      <div v-if="(S.recraftReady || S.debug) && !isViewing()" class="row" style="justify-content:center; margin-top:10px">
+        <button class="subtle" @click="openBatchDlg()"
+                title="Draft every open icon with Recraft — same icons on every sheet, one take per sheet. Review before anything is written; the first round opens automatically.">
+          <span class="ic" v-html="IC.bolt"></span>
+          {{ S.round ? 'seed with Recraft' : 'seed the first round with Recraft' }}
+        </button>
+      </div>
     </section>
 
     <div class="composer" v-show="!waitingForAgent()">

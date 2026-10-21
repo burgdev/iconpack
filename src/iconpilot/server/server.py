@@ -758,6 +758,19 @@ class ReviewHandler(BaseHTTPRequestHandler):
 
         self._json(404, {"error": "no such route"})
 
+    def _ensure_round(self) -> str:
+        """Latest run id; starts round one when the pack has none yet.
+
+        Recraft seeding is a first-class way to open a pack — waiting for
+        the agent should not be required to pick the first candidates.
+        """
+        runs_dir = self.pack_dir / ".runs"
+        runs = sorted(p.name for p in runs_dir.glob("r*")) if runs_dir.is_dir() else []
+        if runs:
+            return runs[-1]
+        out = self._start_round(None)
+        return str(out.get("round") or "r001")
+
     def _start_round(self, only: list[str] | None = None) -> dict:
         """Create the next run dir; archive live feedback into it (history).
 
@@ -1113,10 +1126,7 @@ class ReviewHandler(BaseHTTPRequestHandler):
         with pack_lock(self.pack_dir):
             pack, styles = load_pack(self.pack_dir / "pack.json")
         runs_dir = self.pack_dir / ".runs"
-        runs = sorted(p.name for p in runs_dir.glob("r*")) if runs_dir.is_dir() else []
-        run = runs[-1] if runs else None
-        if not run:
-            raise ValueError("no round yet — start a pass first")
+        run = self._ensure_round()
 
         wrote_all, pass_all, n_all = [], 0, 0
         with pack_lock(self.pack_dir):
@@ -1266,10 +1276,7 @@ class ReviewHandler(BaseHTTPRequestHandler):
         n = plan["n"]
 
         runs_dir = self.pack_dir / ".runs"
-        runs = sorted(p.name for p in runs_dir.glob("r*")) if runs_dir.is_dir() else []
-        run = runs[-1] if runs else None
-        if not run:
-            raise ValueError("no round yet — POST /api/round/new first")
+        run = self._ensure_round()
         # count + write + cost record under the pack lock: closes the concurrent
         # draft race (two tabs double-firing the same icon/variant).
         import json as _json
@@ -1510,10 +1517,7 @@ class ReviewHandler(BaseHTTPRequestHandler):
         with pack_lock(self.pack_dir):
             pack, styles = load_pack(self.pack_dir / "pack.json")
         runs_dir = self.pack_dir / ".runs"
-        runs = sorted(p.name for p in runs_dir.glob("r*") if p.is_dir())
-        run = runs[-1] if runs else None
-        if not run:
-            raise ValueError("no round yet — start a pass first")
+        run = self._ensure_round()
 
         items: list[dict] = []
         skipped: list[dict] = []
