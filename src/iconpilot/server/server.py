@@ -758,6 +758,36 @@ class ReviewHandler(BaseHTTPRequestHandler):
 
         self._json(404, {"error": "no such route"})
 
+    def _save_sheets(
+        self,
+        run: str,
+        tag: str,
+        grid: int,
+        sheets: list[str],
+        prompt: str,
+        input_svg: str | None = None,
+    ) -> None:
+        """Keep the raw grid SVGs the pack was seeded from.
+
+        Split cells become candidates, but the un-split sheet (cell layout,
+        take numbering, generator quirks) is often exactly what a later
+        refine or LLM pass wants. Stored under .runs/<round>/sheets/ with a
+        prompt sidecar so the cell→icon mapping stays recoverable.
+        """
+        import re as _re
+
+        sheets_dir = self.pack_dir / ".runs" / run / "sheets"
+        sheets_dir.mkdir(parents=True, exist_ok=True)
+        safe_tag = _re.sub(r"[^a-z0-9_.-]", "-", tag.lower())
+        g = int(grid)
+        if input_svg:
+            (sheets_dir / f"{safe_tag}-{g}x{g}-input.svg").write_text(input_svg)
+        for i, s in enumerate(sheets):
+            (sheets_dir / f"{safe_tag}-{g}x{g}-t{i + 1}.svg").write_text(s)
+        prompt_file = sheets_dir / f"{safe_tag}-{g}x{g}.prompt.txt"
+        if not prompt_file.is_file():
+            prompt_file.write_text(prompt)
+
     def _ensure_round(self) -> str:
         """Latest run id; starts round one when the pack has none yet.
 
@@ -1630,6 +1660,9 @@ class ReviewHandler(BaseHTTPRequestHandler):
                     sheets = rc.refine(
                         token, grid_svg, prompt, strength, model=model, n=takes, size=g * 512
                     )
+                    self._save_sheets(
+                        run, f"refine-{style_id}", g, sheets, prompt, input_svg=grid_svg
+                    )
                     split_sheets = [rc.split_sheet(s, g) for s in sheets]
                     for k, c_ in enumerate(chunk):
                         results = []
@@ -1844,6 +1877,8 @@ class ReviewHandler(BaseHTTPRequestHandler):
                         )
                     else:
                         raise
+                run_now = self._ensure_round()
+                self._save_sheets(run_now, f"draft-{style_id}", grid, sheets, prompt)
                 split_sheets = [rc.split_sheet(s, grid, target=24.0) for s in sheets]
                 for k, (iid, vid) in enumerate(chunk):
                     results = []

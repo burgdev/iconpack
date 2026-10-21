@@ -1271,3 +1271,81 @@ def test_adopt_cli_reports_fixes_and_gate(tmp_path: Path) -> None:
     )
     assert r.exit_code == 0, r.output
     assert "fixes applied" in r.output or "gate: clean" in r.output
+
+
+def test_refine_grid_saves_input_and_output_sheets(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Grid refine keeps the composed input sheet + returned sheets + prompt."""
+    import iconpilot.recraft as rc
+    from iconpilot.server.server import ReviewHandler
+
+    with tempfile.TemporaryDirectory() as td:
+        pack_dir = Path(td)
+        (pack_dir / ".runs" / "r001" / "flat" / "sail").mkdir(parents=True)
+        (pack_dir / ".runs" / "r001" / "flat" / "sail" / "r1.svg").write_text(
+            '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48"><path d="M4 4L44 44"/></svg>'
+        )
+        pack = {
+            "schema": 2,
+            "name": "sheets-test",
+            "version": "0.1.0",
+            "provenance": {"created_by": "user"},
+            "spec": {
+                "viewBox": "0 0 48 48",
+                "live_area": {"padding": 4},
+                "stroke": {"width": 2, "linecap": "round", "linejoin": "round"},
+                "fill": "none",
+                "allowed_elements": [
+                    "path",
+                    "circle",
+                    "rect",
+                    "line",
+                    "polyline",
+                    "polygon",
+                    "ellipse",
+                ],
+                "precision": 0.5,
+            },
+            "styles": {},
+            "icons": {
+                "sail": {
+                    "brief": "a sailboat",
+                    "variants": {"flat": {"style": "color-flat", "status": "todo"}},
+                },
+            },
+            "feedback": [
+                {
+                    "id": "fb1",
+                    "scope": "variant",
+                    "icon": "sail",
+                    "variant": "flat",
+                    "round": "r001",
+                    "text": "boom longer",
+                    "author": "user",
+                },
+            ],
+        }
+        (pack_dir / "pack.json").write_text(json.dumps(pack))
+
+        def fake_refine(
+            token, svg_text, prompt, strength, model="recraftv4_1_vector", n=2, size=512
+        ):
+            return [
+                (
+                    '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024">'
+                    '<path d="M0 0h512v512H0z"/></svg>'
+                )
+            ] * n
+
+        monkeypatch.setattr(rc, "resolve_token", lambda models_file=None: "tok")
+        monkeypatch.setattr(rc, "refine", fake_refine)
+        h = ReviewHandler.__new__(ReviewHandler)
+        h.pack_dir = pack_dir
+        out = h._recraft_refine({"targets": ["sail#flat"], "grid": 2, "takes": 2})
+        assert out["grid"] == 2
+        sheets = pack_dir / ".runs" / "r001" / "sheets"
+        names = sorted(x.name for x in sheets.iterdir())
+        assert any("-input.svg" in n for n in names)  # composed source grid
+        assert any("-t1.svg" in n for n in names) and any("-t2.svg" in n for n in names)
+        assert any(n.endswith(".prompt.txt") for n in names)
+        inp = next(x for x in sheets.iterdir() if "-input" in x.name)
+        assert 'x="0" y="0" width="512"' in inp.read_text()  # real composed grid

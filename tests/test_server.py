@@ -823,3 +823,33 @@ def test_api_run_filters_orphan_candidates(tmp_path) -> None:
     assert ("sail", "mono") in served
     assert ("campfire", "flat") in served
     assert ("campfire", "mono") not in served  # orphan filtered
+
+
+def test_recraft_batch_saves_raw_sheets(server: _Server, srvpack: Path, monkeypatch) -> None:
+    """Pack draft keeps the un-split grid sheets + prompt for later reuse."""
+    import iconpilot.recraft as rc
+
+    monkeypatch.setattr(rc, "resolve_token", lambda models_file=None: "tok")
+
+    def fake_generate(
+        token, prompt, n=4, style_id=None, model=None, reference_urls=None, curated_style=None
+    ):
+        svg = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024"><path d="M0 0h512v512H0z"/></svg>'
+        return [svg] * n
+
+    monkeypatch.setattr(rc, "generate", fake_generate)
+    pj = srvpack / "pack.json"
+    pack = json.loads(pj.read_text())
+    pack["icons"]["hut"]["variants"]["mono"]["status"] = "todo"
+    pj.write_text(json.dumps(pack))
+    code, data = server.req("POST", "/api/recraft-batch", {"targets": ["hut#mono"], "takes": 2})
+    assert code == 200, data
+    runs = sorted(p.name for p in (srvpack / ".runs").glob("r*"))
+    sheets_dir = srvpack / ".runs" / runs[-1] / "sheets"
+    svgs = sorted(sheets_dir.glob("*.svg"))
+    prompts = sorted(sheets_dir.glob("*.prompt.txt"))
+    assert len(svgs) == 2  # one per take
+    assert svgs[0].name.startswith("draft-mono-line-")
+    assert svgs[0].read_text().startswith("<svg")
+    assert len(prompts) == 1
+    assert "grid" in prompts[0].read_text()
