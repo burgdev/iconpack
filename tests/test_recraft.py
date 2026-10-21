@@ -1033,7 +1033,7 @@ def test_adopt_svg_deterministic_pipeline(tmp_path) -> None:
     )
     style = resolve_styles({})["color-flat"]
     pack = {"icons": {}, "spec": {"viewBox": "0 0 48 48", "precision": 0.5}}
-    out, fixes, _errors = adopt_svg(seed, style, pack)
+    out, fixes, _errors, kept = adopt_svg(seed, style, pack)
     assert "0 0 48 48" in out  # style design grid
     assert "<g" not in out and "transform=" not in out  # baked
     assert "url(" not in out and "linearGradient" not in out  # gradients collapsed
@@ -1041,7 +1041,11 @@ def test_adopt_svg_deterministic_pipeline(tmp_path) -> None:
 
     fills = set(re.findall(r'fill="([^"]+)"', out))
     pal = {c.lower() for c in style.palette}
-    assert fills <= pal, fills  # everything snapped to the palette
+    # near-duplicates snap into the palette; distinct seed colors stay
+    # verbatim and are returned for registration into icon.colors
+    assert fills <= pal | set(kept), fills
+    assert "#123456" in fills and "#123456" in kept  # distinct → kept verbatim
+    assert "kept" in "; ".join(fixes)
     assert any("background" in f for f in fixes)
     assert any("transform" in f for f in fixes)
     assert out.count("<path") >= 2
@@ -1349,3 +1353,27 @@ def test_refine_grid_saves_input_and_output_sheets(monkeypatch: pytest.MonkeyPat
         assert any(n.endswith(".prompt.txt") for n in names)
         inp = next(x for x in sheets.iterdir() if "-input" in x.name)
         assert 'x="0" y="0" width="512"' in inp.read_text()  # real composed grid
+
+
+def test_adopt_keeps_distinct_seed_colors_verbatim() -> None:
+    """Adopt registers the art's colors; only near-duplicates snap."""
+    from iconpilot.adopt import adopt_svg
+    from iconpilot.styles import resolve_styles
+
+    seed = (
+        '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24">'
+        '<path fill="#5b8fb5" d="M2 2H22V22H2Z"/>'  # distinct blue — must stay
+        '<path fill="#3f7f5f" d="M4 4H10V10H4Z"/>'  # distinct green — must stay
+        '<path fill="#7fc97f" d="M12 12H18V18H12Z"/>'  # near #7ecc7e palette dup
+        "</svg>"
+    )
+    style = resolve_styles({"palette": ["#7ecc7e", "#cccccc"]}) if False else None
+    from dataclasses import replace
+
+    base = resolve_styles({})["color-flat"]
+    style = replace(base, palette=["#7ecc7e", "#cccccc"], max_nodes=200)
+    pack = {"icons": {}, "spec": {"viewBox": "0 0 48 48", "precision": 0.5}}
+    out, fixes, _errs, kept = adopt_svg(seed, style, pack, gate_check=False)
+    assert "#5b8fb5" in out and "#3f7f5f" in out  # verbatim, not snapped
+    assert "#5b8fb5" in kept and "#3f7f5f" in kept
+    assert "kept 2 seed color(s)" in "; ".join(fixes)

@@ -211,21 +211,36 @@ def _hex_to_rgb(h: str) -> tuple[int, int, int] | None:
     return named.get(h)
 
 
-def _snap_color(value: str, palette: list[tuple[int, int, int]]) -> tuple[str, bool]:
-    """Snap a color string to the nearest palette entry. → (hex, changed)."""
+_NEAR_RGB_DIST = 24 * 24  # near-duplicate colors dedupe; distinct colors stay
+
+
+def _snap_color(value: str, palette: list[tuple[int, int, int]]) -> tuple[str, bool, bool]:
+    """Snap a color to the palette ONLY when it is a near-duplicate.
+
+    Adopting user-approved art: the art is the source of truth. Distinct
+    colors are kept verbatim (returned in kept) so they can be registered
+    into the icon's color list; only palette-distance dedupe happens here.
+    → (hex, snapped_to_palette, kept_verbatim).
+    """
     rgb = _hex_to_rgb(value)
     if rgb is None:
-        return value, False
+        return value, False, False
     if rgb in palette:
-        return "#{:02x}{:02x}{:02x}".format(*rgb), False
+        return "#{:02x}{:02x}{:02x}".format(*rgb), False, False
     best = min(palette, key=lambda p: sum((a - b) ** 2 for a, b in zip(p, rgb)))
-    return "#{:02x}{:02x}{:02x}".format(*tuple(best)), True
+    if sum((a - b) ** 2 for a, b in zip(best, rgb)) <= _NEAR_RGB_DIST:
+        return "#{:02x}{:02x}{:02x}".format(*tuple(best)), True, False
+    return "#{:02x}{:02x}{:02x}".format(*rgb), False, True
 
 
 def adopt_svg(
     svg_text: str, style, pack: dict, gate_check: bool = True
-) -> tuple[str, list[str], list[str]]:
-    """Deterministic seed → pack-icon conversion. Returns (svg, fixes, gate_errors).
+) -> tuple[str, list[str], list[str], list[str]]:
+    """Deterministic seed → pack-icon conversion.
+
+    Returns (svg, fixes, gate_errors, kept_colors). kept_colors are the
+    seed's distinct colors kept verbatim — register them into the icon's
+    color list so the gate's color-subset check passes with the TRUE colors.
 
     Never raises on content — geometry that can't meet the node budget is
     reported, not blocked (approval is the user's).
@@ -323,6 +338,7 @@ def adopt_svg(
 
     # ── colors ──
     snapped = 0
+    kept_colors: set[str] = set()
     paths_out: list[tuple[str, list[tuple[float, float]]]] = []
     for fill, pts in drawn:
         if mono:
@@ -334,14 +350,18 @@ def adopt_svg(
             rep = grad_colors.get(gid)
             f = "#{:02x}{:02x}{:02x}".format(*tuple(rep)) if rep else "#000000"
         if f and f.lower() != "none" and palette:
-            f2, changed = _snap_color(f, palette)
+            f2, changed, kept_new = _snap_color(f, palette)
             snapped += changed
+            if kept_new:
+                kept_colors.add(f2)
             f = f2
         paths_out.append((f, pts))
     if mono:
         fixes.append("mono: fills → currentColor")
     elif snapped:
-        fixes.append(f"snapped {snapped} color(s) to the style palette")
+        fixes.append(f"deduped {snapped} near-palette color(s)")
+    if kept_colors:
+        fixes.append(f"kept {len(kept_colors)} seed color(s) verbatim — register into icon colors")
     grad_count = len(grad_colors)
     if grad_count and not mono:
         fixes.append(f"collapsed {grad_count} gradient(s) to mid-stop colors")
@@ -434,4 +454,4 @@ def adopt_svg(
         except Exception as exc:  # noqa: BLE001 — gate failure shouldn't block adopt
             gate_errors = [f"gate could not run: {exc}"]
 
-    return out, fixes, gate_errors
+    return out, fixes, gate_errors, sorted(kept_colors)

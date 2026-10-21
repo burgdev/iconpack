@@ -2075,7 +2075,7 @@ async function adoptPreview() {
     const r = await api('/api/adopt', { method: 'POST', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ icon: d.icon, variant: d.variant, cand: d.cand || '' }) });
     S.adoptDlg = { icon: r.icon, variant: r.variant, cand: r.cand,
-      svg_data: r.svg_data, fixes: r.fixes, gate_errors: r.gate_errors, busy: false, err: '' };
+      svg_data: r.svg_data, fixes: r.fixes, gate_errors: r.gate_errors, kept: r.kept_colors || [], busy: false, err: '' };
     S.dlg = null;
     focusDialog();
   } catch (e) { flash('adopt: ' + (e.d?.error || e.message), false); }
@@ -2087,7 +2087,7 @@ async function adoptCommit() {
   try {
     const svg = atob(d.svg_data.split(',')[1]);
     const r = await api('/api/adopt-commit', { method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ icon: d.icon, variant: d.variant, cand: d.cand, svg, gate_errors: d.gate_errors }) });
+      body: JSON.stringify({ icon: d.icon, variant: d.variant, cand: d.cand, svg, gate_errors: d.gate_errors, kept_colors: d.kept || [] }) });
     flash('adopted ' + d.icon + '#' + d.variant + (r.gate_issues ? ' — ' + r.gate_issues + ' gate issue(s) recorded' : ' — gate clean'), true);
     S.adoptDlg = null;
     await load();

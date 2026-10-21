@@ -1457,7 +1457,7 @@ class ReviewHandler(BaseHTTPRequestHandler):
         if src is None:
             raise ValueError("need cand (current round) or an approved icon")
 
-        out, fixes, gate_errors = adopt_svg(src.read_text(), style, pack)
+        out, fixes, gate_errors, kept = adopt_svg(src.read_text(), style, pack)
         b64 = _b64.b64encode(out.encode()).decode()
         return {
             "icon": icon_id,
@@ -1468,6 +1468,7 @@ class ReviewHandler(BaseHTTPRequestHandler):
             "fixes": fixes,
             "gate_pass": not gate_errors,
             "gate_errors": gate_errors,
+            "kept_colors": kept,
         }
 
     def _adopt_commit(self, data: dict) -> dict:
@@ -1482,10 +1483,17 @@ class ReviewHandler(BaseHTTPRequestHandler):
         svg = str(data.get("svg") or "")
         cand = str(data.get("cand") or "")
         gate_errors = data.get("gate_errors") or []
+        kept = data.get("kept_colors") or []
         if not svg.startswith("<svg"):
             raise ValueError("need the adopted svg text")
         with pack_lock(self.pack_dir):
             pack, _styles = load_pack(self.pack_dir / "pack.json")
+        if kept:
+            lst = pack["icons"].setdefault(icon_id, {}).setdefault("colors", [])
+            have = set(lst)
+            for c in kept:
+                if c not in have:
+                    lst.append(c)
         icon = pack["icons"].get(icon_id)
         var = (icon or {}).get("variants", {}).get(variant)
         if var is None or "style" not in var:

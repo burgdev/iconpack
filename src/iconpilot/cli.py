@@ -264,7 +264,9 @@ def adopt_cmd(
     if not src.is_file():
         typer.secho(f"no such file: {src}", fg=typer.colors.RED, err=True)
         raise typer.Exit(code=2)
-    converted, fixes, gate_errors = adopt_svg(src.read_text(), styles[var["style"]], pack_data)
+    converted, fixes, gate_errors, kept = adopt_svg(
+        src.read_text(), styles[var["style"]], pack_data
+    )
 
     if write:
         pack_dir = resolve_pack_dir(pack)
@@ -278,6 +280,14 @@ def adopt_cmd(
         n = len(list(cdir.glob("r*.svg"))) + 1
         dst = cdir / f"r{n}.svg"
         dst.write_text(converted)
+        if kept:
+            pack_data["icons"].setdefault(icon, {}).setdefault("colors", [])
+            have = set(pack_data["icons"][icon]["colors"])
+            for c in kept:
+                if c not in have:
+                    pack_data["icons"][icon]["colors"].append(c)
+            with pack_lock(resolve_pack_dir(pack)):
+                write_pack_atomic(resolve_pack_dir(pack), pack_data)
         typer.secho(f"adopted → {dst}", fg=typer.colors.GREEN)
     elif out:
         Path(out).write_text(converted)
@@ -289,6 +299,8 @@ def adopt_cmd(
         typer.secho(f"fixes applied ({len(fixes)}):", fg=typer.colors.CYAN)
         for f in fixes:
             typer.secho(f"  - {f}", fg=typer.colors.CYAN)
+    if kept and not write:
+        typer.secho(f"seed colors kept verbatim: {', '.join(kept)}", fg=typer.colors.CYAN)
     if gate_errors:
         typer.secho("residual gate findings (soft — user decides):", fg=typer.colors.YELLOW)
         for e in gate_errors:
