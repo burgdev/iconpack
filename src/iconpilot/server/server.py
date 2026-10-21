@@ -1646,7 +1646,8 @@ class ReviewHandler(BaseHTTPRequestHandler):
                     chunk = group[i0 : i0 + grid_sel * grid_sel]
                     g = rc.pack_grid(len(chunk), max_grid=grid_sel)
                     changes = [f"{c_['iid']} icon ({label}) — change: {c_['fb']}" for c_ in chunk]
-                    prompt = rc.refine_sheet_prompt(changes, g, model=model)
+                    anchor = rc.style_anchor(styles[style_id])
+                    prompt = rc.refine_sheet_prompt(changes, g, model=model, style_phrase=anchor)
                     grid_svg = rc.refine_grid_svg([c_["source"].read_text() for c_ in chunk], g)
                     c_cost = round(rc.price_per_image(model) * takes, 4)
                     calls.append(
@@ -1687,11 +1688,12 @@ class ReviewHandler(BaseHTTPRequestHandler):
         else:
             for r_ in ready:
                 c_cost = round(rc.price_per_image(model) * takes, 4)
+                anchor = rc.style_anchor(styles[r_["style"]])
                 calls.append(
                     {
                         "target": r_["target"],
                         "source": str(r_["source"].relative_to(self.pack_dir)),
-                        "prompt": r_["fb"],
+                        "prompt": anchor + " Change: " + r_["fb"],
                         "strength": strength,
                         "takes": takes,
                         "model": model,
@@ -1702,7 +1704,12 @@ class ReviewHandler(BaseHTTPRequestHandler):
                 if data.get("debug"):
                     continue
                 svgs = rc.refine(
-                    token, r_["source"].read_text(), r_["fb"], strength, model=model, n=takes
+                    token,
+                    r_["source"].read_text(),
+                    anchor + " Change: " + r_["fb"],
+                    strength,
+                    model=model,
+                    n=takes,
                 )
                 results = []
                 for i, raw in enumerate(svgs):

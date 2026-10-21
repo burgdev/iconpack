@@ -1175,7 +1175,7 @@ footer { text-align:center; color:var(--muted); font-size:.75rem; padding:20px 0
         <label class="muted">strength</label>
         <input type="range" min="0" max="1" step="0.05" v-model.number="S.refineDlg.strength" style="flex:1">
         <span class="chip">{{ S.refineDlg.strength }}</span>
-        <span class="muted" style="font-size:.75rem">0 = identical · 1 = reinvent</span>
+        <span class="muted" style="font-size:.75rem">{{ S.refineDlg.strength <= 0.3 ? 'subtle — keeps the look' : S.refineDlg.strength <= 0.6 ? 'moderate — some drift' : 'strong — reinvents the icon, style may not hold' }}</span>
       </div>
       <div class="row" style="margin-top:6px; gap:8px; flex-wrap:wrap">
         <label class="muted">takes</label>

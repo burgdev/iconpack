@@ -385,6 +385,32 @@ def refine(
     return svgs
 
 
+def style_anchor(style) -> str:
+    """Prompt-level style anchor for image-to-image.
+
+    Recraft's /images/imageToImage rejects V4 custom styles (style_id is
+    V3-only there) — the input image plus this contract line is the only
+    style binding V4 refine gets. Label, vocabulary, palette, avoid-list,
+    and an explicit keep-style instruction.
+    """
+    label = getattr(style, "label", "") or getattr(style, "id", "pack style")
+    bits = [f"Style: {label}"]
+    words = list(getattr(style, "style_words", None) or [])
+    if words:
+        bits.append(", ".join(words[:8]))
+    palette = list(getattr(style, "palette", None) or [])
+    if palette:
+        bits.append("palette " + " ".join(palette[:8]))
+    avoid = list(getattr(style, "avoid", None) or [])
+    if avoid:
+        bits.append("avoid " + ", ".join(avoid[:6]))
+    bits.append(
+        "keep the input image's exact rendering style — same technique, stroke "
+        "treatment and color system; change only what the instruction asks"
+    )
+    return ". ".join(bits) + "."
+
+
 def refine_grid_svg(sources: list[str], grid: int, cell: int = 512) -> str:
     """Compose source SVGs into one grid sheet for image-to-image.
 
@@ -415,7 +441,9 @@ def refine_grid_svg(sources: list[str], grid: int, cell: int = 512) -> str:
     )
 
 
-def refine_sheet_prompt(changes: list[str], grid: int, model: str | None = None) -> str:
+def refine_sheet_prompt(
+    changes: list[str], grid: int, model: str | None = None, style_phrase: str = ""
+) -> str:
     """Grid refine prompt: cell anchors + per-cell change instructions.
 
     `changes[k]` describes the icon in cell k and WHAT to change (the
@@ -435,6 +463,7 @@ def refine_sheet_prompt(changes: list[str], grid: int, model: str | None = None)
         pos = corners.get((row, col), f"row {row + 1}, column {col + 1}")
         parts.append(f"cell {i + 1} at {pos} ({row + 1},{col + 1}): {ch}")
     cells = "; ".join(parts)
+    style_line = f" {style_phrase.strip()}" if style_phrase.strip() else ""
     empty = ""
     if len(changes) < g * g:
         empty = f" Leave the remaining {g * g - len(changes)} cell(s) empty."
@@ -443,7 +472,7 @@ def refine_sheet_prompt(changes: list[str], grid: int, model: str | None = None)
         "one icon per cell, cells numbered left to right, top to bottom, "
         f"starting at the top left. Keep each cell's icon recognisable and its "
         f"style, stroke weight and color system; apply only the requested "
-        f"change per cell — {cells}.{empty} Keep generous clean margins "
+        f"change per cell — {cells}.{empty}{style_line} Keep generous clean margins "
         "between cells — no touching, no overlapping. Plain empty background, "
         "no grid lines, no borders, no labels, no text."
     )

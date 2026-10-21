@@ -1377,3 +1377,90 @@ def test_adopt_keeps_distinct_seed_colors_verbatim() -> None:
     assert "#5b8fb5" in out and "#3f7f5f" in out  # verbatim, not snapped
     assert "#5b8fb5" in kept and "#3f7f5f" in kept
     assert "kept 2 seed color(s)" in "; ".join(fixes)
+
+
+def test_refine_prompt_carries_style_anchor(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Per-icon and grid refine prompts both anchor the style contract."""
+    import iconpilot.recraft as rc
+    from iconpilot.server.server import ReviewHandler
+
+    with tempfile.TemporaryDirectory() as td:
+        pack_dir = Path(td)
+        (pack_dir / ".runs" / "r001" / "flat" / "sail").mkdir(parents=True)
+        (pack_dir / ".runs" / "r001" / "flat" / "sail" / "r1.svg").write_text(
+            '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48"><path d="M4 4L44 44"/></svg>'
+        )
+        pack = {
+            "schema": 2,
+            "name": "anchor-test",
+            "version": "0.1.0",
+            "provenance": {"created_by": "user"},
+            "spec": {
+                "viewBox": "0 0 48 48",
+                "live_area": {"padding": 4},
+                "stroke": {"width": 2, "linecap": "round", "linejoin": "round"},
+                "fill": "none",
+                "allowed_elements": [
+                    "path",
+                    "circle",
+                    "rect",
+                    "line",
+                    "polyline",
+                    "polygon",
+                    "ellipse",
+                ],
+                "precision": 0.5,
+            },
+            "styles": {
+                "color-flat": {
+                    "extends": "color-flat",
+                    "style_words": ["flat", "bold shapes"],
+                    "palette": ["#775b44", "#22534f"],
+                    "avoid": ["gradients"],
+                }
+            },
+            "icons": {
+                "sail": {
+                    "brief": "a sailboat",
+                    "variants": {"flat": {"style": "color-flat", "status": "todo"}},
+                }
+            },
+            "feedback": [
+                {
+                    "id": "fb1",
+                    "scope": "variant",
+                    "icon": "sail",
+                    "variant": "flat",
+                    "round": "r001",
+                    "text": "boom longer",
+                    "author": "user",
+                },
+            ],
+        }
+        (pack_dir / "pack.json").write_text(json.dumps(pack))
+
+        sent: list[dict] = []
+
+        def fake_refine(token, svg_text, prompt, strength, model="x", n=2, size=512):
+            sent.append({"prompt": prompt, "n": n, "size": size})
+            return [
+                (
+                    '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024">'
+                    '<path d="M0 0h512v512H0z"/></svg>'
+                )
+            ] * n
+
+        monkeypatch.setattr(rc, "resolve_token", lambda models_file=None: "tok")
+        monkeypatch.setattr(rc, "refine", fake_refine)
+        h = ReviewHandler.__new__(ReviewHandler)
+        h.pack_dir = pack_dir
+        h._recraft_refine({"targets": ["sail#flat"], "takes": 1})
+        assert "Style: Color flat" in sent[0]["prompt"]  # anchored
+        assert "flat" in sent[0]["prompt"] and "#775b44" in sent[0]["prompt"]
+        assert "keep the input image's exact rendering style" in sent[0]["prompt"]
+        assert "Change: boom longer" in sent[0]["prompt"]
+        # grid path anchors too
+        sent.clear()
+        h._recraft_refine({"targets": ["sail#flat"], "grid": 2, "takes": 1})
+        assert "Style: Color flat" in sent[0]["prompt"]
+        assert "keep the input image's exact rendering style" in sent[0]["prompt"]
