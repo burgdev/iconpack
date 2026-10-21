@@ -1813,6 +1813,21 @@ class ReviewHandler(BaseHTTPRequestHandler):
             for i0 in range(0, len(targets), chunk_size):
                 chunk = targets[i0 : i0 + chunk_size]
                 grid = rc.pack_grid(len(chunk), max_grid=max_grid or None)
+                live_fb = pack.get("feedback") or []
+
+                def _fb_for(feedback: list, iid: str, vid: str) -> list[str]:
+                    out = []
+                    for f in feedback:
+                        s = f.get("scope")
+                        hit = (
+                            s == "pack"
+                            or (s == "icon" and f.get("icon") == iid)
+                            or (s == "variant" and f.get("icon") == iid and f.get("variant") == vid)
+                        )
+                        if hit:
+                            out.append(str(f.get("text", "")))
+                    return [x.strip() for x in out if x.strip()]
+
                 briefs = []
                 for iid, vid in chunk:
                     icon = pack["icons"][iid]
@@ -1821,6 +1836,9 @@ class ReviewHandler(BaseHTTPRequestHandler):
                         b += ", colors " + " ".join(icon["colors"][:5])
                     elif icon.get("main_color") and not style_id_rc:
                         b += f", dominant color {icon['main_color']}"
+                    fbs = _fb_for(live_fb, iid, vid)
+                    if fbs:
+                        b += ". Note: " + "; ".join(fbs)[:220]
                     briefs.append(b)
                 prompt = rc.pack_sheet_prompt(briefs, style.label, grid, model=model)
                 cost = round(

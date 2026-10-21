@@ -1464,3 +1464,82 @@ def test_refine_prompt_carries_style_anchor(monkeypatch: pytest.MonkeyPatch) -> 
         h._recraft_refine({"targets": ["sail#flat"], "grid": 2, "takes": 1})
         assert "Style: Color flat" in sent[0]["prompt"]
         assert "keep the input image's exact rendering style" in sent[0]["prompt"]
+
+
+def test_batch_draft_briefs_carry_live_feedback() -> None:
+    """Redraft briefs include matching pack/icon/variant feedback as Notes."""
+    from iconpilot.server.server import ReviewHandler
+
+    with tempfile.TemporaryDirectory() as td:
+        pack_dir = Path(td)
+        pack = {
+            "schema": 2,
+            "name": "fbdraft-test",
+            "version": "0.1.0",
+            "provenance": {"created_by": "user"},
+            "spec": {
+                "viewBox": "0 0 48 48",
+                "live_area": {"padding": 4},
+                "stroke": {"width": 2, "linecap": "round", "linejoin": "round"},
+                "fill": "none",
+                "allowed_elements": [
+                    "path",
+                    "circle",
+                    "rect",
+                    "line",
+                    "polyline",
+                    "polygon",
+                    "ellipse",
+                ],
+                "precision": 0.5,
+            },
+            "styles": {},
+            "icons": {
+                "sail": {
+                    "brief": "a sailboat",
+                    "variants": {"flat": {"style": "color-flat", "status": "todo"}},
+                },
+                "hut": {
+                    "brief": "a hut",
+                    "variants": {"flat": {"style": "color-flat", "status": "todo"}},
+                },
+            },
+            "feedback": [
+                {
+                    "id": "f1",
+                    "scope": "pack",
+                    "text": "bolder shapes overall",
+                    "round": "r001",
+                    "author": "user",
+                },
+                {
+                    "id": "f2",
+                    "scope": "variant",
+                    "icon": "sail",
+                    "variant": "flat",
+                    "text": "fewer waves",
+                    "round": "r001",
+                    "author": "user",
+                },
+                {
+                    "id": "f3",
+                    "scope": "icon",
+                    "icon": "hut",
+                    "text": "steep roof",
+                    "round": "r001",
+                    "author": "user",
+                },
+            ],
+        }
+        (pack_dir / "pack.json").write_text(json.dumps(pack))
+        h = ReviewHandler.__new__(ReviewHandler)
+        h.pack_dir = pack_dir
+        out = h._recraft_batch({"targets": ["sail#flat", "hut#flat"], "takes": 2, "debug": True})
+        prompt = out["calls"][0]["prompt"]
+        assert "bolder shapes overall" in prompt  # pack scope reaches every cell
+        assert "fewer waves" in prompt  # variant scope → sail cell
+        assert "steep roof" in prompt  # icon scope → hut cell
+        # cell isolation: hut's feedback stays in hut's cell, not sail's
+        cells = prompt.split("cell ")
+        sail_cell = next((c for c in cells if c.startswith("1 ")), "")
+        assert "fewer waves" in sail_cell and "steep roof" not in sail_cell
