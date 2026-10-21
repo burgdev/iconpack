@@ -1184,6 +1184,11 @@ footer { text-align:center; color:var(--muted); font-size:.75rem; padding:20px 0
         </select>
         <span class="chip rule">≈ ${{ refineEst() }}</span>
       </div>
+      <div v-if="S.refineDlg.busy" class="progressrow" style="margin-top:12px">
+        <span class="spin"></span>
+        <span>{{ S.refineDlg.phase }} · {{ refineElapsed() }}s</span>
+        <progress max="100" :value="refineProgress()"></progress>
+      </div>
       <div class="row" style="margin-top:12px">
         <button class="primary" :class="{ busy: S.refineDlg.busy }" :disabled="!refineReady()" @click="refineGenerate()">
           <span class="ic" v-html="IC.spark"></span> refine {{ refineUnits() * S.refineDlg.takes }} variants · ~${{ refineEst() }}
@@ -2196,6 +2201,14 @@ async function refineGenerate() {
   const d = S.refineDlg;
   if (!d || d.busy || !refineReady()) return;
   d.busy = true; d.err = '';
+  d.t0 = Date.now();
+  const calls = refineUnits();
+  d.est = Math.max(8, calls * d.takes * 6);  // ~6s per paid image, rough
+  d.phase = (d.grid >= 2 ? 'composing grid sheet, ' : '') + 'sending ' + calls + ' request' + (calls > 1 ? 's' : '') + ' to Recraft';
+  refineTimer = setInterval(() => {
+    const s = refineElapsed();
+    d.phase = s < 3 ? d.phase : s > d.est * 0.6 ? (d.grid >= 2 ? 'splitting sheets into icons…' : 'refining at Recraft…') : 'image-to-image at Recraft…';
+  }, 1000);
   try {
     const active = refineActive();
     const feedback = {};
@@ -2207,6 +2220,7 @@ async function refineGenerate() {
         feedback, strength: d.strength, takes: d.takes, model: d.model, grid: d.grid || 0,
       }) });
     S.refineDlg = null;
+    if (refineTimer) { clearInterval(refineTimer); refineTimer = null; }
     if ((r.skipped || []).length) {
       flash('skipped: ' + r.skipped.map(s => s.target + ' (' + s.reason + ')').join(', '), false);
     }
@@ -2218,6 +2232,7 @@ async function refineGenerate() {
       takes: r.takes, model: r.model, cost: r.cost_usd,
     };
   } catch (e) {
+    if (refineTimer) { clearInterval(refineTimer); refineTimer = null; }
     d.busy = false;
     d.err = e.d?.error || e.message || 'refine failed';
   }
@@ -2331,7 +2346,14 @@ function batchEst() {
   return (sheets * d.takes * price).toFixed(2);
 }
 let batchTimer = null;
+let refineTimer = null;
 function batchElapsed() { return S.batchDlg?.t0 ? Math.round((Date.now() - S.batchDlg.t0) / 1000) : 0; }
+function refineElapsed() { return S.refineDlg?.t0 ? Math.round((Date.now() - S.refineDlg.t0) / 1000) : 0; }
+function refineProgress() {
+  const d = S.refineDlg;
+  if (!d || !d.est) return 0;
+  return Math.min(95, Math.round((refineElapsed() / d.est) * 100));
+}
 function batchProgress() {
   const d = S.batchDlg;
   if (!d || !d.est) return 0;
@@ -3048,7 +3070,7 @@ const App = {
       showDebug, debugCopy, openNextDlg, addVariantBulk, addCustomStyle, saveRecraftDefaults,
       GATE_HELP, styleRules, stylePalette, ruleTitle, styleUsageCount, isPostponed, togglePostpone, applyAndNext, colState, toggleCol, toggleAll, usedStyles, setTab, iconSuggest, pickSuggestion, addNewIcon, startRoundWithNew,
       styleSummary, isOwnRef, editStyle, toggleGate, saveStyleRules, removeStyle, addStyleToPack, pickRefFile, removeRef,
-      vectorModels, curatedNames, styleDetail, editCustomStyle, recraftGenerate, commitResults, iconStylePalette, toggleIconColor, waitingForAgent, waitTargets, refineFeedback, refineResume, adoptPreview, adoptCommit, openRefineDlg, hasSrc, refinePreview, fbSrc, refineSel, refineMissing, refineUnits, refineGrid, refineSetAll, refineCellAll, refineToggleCell, refineRowState, refineToggleRow2, refineColState, refineToggleCol2, refineActive, refineReady, refineEst, refineGenerate, openStyleRc, styleRcCreate, styleRcSave, openBatchDlg, batchGrid, batchCellAll, batchToggleCell, batchRowState, batchToggleRow, batchColState, batchToggleCol, batchSelAll, batchSelCount, batchTotal, batchSheets, batchDebug, batchEst, batchGenerate, batchElapsed, batchProgress, planCheck, dropResult, keptCount, totalCount, keepAll,
+      vectorModels, curatedNames, styleDetail, editCustomStyle, recraftGenerate, commitResults, iconStylePalette, toggleIconColor, waitingForAgent, waitTargets, refineFeedback, refineResume, adoptPreview, adoptCommit, openRefineDlg, hasSrc, refinePreview, fbSrc, refineSel, refineMissing, refineUnits, refineGrid, refineSetAll, refineCellAll, refineToggleCell, refineRowState, refineToggleRow2, refineColState, refineToggleCol2, refineActive, refineReady, refineEst, refineElapsed, refineProgress, refineGenerate, openStyleRc, styleRcCreate, styleRcSave, openBatchDlg, batchGrid, batchCellAll, batchToggleCell, batchRowState, batchToggleRow, batchColState, batchToggleCol, batchSelAll, batchSelCount, batchTotal, batchSheets, batchDebug, batchEst, batchGenerate, batchElapsed, batchProgress, planCheck, dropResult, keptCount, totalCount, keepAll,
 
     };
   },
