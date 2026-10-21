@@ -154,6 +154,96 @@ def _flatten_d(d: str, m: Affine) -> list[tuple[float, float]]:
     return pts
 
 
+def _parse_segs(d: str, m: Affine) -> list[tuple]:
+    """Parse path data into affine-transformed segments, CURVES PRESERVED.
+
+    Affine transforms map beziers to beziers exactly — transforming the
+    control points is lossless, unlike flatten-to-polyline. Segment shape:
+    ("L", p0, p1) | ("Q", p0, c, p1) | ("C", p0, c1, c2, p3).
+    """
+    from svgpathtools import Arc, CubicBezier, Line, QuadraticBezier, parse_path
+
+    try:
+        path = parse_path(d)
+    except Exception:  # noqa: BLE001 — unparseable seed data degrades to skip
+        return []
+    segs: list[tuple] = []
+    for seg in path:
+        if isinstance(seg, Arc):
+            try:
+                sub = seg.as_cubic_curves()
+            except Exception:  # noqa: BLE001, S112
+                continue
+        else:
+            sub = [seg]
+        for s in sub:
+            if isinstance(s, Line):
+                segs.append(
+                    ("L", _apply(m, s.start.real, s.start.imag), _apply(m, s.end.real, s.end.imag))
+                )
+            elif isinstance(s, QuadraticBezier):
+                segs.append(
+                    (
+                        "Q",
+                        _apply(m, s.start.real, s.start.imag),
+                        _apply(m, s.control.real, s.control.imag),
+                        _apply(m, s.end.real, s.end.imag),
+                    )
+                )
+            elif isinstance(s, CubicBezier):
+                segs.append(
+                    (
+                        "C",
+                        _apply(m, s.start.real, s.start.imag),
+                        _apply(m, s.control1.real, s.control1.imag),
+                        _apply(m, s.control2.real, s.control2.imag),
+                        _apply(m, s.end.real, s.end.imag),
+                    )
+                )
+    return segs
+
+
+def _segs_hull(segs: list[tuple]) -> tuple[float, float, float, float] | None:
+    """Control-point hull bbox (upper bound of the true ink bbox)."""
+    xs = [p[0] for s in segs for p in s[1:]]
+    ys = [p[1] for s in segs for p in s[1:]]
+    if not xs:
+        return None
+    return min(xs), min(ys), max(xs), max(ys)
+
+
+def _seg_nodes(segs: list[tuple]) -> int:
+    """Gate-compatible node metric: L=2, Q=3, C=4 per segment."""
+    return sum({"L": 2, "Q": 3, "C": 4}[s[0]] for s in segs)
+
+
+def _segs_polyline(segs: list[tuple], steps: int = 12) -> list[tuple[float, float]]:
+    """Dense polyline from segments (budget fallback)."""
+    pts: list[tuple[float, float]] = []
+    for s in segs:
+        if s[0] == "L":
+            pts.extend([s[1], s[2]])
+            continue
+        p0, *ctrl, p1 = s[1:]
+        pts.append(p0)
+        n = steps if s[0] == "C" else max(4, steps // 2)
+        for k in range(1, n):
+            t = k / n
+            if s[0] == "C":
+                c1, c2 = ctrl
+                mt = 1 - t
+                x = mt**3 * p0[0] + 3 * mt**2 * t * c1[0] + 3 * mt * t**2 * c2[0] + t**3 * p1[0]
+                y = mt**3 * p0[1] + 3 * mt**2 * t * c1[1] + 3 * mt * t**2 * c2[1] + t**3 * p1[1]
+            else:
+                (c1,) = ctrl
+                mt = 1 - t
+                x = mt**2 * p0[0] + 2 * mt * t * c1[0] + t**2 * p1[0]
+                y = mt**2 * p0[1] + 2 * mt * t * c1[1] + t**2 * p1[1]
+            pts.append((x, y))
+        pts.append(p1)
+    return pts
+
+
 def _dp(points: list[tuple[float, float]], tol: float) -> list[tuple[float, float]]:
     """Douglas-Peucker polyline simplification."""
     if len(points) < 3:
@@ -281,7 +371,7 @@ def adopt_svg(
             palette = []
 
     # ── collect drawn elements with accumulated transforms; drop backgrounds ──
-    drawn: list[tuple[str, list[tuple[float, float]]]] = []  # (fill, polyline)
+    drawn: list[tuple[str, list[tuple]]] = []  # (fill, curve segments)
     bg_removed = 0
 
     def local_tag(el: ET.Element) -> str:
@@ -306,18 +396,19 @@ def adopt_svg(
                 continue
             if not d:
                 continue
-            pts = _flatten_d(d, cm)
-            if len(pts) < 2:
+            segs = _parse_segs(d, cm)
+            if not segs:
                 continue
             # background detection: painted element covering ≥88% of canvas
-            xs = [p[0] for p in pts]
-            ys = [p[1] for p in pts]
-            cover = (max(xs) - min(xs)) * (max(ys) - min(ys)) / (src_w * src_w)
+            hull = _segs_hull(segs)
+            if hull is None:
+                continue
+            cover = (hull[2] - hull[0]) * (hull[3] - hull[1]) / (src_w * src_w)
             fill = (child.get("fill") or "").strip()
             if cover >= 0.88 and fill and fill.lower() not in ("none",):
                 bg_removed += 1
                 continue
-            drawn.append((fill, pts))
+            drawn.append((fill, segs))
 
     walk(root, IDENTITY)
     if bg_removed:
@@ -339,10 +430,10 @@ def adopt_svg(
     # ── colors ──
     snapped = 0
     kept_colors: set[str] = set()
-    paths_out: list[tuple[str, list[tuple[float, float]]]] = []
-    for fill, pts in drawn:
+    paths_out: list[tuple[str, list]] = []
+    for fill, segs in drawn:
         if mono:
-            paths_out.append(("currentColor" if fill.lower() not in ("none",) else "none", pts))
+            paths_out.append(("currentColor" if fill.lower() not in ("none",) else "none", segs))
             continue
         f = fill
         if f.startswith("url("):
@@ -355,7 +446,7 @@ def adopt_svg(
             if kept_new:
                 kept_colors.add(f2)
             f = f2
-        paths_out.append((f, pts))
+        paths_out.append((f, segs))
     if mono:
         fixes.append("mono: fills → currentColor")
     elif snapped:
@@ -366,21 +457,26 @@ def adopt_svg(
     if grad_count and not mono:
         fixes.append(f"collapsed {grad_count} gradient(s) to mid-stop colors")
 
-    # ── node budget: drop micro-paths, then DP-simplify if still over ──
+    # ── node budget: curves stay curves while they fit; over budget the
+    # deterministic ladder flattens + DP-simplifies (best effort, reported) ──
     def node_count(items) -> int:
-        # gate metric: sum(max(1, len(seg))) ≈ 2 per polyline segment
-        return sum(2 * max(0, len(pts) - 1) for _, pts in items)
+        # curve mode: gate metric L=2/Q=3/C=4; polyline mode: 2 per segment
+        total = 0
+        for _, payload in items:
+            if payload and isinstance(payload[0], tuple) and isinstance(payload[0][0], str):
+                total += _seg_nodes(payload)
+            else:
+                total += 2 * max(0, len(payload) - 1)
+        return total
 
     budget = getattr(style, "max_nodes", None) or 64
-    pruned = [
-        i
-        for i in paths_out
-        if math.hypot(
-            max(p[0] for p in i[1]) - min(p[0] for p in i[1]),
-            max(p[1] for p in i[1]) - min(p[1] for p in i[1]),
-        )
-        >= 0.75
-    ]
+    pruned = []
+    for i in paths_out:
+        hull = _segs_hull(i[1])
+        if hull is None:
+            continue
+        if math.hypot(hull[2] - hull[0], hull[3] - hull[1]) >= 0.75:
+            pruned.append(i)
     dropped = len(paths_out) - len(pruned)
     if dropped:
         fixes.append(f"dropped {dropped} micro-path(s)")
@@ -388,9 +484,12 @@ def adopt_svg(
 
     nodes = node_count(paths_out)
     if nodes > budget:
-        best = paths_out
+        # flatten to polylines, then the DP ladder
+        flat = [(f, _segs_polyline(segs)) for f, segs in paths_out]
+        flat = [i for i in flat if len(i[1]) >= 2]
+        best = flat
         for tol in (0.1, 0.25, 0.5, 0.75, 1.0):
-            simplified = [(f, _dp(pts, tol)) for f, pts in paths_out]
+            simplified = [(f, _dp(pts, tol)) for f, pts in flat]
             simplified = [i for i in simplified if len(i[1]) >= 2]
             if node_count(simplified) < node_count(best):
                 best = simplified
@@ -398,40 +497,93 @@ def adopt_svg(
                 break
         paths_out = best  # always take the best — never keep the unsimplified set
         if node_count(paths_out) <= budget:
-            fixes.append(f"simplified {nodes} → {node_count(paths_out)} nodes")
+            fixes.append(f"simplified {nodes} → {node_count(paths_out)} nodes (flattened)")
         else:
             fixes.append(
-                f"simplified {nodes} → {node_count(paths_out)} nodes — "
+                f"simplified {nodes} → {node_count(paths_out)} nodes (flattened) — "
                 f"budget {budget} still exceeded, needs redraw"
             )
     else:
-        fixes.append(f"node budget ok ({nodes}/{budget})")
+        fixes.append(f"node budget ok ({nodes}/{budget}, curves preserved)")
 
     # ── rescale to the style design grid, centered, precision-snapped ──
+    # A seed already living on the target canvas (e.g. a normalize()d
+    # Recraft take) keeps its geometry as-is: no re-fit, no re-center —
+    # only precision snapping. Maximum fidelity.
     target = float(getattr(style, "size", None) or 24)
     precision = float(pack.get("spec", {}).get("precision", 0.5) or 0.5)
-    xs = [p[0] for _, pts in paths_out for p in pts]
-    ys = [p[1] for _, pts in paths_out for p in pts]
+
+    def _payload_points(items):
+        for _, payload in items:
+            if payload and isinstance(payload[0], tuple) and isinstance(payload[0][0], str):
+                yield from (p for s in payload for p in s[1:])
+            else:
+                yield from payload
+
+    pts_all = list(_payload_points(paths_out))
+    xs = [p[0] for p in pts_all]
+    ys = [p[1] for p in pts_all]
     x0, y0, x1, y1 = min(xs), min(ys), max(xs), max(ys)
-    k = (target * 0.85) / max(x1 - x0, y1 - y0, 1e-9)
-    tx = (target - (x1 - x0) * k) / 2 - x0 * k
-    ty = (target - (y1 - y0) * k) / 2 - y0 * k
+    if abs(src_w - target) < 0.01:
+        k, tx, ty = 1.0, 0.0, 0.0  # same canvas → keep geometry exactly
+    else:
+        k = (target * 0.85) / max(x1 - x0, y1 - y0, 1e-9)
+        tx = (target - (x1 - x0) * k) / 2 - x0 * k
+        ty = (target - (y1 - y0) * k) / 2 - y0 * k
 
     def rnd(v: float) -> float:
         return round(round(v / precision) * precision, 3)
 
+    def _is_segs(payload) -> bool:
+        return bool(payload) and isinstance(payload[0], tuple) and isinstance(payload[0][0], str)
+
     body = []
-    for fill, pts in paths_out:
-        raw = [(rnd(x * k + tx), rnd(y * k + ty)) for x, y in pts]
-        snapped_pts = [raw[0]]
-        for p in raw[1:]:  # rounding collapses near points — drop duplicates
-            if p != snapped_pts[-1]:
-                snapped_pts.append(p)
-        if len(snapped_pts) == 1:
-            continue
-        d = "M" + "L".join(f"{x} {y}" for x, y in snapped_pts)
-        if len(snapped_pts) > 2 and snapped_pts[-1] == snapped_pts[0]:
-            d += "Z"
+    for fill, payload in paths_out:
+        if _is_segs(payload):
+            parts: list[str] = []
+            prev = None
+            first = None
+            for s in payload:
+                pts_n = [(rnd(x * k + tx), rnd(y * k + ty)) for x, y in s[1:]]
+                start, end = pts_n[0], pts_n[-1]
+                if prev is None:
+                    first = start
+                    parts.append(f"M{start[0]:g} {start[1]:g}")
+                elif start != prev:  # subpath jump
+                    parts.append(f"L{start[0]:g} {start[1]:g}")
+                if s[0] == "L":
+                    if end != prev:
+                        parts.append(f"L{end[0]:g} {end[1]:g}")
+                elif s[0] == "Q":
+                    c = pts_n[1]
+                    if not (c == start and c == end and end == prev):
+                        parts.append(f"Q{c[0]:g} {c[1]:g} {end[0]:g} {end[1]:g}")
+                else:  # C
+                    c1, c2 = pts_n[1], pts_n[2]
+                    if c1 == start and c2 == end:  # control points on the chord → line
+                        if end != prev:
+                            parts.append(f"L{end[0]:g} {end[1]:g}")
+                    else:
+                        parts.append(
+                            f"C{c1[0]:g} {c1[1]:g} {c2[0]:g} {c2[1]:g} {end[0]:g} {end[1]:g}"
+                        )
+                prev = end
+            if len(parts) <= 1:
+                continue  # everything collapsed
+            d = "".join(parts)
+            if first is not None and prev == first:
+                d += "Z"
+        else:
+            raw = [(rnd(x * k + tx), rnd(y * k + ty)) for x, y in payload]
+            snapped_pts = [raw[0]]
+            for pnt in raw[1:]:  # rounding collapses near points — drop duplicates
+                if pnt != snapped_pts[-1]:
+                    snapped_pts.append(pnt)
+            if len(snapped_pts) == 1:
+                continue
+            d = "M" + "L".join(f"{x:g} {y:g}" for x, y in snapped_pts)
+            if len(snapped_pts) > 2 and snapped_pts[-1] == snapped_pts[0]:
+                d += "Z"
         body.append(f'<path fill="{fill}" d="{d}"/>')
 
     out = (
