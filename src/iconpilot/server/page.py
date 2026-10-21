@@ -1794,7 +1794,7 @@ function editCustomStyle() {
   S.styleEdit = {
     id: '', label: '', size: '', strokeWidth: '', minGap: 1.5, maxNodes: 40,
     paletteList: [], words: '', avoid: '', guidance: '', gateOff: [],
-    recraftModel: '', extends: 'mono-line',
+    recraftModel: '', curatedStyle: '', extends: 'mono-line',
   };
   focusDialog();
 }
@@ -1844,6 +1844,8 @@ async function editStyle(sid) {
       guidance: def.guidance || '',
       gateOff,
       extends: (d.snapshot || {}).extends,
+      recraftModel: (d.snapshot || {}).recraft_model || '',
+      curatedStyle: (d.snapshot || {}).recraft_curated || '',
     };
     focusDialog();
   } catch (e) { flash('style detail: ' + e.message, false); }
@@ -1870,6 +1872,8 @@ async function saveStyleRules() {
   if (e.guidance.trim()) sdef.guidance = e.guidance;
   const off = Object.fromEntries((e.gateOff || []).map(k => [k, false]));
   if (Object.keys(off).length) sdef.gate = off;
+  if (e.recraftModel) sdef.recraft_model = e.recraftModel;
+  if (e.curatedStyle) sdef.recraft_curated = e.curatedStyle;
   try {
     await api('/api/pack-style', { method: 'POST', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ id: e.id, def: sdef }) });

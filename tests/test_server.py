@@ -636,6 +636,42 @@ def test_round_new_focus_only(server: _Server, srvpack: Path) -> None:
     assert code == 400
 
 
+def test_pack_style_saves_recraft_fields_and_keeps_style_id(server: _Server, srvpack: Path) -> None:
+    """Style edit persists recraft_model/curated AND keeps account-style extras."""
+    # seed a cached account style id like the Recraft seeder does
+    pack = json.loads((srvpack / "pack.json").read_text())
+    pack.setdefault("styles", {})["color-flat"] = {
+        "extends": "color-flat",
+        "recraft_style_id": "acc-123",
+        "recraft_style_hash": "deadbeef",
+    }
+    (srvpack / "pack.json").write_text(json.dumps(pack))
+
+    code, data = server.req(
+        "POST",
+        "/api/pack-style",
+        {
+            "id": "color-flat",
+            "def": {"extends": "color-flat", "size": 48, "recraft_model": "recraftv4_vector"},
+        },
+    )
+    assert code == 200, data
+    snap = json.loads((srvpack / "pack.json").read_text())["styles"]["color-flat"]
+    assert snap["recraft_model"] == "recraftv4_vector"  # saved now
+    assert snap["recraft_style_id"] == "acc-123"  # cached id survives the edit
+    assert snap["recraft_style_hash"] == "deadbeef"
+    # a further edit without recraft_model clears the choice (auto) but keeps ids
+    code, data = server.req(
+        "POST",
+        "/api/pack-style",
+        {"id": "color-flat", "def": {"extends": "color-flat", "size": 48}},
+    )
+    assert code == 200, data
+    snap = json.loads((srvpack / "pack.json").read_text())["styles"]["color-flat"]
+    assert "recraft_model" not in snap
+    assert snap["recraft_style_id"] == "acc-123"
+
+
 def test_pack_style_custom_extends(server: _Server, srvpack: Path) -> None:
     code, data = server.req(
         "POST",

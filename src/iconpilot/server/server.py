@@ -2147,6 +2147,16 @@ class ReviewHandler(BaseHTTPRequestHandler):
                         sdef = {**sdef, "extends": existing["extends"]}
                     elif not existing and sid in styles:
                         sdef = {**sdef, "extends": sid}  # lineage to the registry style
+                    if existing:
+                        # account-style extras are managed by the Recraft
+                        # seeder, not the edit dialog — keep them across edits
+                        keep = {
+                            k: v
+                            for k, v in existing.items()
+                            if k in ("recraft_style_id", "recraft_style_hash") and k not in sdef
+                        }
+                        if keep:
+                            sdef = {**keep, **sdef}
                     pack["styles"][sid] = sdef
                     _, errors = revalidate(pack)
                     if errors:
