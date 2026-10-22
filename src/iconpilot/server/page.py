@@ -1172,7 +1172,7 @@ footer { text-align:center; color:var(--muted); font-size:.75rem; padding:20px 0
           </button>
         </div>
       </div>
-      <div class="row" style="margin-top:8px; gap:10px">
+      <div v-if="S.refineDlg.mode !== 'redraft'" class="row" style="margin-top:8px; gap:10px">
         <label class="muted">strength</label>
         <input type="range" min="0" max="1" step="0.05" v-model.number="S.refineDlg.strength" style="flex:1">
         <span class="chip">{{ S.refineDlg.strength }}</span>
@@ -1181,13 +1181,19 @@ footer { text-align:center; color:var(--muted); font-size:.75rem; padding:20px 0
       <div class="row" style="margin-top:6px; gap:8px; flex-wrap:wrap">
         <label class="muted">takes</label>
         <select v-model.number="S.refineDlg.takes"><option v-for="tk in [1,2,3,4,5,6]" :key="tk" :value="tk">{{ tk }}</option></select>
-        <label class="muted">grid</label>
-        <select v-model.number="S.refineDlg.grid">
+        <label class="muted">mode</label>
+        <select v-model="S.refineDlg.mode">
+          <option value="i2i">edit image (i2i)</option>
+          <option value="redraft">new takes, current as reference</option>
+        </select>
+        <label class="muted" v-if="S.refineDlg.mode === 'i2i'">grid</label>
+        <select v-if="S.refineDlg.mode === 'i2i'" v-model.number="S.refineDlg.grid">
           <option :value="0">off — one call per icon</option>
           <option v-for="g in [2,3,4,5]" :key="g" :value="g">{{ g }}×{{ g }} sheet ({{ g * g }} icons)</option>
         </select>
-        <span v-if="S.refineDlg.grid >= 2 && refineSel().filter(i => hasSrc(i.icon, i.variant)).length < 2"
+        <span v-if="S.refineDlg.mode === 'i2i' && S.refineDlg.grid >= 2 && refineSel().filter(i => hasSrc(i.icon, i.variant)).length < 2"
               class="chip" style="font-size:.7rem; color:var(--warn); border-color:var(--warn)">⚠ grid needs ≥2 icons — a single icon refines per-icon</span>
+        <span v-if="S.refineDlg.mode === 'redraft'" class="muted" style="font-size:.72rem">drafts fresh takes anchored on the current icon as a reference image — best when the change is big</span>
         <label class="muted">model</label>
         <select v-model="S.refineDlg.model">
           <option v-for="m in ['recraftv4_vector', 'recraftv4_1_vector']" :key="m" :value="m">{{ m }} (${{ (S.recraftModels.prices || {})[m] || '?' }}/img)</option>
@@ -2125,7 +2131,7 @@ function openRefineDlg(iconId) {
   });
   // pre-select only variants that have feedback (refine needs it)
   items.forEach(it => { if (it.feedback && hasSrc(it.icon, it.variant)) it.skip = false; });
-  S.refineDlg = { items, strength: 0.3, takes: 2, model: 'recraftv4_1_vector', grid: 0, busy: false, err: '' };
+  S.refineDlg = { items, strength: 0.3, takes: 2, model: 'recraftv4_1_vector', grid: 0, mode: 'i2i', busy: false, err: '' };
   focusDialog();
 }
 function refineGrid() {
@@ -2210,13 +2216,15 @@ function refineReady() { const r = refineSel().filter(i => hasSrc(i.icon, i.vari
 function refineUnits() {
   const d = S.refineDlg; if (!d) return 0;
   const n = refineSel().filter(i => hasSrc(i.icon, i.variant)).length;
+  if (d.mode === 'redraft') return n;  // one generation call per icon
   if (d.grid >= 2) return Math.ceil(n / (d.grid * d.grid));
   return n;
 }
 function refineEst() {
   const d = S.refineDlg; if (!d) return '0.00';
   const price = (S.recraftModels.prices || {})[d.model] || 0.08;
-  return (refineUnits() * d.takes * price).toFixed(2);
+  const base = refineUnits() * d.takes * price;
+  return (base + (d.mode === 'redraft' ? refineUnits() * 0.005 : 0)).toFixed(2);
 }
 async function refineGenerate() {
   const d = S.refineDlg;
@@ -2238,7 +2246,7 @@ async function refineGenerate() {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         targets: active.map(i => i.icon + '#' + i.variant),
-        feedback, strength: d.strength, takes: d.takes, model: d.model, grid: d.grid || 0,
+        feedback, strength: d.strength, takes: d.takes, model: d.model, grid: d.grid || 0, mode: d.mode || 'i2i',
       }) });
     S.refineDlg = null;
     if (refineTimer) { clearInterval(refineTimer); refineTimer = null; }

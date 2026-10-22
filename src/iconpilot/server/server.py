@@ -1551,6 +1551,9 @@ class ReviewHandler(BaseHTTPRequestHandler):
         model = data.get("model") or "recraftv4_1_vector"
         if model not in rc.REFINE_MODELS:
             raise ValueError(f"refine needs a v4+ vector model, got '{model}'")
+        mode = str(data.get("mode") or "i2i")
+        if mode not in ("i2i", "redraft"):
+            raise ValueError("mode must be i2i|redraft")
         overrides = data.get("feedback") or {}
 
         with pack_lock(self.pack_dir):
@@ -1634,7 +1637,57 @@ class ReviewHandler(BaseHTTPRequestHandler):
                 "gate_pass": run_gate_svg(svg, pack, styles, iid2, vid2),
             }
 
-        if grid_sel >= 2 and sum(1 for r_ in ready if True) >= 2:
+        if mode == "redraft":
+            # draft NEW takes with the current one as a REFERENCE IMAGE —
+            # generations + style_reference_urls keeps the look far better
+            # than image-to-image when the change is substantial.
+            for r_ in ready:
+                iid, vid = r_["iid"], r_["vid"]
+                style = styles[r_["style"]]
+                anchor = rc.style_anchor(style)
+                brief = pack["icons"][iid].get("brief") or ""
+                prompt = (
+                    f"Vector icon of {brief}. Match the attached reference icon's "
+                    f"subject, look and proportions; this is a revised draft of it. "
+                    f"{anchor} Change: {r_['fb']}"
+                )
+                refs = [rc.png_data_url(r_["source"].read_text(), 256)]
+                from iconpilot.styles import style_refs as _sr
+
+                for f_ in _sr(self.pack_dir, r_["style"])[:9]:
+                    try:
+                        refs.append(rc.png_data_url(f_.read_text(), 256))
+                    except (ValueError, OSError):
+                        pass
+                c_cost = round(rc.price_per_image(model) * takes + rc.STYLE_REF_PRICE, 4)
+                calls.append(
+                    {
+                        "target": r_["target"],
+                        "mode": "redraft",
+                        "source": str(r_["source"].relative_to(self.pack_dir)),
+                        "prompt": prompt,
+                        "takes": takes,
+                        "model": model,
+                        "cost": c_cost,
+                    }
+                )
+                cost += c_cost
+                if data.get("debug"):
+                    continue
+                svgs = rc.generate(
+                    token,
+                    prompt,
+                    n=takes,
+                    model=model,
+                    reference_urls=refs,
+                )
+                results = []
+                for i, raw in enumerate(svgs):
+                    res = _norm_gate(raw, r_["style"], iid, vid)
+                    res["id"] = i
+                    results.append(res)
+                items.append({"icon": iid, "variant": vid, "results": results})
+        elif grid_sel >= 2 and sum(1 for r_ in ready if True) >= 2:
             # grid refine: chunk ready targets (grouped by style) into
             # g×g sheets of source images — ONE i2i call per sheet, then
             # split the returned sheet back into per-icon candidates.

@@ -1634,26 +1634,126 @@ def test_recraft_preview_no_style_keyerror(monkeypatch: pytest.MonkeyPatch) -> N
             '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M2 2H22V22H2Z"/></svg>'
         )
         pack = {
-            "schema": 2, "name": "preview-fix", "version": "0.1.0",
+            "schema": 2,
+            "name": "preview-fix",
+            "version": "0.1.0",
             "provenance": {"created_by": "user"},
             "spec": {
-                "viewBox": "0 0 48 48", "live_area": {"padding": 4},
+                "viewBox": "0 0 48 48",
+                "live_area": {"padding": 4},
                 "stroke": {"width": 2, "linecap": "round", "linejoin": "round"},
                 "fill": "none",
-                "allowed_elements": ["path", "circle", "rect", "line", "polyline", "polygon", "ellipse"],
+                "allowed_elements": [
+                    "path",
+                    "circle",
+                    "rect",
+                    "line",
+                    "polyline",
+                    "polygon",
+                    "ellipse",
+                ],
                 "precision": 0.5,
             },
             "styles": {},
-            "icons": {"alp": {"brief": "an alp hut", "variants": {"color": {"style": "color-flat", "status": "todo"}}}},
+            "icons": {
+                "alp": {
+                    "brief": "an alp hut",
+                    "variants": {"color": {"style": "color-flat", "status": "todo"}},
+                }
+            },
         }
         (pack_dir / "pack.json").write_text(json.dumps(pack))
         monkeypatch.setattr(rc, "resolve_token", lambda models_file=None: "tok")
-        monkeypatch.setattr(rc, "generate", lambda *a, **k: [
-            '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024"><path d="M0 0h512v512H0z"/></svg>'
-        ])
+        monkeypatch.setattr(
+            rc,
+            "generate",
+            lambda *a, **k: [
+                '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024"><path d="M0 0h512v512H0z"/></svg>'
+            ],
+        )
         h = ReviewHandler.__new__(ReviewHandler)
         h.pack_dir = pack_dir
         h._ensure_style_id = lambda token, key, style, refs: "sid-test"
         out = h._recraft_preview({"icon": "alp", "variant": "color", "n": 4, "grid": 2})
         assert "error" not in out
         assert out.get("results") or out.get("grid"), out  # preview produced something
+
+
+def test_refine_redraft_mode_uses_reference_urls(monkeypatch: pytest.MonkeyPatch) -> None:
+    """redraft mode: generations + the current take as first reference, no i2i."""
+    import iconpilot.recraft as rc
+    from iconpilot.server.server import ReviewHandler
+
+    with tempfile.TemporaryDirectory() as td:
+        pack_dir = Path(td)
+        (pack_dir / ".runs" / "r001" / "flat" / "sail").mkdir(parents=True)
+        (pack_dir / ".runs" / "r001" / "flat" / "sail" / "r1.svg").write_text(
+            '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48"><path d="M4 4L44 44"/></svg>'
+        )
+        pack = {
+            "schema": 2,
+            "name": "redraft-mode",
+            "version": "0.1.0",
+            "provenance": {"created_by": "user"},
+            "spec": {
+                "viewBox": "0 0 48 48",
+                "live_area": {"padding": 4},
+                "stroke": {"width": 2, "linecap": "round", "linejoin": "round"},
+                "fill": "none",
+                "allowed_elements": [
+                    "path",
+                    "circle",
+                    "rect",
+                    "line",
+                    "polyline",
+                    "polygon",
+                    "ellipse",
+                ],
+                "precision": 0.5,
+            },
+            "styles": {},
+            "icons": {
+                "sail": {
+                    "brief": "a sailboat",
+                    "variants": {"flat": {"style": "color-flat", "status": "todo"}},
+                }
+            },
+            "feedback": [
+                {
+                    "id": "fb1",
+                    "scope": "variant",
+                    "icon": "sail",
+                    "variant": "flat",
+                    "round": "r001",
+                    "text": "boom longer",
+                    "author": "user",
+                },
+            ],
+        }
+        (pack_dir / "pack.json").write_text(json.dumps(pack))
+
+        gen_calls: list[dict] = []
+        refine_calls = []
+
+        def fake_generate(
+            token, prompt, n=4, style_id=None, model=None, reference_urls=None, curated_style=None
+        ):
+            gen_calls.append({"prompt": prompt, "n": n, "refs": reference_urls})
+            return [
+                '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024"><path d="M0 0h512v512H0z"/></svg>'
+            ] * n
+
+        monkeypatch.setattr(rc, "resolve_token", lambda models_file=None: "tok")
+        monkeypatch.setattr(rc, "generate", fake_generate)
+        monkeypatch.setattr(rc, "refine", lambda *a, **k: refine_calls.append(1) or [])
+        h = ReviewHandler.__new__(ReviewHandler)
+        h.pack_dir = pack_dir
+        out = h._recraft_refine({"targets": ["sail#flat"], "takes": 2, "mode": "redraft"})
+        assert gen_calls and not refine_calls  # generations, never i2i
+        call = gen_calls[0]
+        assert call["refs"] and call["refs"][0].startswith(
+            "data:image/png;base64,"
+        )  # source as ref
+        assert "reference icon" in call["prompt"] and "Change: boom longer" in call["prompt"]
+        assert out["calls"][0]["mode"] == "redraft"
+        assert len(out["items"][0]["results"]) == 2
