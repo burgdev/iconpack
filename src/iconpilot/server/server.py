@@ -1024,6 +1024,7 @@ class ReviewHandler(BaseHTTPRequestHandler):
             "pack": pack,
             "styles": styles,
             "style": style,
+            "style_key": v["style"],
         }
 
     def _recraft_preview(self, data: dict) -> dict:
@@ -1052,7 +1053,7 @@ class ReviewHandler(BaseHTTPRequestHandler):
             # no cached style yet → create it now ($0.005, cached after)
             try:
                 style_id = self._ensure_style_id(
-                    token, plan["style"], styles[plan["style"]], plan["refs"]
+                    token, plan["style_key"], plan["style"], plan["refs"]
                 )
             except rc.RecraftError:
                 style_id = None
@@ -1060,7 +1061,7 @@ class ReviewHandler(BaseHTTPRequestHandler):
             # look + palette live in the style: prompt names only the subject
             icon = pack["icons"][data.get("icon", "")]
             plan["prompt"] = rc.draft_prompt(
-                icon, styles[plan["style"]], pack, model=plan["model"], styled=False
+                icon, plan["style"], pack, model=plan["model"], styled=False
             )
             if data.get("prompt"):
                 plan["prompt"] = (plan["prompt"] + ", " + str(data["prompt"]))[:10000]
@@ -1105,7 +1106,7 @@ class ReviewHandler(BaseHTTPRequestHandler):
 
         # normalize + gate each, return as data URLs for preview
         viewbox = pack["spec"]["viewBox"]
-        mono = styles[plan["style"]].color_mode == "mono"
+        mono = plan["style"].color_mode == "mono"
         results = []
         for i, raw in enumerate(cells):
             svg = rc.normalize(rc.strip_metadata(raw), viewbox, mono=mono)

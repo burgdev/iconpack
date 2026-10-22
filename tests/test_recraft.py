@@ -1620,3 +1620,40 @@ def test_grid_refine_single_target_falls_back_to_per_icon(monkeypatch: pytest.Mo
         assert "grid" not in call  # per-icon path, no sheet
         assert "Change: cleaner roof" in call["prompt"]
         assert call["source"].endswith("r1.svg")  # direct source, not a composed grid
+
+
+def test_recraft_preview_no_style_keyerror(monkeypatch: pytest.MonkeyPatch) -> None:
+    """_recraft_preview must not KeyError with a Style object (repr leaked as error)."""
+    import iconpilot.recraft as rc
+    from iconpilot.server.server import ReviewHandler
+
+    with tempfile.TemporaryDirectory() as td:
+        pack_dir = Path(td)
+        (pack_dir / ".style-refs" / "color-flat").mkdir(parents=True)
+        (pack_dir / ".style-refs" / "color-flat" / "a.svg").write_text(
+            '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M2 2H22V22H2Z"/></svg>'
+        )
+        pack = {
+            "schema": 2, "name": "preview-fix", "version": "0.1.0",
+            "provenance": {"created_by": "user"},
+            "spec": {
+                "viewBox": "0 0 48 48", "live_area": {"padding": 4},
+                "stroke": {"width": 2, "linecap": "round", "linejoin": "round"},
+                "fill": "none",
+                "allowed_elements": ["path", "circle", "rect", "line", "polyline", "polygon", "ellipse"],
+                "precision": 0.5,
+            },
+            "styles": {},
+            "icons": {"alp": {"brief": "an alp hut", "variants": {"color": {"style": "color-flat", "status": "todo"}}}},
+        }
+        (pack_dir / "pack.json").write_text(json.dumps(pack))
+        monkeypatch.setattr(rc, "resolve_token", lambda models_file=None: "tok")
+        monkeypatch.setattr(rc, "generate", lambda *a, **k: [
+            '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024"><path d="M0 0h512v512H0z"/></svg>'
+        ])
+        h = ReviewHandler.__new__(ReviewHandler)
+        h.pack_dir = pack_dir
+        h._ensure_style_id = lambda token, key, style, refs: "sid-test"
+        out = h._recraft_preview({"icon": "alp", "variant": "color", "n": 4, "grid": 2})
+        assert "error" not in out
+        assert out.get("results") or out.get("grid"), out  # preview produced something
