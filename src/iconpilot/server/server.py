@@ -1633,10 +1633,12 @@ class ReviewHandler(BaseHTTPRequestHandler):
                 "gate_pass": run_gate_svg(svg, pack, styles, iid2, vid2),
             }
 
-        if grid_sel >= 2:
+        if grid_sel >= 2 and sum(1 for r_ in ready if True) >= 2:
             # grid refine: chunk ready targets (grouped by style) into
             # g×g sheets of source images — ONE i2i call per sheet, then
-            # split the returned sheet back into per-icon candidates
+            # split the returned sheet back into per-icon candidates.
+            # A sheet needs ≥2 icons: one icon on a mostly-empty grid
+            # makes the model fill the empty cells with copies.
             by_style: dict[str, list[dict]] = {}
             for r_ in ready:
                 by_style.setdefault(r_["style"], []).append(r_)
@@ -1644,6 +1646,40 @@ class ReviewHandler(BaseHTTPRequestHandler):
                 label = styles[style_id].label
                 for i0 in range(0, len(group), grid_sel * grid_sel):
                     chunk = group[i0 : i0 + grid_sel * grid_sel]
+                    if len(chunk) < 2:
+                        # lone target on a sheet → per-icon refine instead
+                        r_ = chunk[0]
+                        anchor = rc.style_anchor(styles[r_["style"]])
+                        c_cost = round(rc.price_per_image(model) * takes, 4)
+                        calls.append(
+                            {
+                                "target": r_["target"],
+                                "source": str(r_["source"].relative_to(self.pack_dir)),
+                                "prompt": anchor + " Change: " + r_["fb"],
+                                "strength": strength,
+                                "takes": takes,
+                                "model": model,
+                                "cost": c_cost,
+                            }
+                        )
+                        cost += c_cost
+                        if data.get("debug"):
+                            continue
+                        svgs = rc.refine(
+                            token,
+                            r_["source"].read_text(),
+                            anchor + " Change: " + r_["fb"],
+                            strength,
+                            model=model,
+                            n=takes,
+                        )
+                        results = []
+                        for i, raw in enumerate(svgs):
+                            res = _norm_gate(raw, r_["style"], r_["iid"], r_["vid"])
+                            res["id"] = i
+                            results.append(res)
+                        items.append({"icon": r_["iid"], "variant": r_["vid"], "results": results})
+                        continue
                     g = rc.pack_grid(len(chunk), max_grid=grid_sel)
                     changes = [f"{c_['iid']} icon ({label}) — change: {c_['fb']}" for c_ in chunk]
                     anchor = rc.style_anchor(styles[style_id])
@@ -1826,7 +1862,14 @@ class ReviewHandler(BaseHTTPRequestHandler):
                         )
                         if hit:
                             out.append(str(f.get("text", "")))
-                    return [x.strip() for x in out if x.strip()]
+                    seen: set[str] = set()
+                    uniq = []
+                    for x in out:
+                        x = x.strip()
+                        if x and x not in seen:
+                            seen.add(x)
+                            uniq.append(x)
+                    return uniq
 
                 briefs = []
                 for iid, vid in chunk:
@@ -2020,6 +2063,19 @@ class ReviewHandler(BaseHTTPRequestHandler):
                 src = next((i for i in archived if i.get("id") == fid), None)
                 if src is None:
                     raise ValueError(f"no archived feedback item '{fid}' in {src_round}")
+                already = next(
+                    (
+                        i
+                        for i in items
+                        if i.get("text") == src.get("text")
+                        and i.get("scope") == (src.get("scope") or "pack")
+                        and i.get("icon") == src.get("icon")
+                        and i.get("variant") == src.get("variant")
+                    ),
+                    None,
+                )
+                if already is not None:
+                    raise ValueError("identical feedback is already live")
                 scope = src.get("scope") or "pack"
                 icon_id = src.get("icon")
                 if scope in ("icon", "variant"):

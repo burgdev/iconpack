@@ -1284,10 +1284,12 @@ def test_refine_grid_saves_input_and_output_sheets(monkeypatch: pytest.MonkeyPat
 
     with tempfile.TemporaryDirectory() as td:
         pack_dir = Path(td)
-        (pack_dir / ".runs" / "r001" / "flat" / "sail").mkdir(parents=True)
-        (pack_dir / ".runs" / "r001" / "flat" / "sail" / "r1.svg").write_text(
-            '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48"><path d="M4 4L44 44"/></svg>'
-        )
+        for ic in ("sail", "hut"):
+            d_ = pack_dir / ".runs" / "r001" / "flat" / ic
+            d_.mkdir(parents=True)
+            (d_ / "r1.svg").write_text(
+                '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48"><path d="M4 4L44 44"/></svg>'
+            )
         pack = {
             "schema": 2,
             "name": "sheets-test",
@@ -1315,6 +1317,10 @@ def test_refine_grid_saves_input_and_output_sheets(monkeypatch: pytest.MonkeyPat
                     "brief": "a sailboat",
                     "variants": {"flat": {"style": "color-flat", "status": "todo"}},
                 },
+                "hut": {
+                    "brief": "a hut",
+                    "variants": {"flat": {"style": "color-flat", "status": "todo"}},
+                },
             },
             "feedback": [
                 {
@@ -1324,6 +1330,15 @@ def test_refine_grid_saves_input_and_output_sheets(monkeypatch: pytest.MonkeyPat
                     "variant": "flat",
                     "round": "r001",
                     "text": "boom longer",
+                    "author": "user",
+                },
+                {
+                    "id": "fb2",
+                    "scope": "variant",
+                    "icon": "hut",
+                    "variant": "flat",
+                    "round": "r001",
+                    "text": "roof steeper",
                     "author": "user",
                 },
             ],
@@ -1344,7 +1359,7 @@ def test_refine_grid_saves_input_and_output_sheets(monkeypatch: pytest.MonkeyPat
         monkeypatch.setattr(rc, "refine", fake_refine)
         h = ReviewHandler.__new__(ReviewHandler)
         h.pack_dir = pack_dir
-        out = h._recraft_refine({"targets": ["sail#flat"], "grid": 2, "takes": 2})
+        out = h._recraft_refine({"targets": ["sail#flat", "hut#flat"], "grid": 2, "takes": 2})
         assert out["grid"] == 2
         sheets = pack_dir / ".runs" / "r001" / "sheets"
         names = sorted(x.name for x in sheets.iterdir())
@@ -1386,10 +1401,12 @@ def test_refine_prompt_carries_style_anchor(monkeypatch: pytest.MonkeyPatch) -> 
 
     with tempfile.TemporaryDirectory() as td:
         pack_dir = Path(td)
-        (pack_dir / ".runs" / "r001" / "flat" / "sail").mkdir(parents=True)
-        (pack_dir / ".runs" / "r001" / "flat" / "sail" / "r1.svg").write_text(
-            '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48"><path d="M4 4L44 44"/></svg>'
-        )
+        for ic in ("sail", "hut"):
+            d_ = pack_dir / ".runs" / "r001" / "flat" / ic
+            d_.mkdir(parents=True)
+            (d_ / "r1.svg").write_text(
+                '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48"><path d="M4 4L44 44"/></svg>'
+            )
         pack = {
             "schema": 2,
             "name": "anchor-test",
@@ -1543,3 +1560,63 @@ def test_batch_draft_briefs_carry_live_feedback() -> None:
         cells = prompt.split("cell ")
         sail_cell = next((c for c in cells if c.startswith("1 ")), "")
         assert "fewer waves" in sail_cell and "steep roof" not in sail_cell
+
+
+def test_grid_refine_single_target_falls_back_to_per_icon(monkeypatch: pytest.MonkeyPatch) -> None:
+    """One target + grid selected → per-icon i2i, never a mostly-empty sheet."""
+    from iconpilot.server.server import ReviewHandler
+
+    with tempfile.TemporaryDirectory() as td:
+        pack_dir = Path(td)
+        (pack_dir / ".runs" / "r001" / "flat" / "alp").mkdir(parents=True)
+        (pack_dir / ".runs" / "r001" / "flat" / "alp" / "r1.svg").write_text(
+            '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48"><path d="M4 4L44 44"/></svg>'
+        )
+        pack = {
+            "schema": 2,
+            "name": "solo-grid",
+            "version": "0.1.0",
+            "provenance": {"created_by": "user"},
+            "spec": {
+                "viewBox": "0 0 48 48",
+                "live_area": {"padding": 4},
+                "stroke": {"width": 2, "linecap": "round", "linejoin": "round"},
+                "fill": "none",
+                "allowed_elements": [
+                    "path",
+                    "circle",
+                    "rect",
+                    "line",
+                    "polyline",
+                    "polygon",
+                    "ellipse",
+                ],
+                "precision": 0.5,
+            },
+            "styles": {},
+            "icons": {
+                "alp": {
+                    "brief": "an alpine hut",
+                    "variants": {"flat": {"style": "color-flat", "status": "todo"}},
+                }
+            },
+            "feedback": [
+                {
+                    "id": "fb1",
+                    "scope": "variant",
+                    "icon": "alp",
+                    "variant": "flat",
+                    "round": "r001",
+                    "text": "cleaner roof",
+                    "author": "user",
+                },
+            ],
+        }
+        (pack_dir / "pack.json").write_text(json.dumps(pack))
+        h = ReviewHandler.__new__(ReviewHandler)
+        h.pack_dir = pack_dir
+        out = h._recraft_refine({"targets": ["alp#flat"], "grid": 4, "takes": 1, "debug": True})
+        call = out["calls"][0]
+        assert "grid" not in call  # per-icon path, no sheet
+        assert "Change: cleaner roof" in call["prompt"]
+        assert call["source"].endswith("r1.svg")  # direct source, not a composed grid

@@ -1186,6 +1186,8 @@ footer { text-align:center; color:var(--muted); font-size:.75rem; padding:20px 0
           <option :value="0">off — one call per icon</option>
           <option v-for="g in [2,3,4,5]" :key="g" :value="g">{{ g }}×{{ g }} sheet ({{ g * g }} icons)</option>
         </select>
+        <span v-if="S.refineDlg.grid >= 2 && refineSel().filter(i => hasSrc(i.icon, i.variant)).length < 2"
+              class="chip" style="font-size:.7rem; color:var(--warn); border-color:var(--warn)">⚠ grid needs ≥2 icons — a single icon refines per-icon</span>
         <label class="muted">model</label>
         <select v-model="S.refineDlg.model">
           <option v-for="m in ['recraftv4_vector', 'recraftv4_1_vector']" :key="m" :value="m">{{ m }} (${{ (S.recraftModels.prices || {})[m] || '?' }}/img)</option>
