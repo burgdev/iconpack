@@ -14,7 +14,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 from lxml import etree  # ty: ignore[unresolved-import]
-from svgpathtools import parse_path
+from svgpathtools import CubicBezier, Line, QuadraticBezier, parse_path
 
 from iconpilot.render.render import (
     HASH_RENDER_SIZE,
@@ -215,7 +215,10 @@ def _geometry(root, spec, style, viewbox, report):
             except Exception as exc:  # noqa: BLE001 — svgpathtools raises assorted errors
                 report.fail(f"geometry: unparseable path data: {exc}")
                 continue
-            nodes += sum(max(1, len(s)) for s in segs) or len(segs)
+            nodes += sum(
+                max(1, len(s)) if isinstance(s, (Line, CubicBezier, QuadraticBezier)) else 4
+                for s in segs
+            ) or len(segs)
             for seg in segs:
                 bx0, bx1, by0, by1 = seg.bbox()  # svgpathtools order: (xmin, xmax, ymin, ymax)
                 bboxes.append((bx0, by0, bx1, by1))  # includes bezier control-point hull
